@@ -35,11 +35,11 @@ PyTorch tensors.
 
 ## Installation
 
-kernox needs Python 3.10 or later, PyTorch and a supported GPU. Install symox
-from GitHub first, then PyTorch for your platform, then kernox:
+kernox needs Python 3.10 or later, PyTorch and a supported GPU. Install PyTorch
+for your platform first, then kernox (symox, its symbolic engine, comes from
+PyPI as a dependency):
 
 ```sh
-pip install "symox @ git+https://github.com/keckj/symox@53d9576e9f39db16e9ca8b3483d754385ebaf986"
 pip install torch --index-url https://download.pytorch.org/whl/cu126   # NVIDIA
 pip install "kernox[cuda] @ git+https://github.com/keckj/kernox"
 python -m kernox.diagnostics --check

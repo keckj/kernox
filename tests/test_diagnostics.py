@@ -18,13 +18,13 @@ def test_report_is_json_and_mentions_every_backend(capsys):
     assert json.loads(capsys.readouterr().out)["backends"].keys() == {"sycl"}
 
 
-def test_symox_revision_warning(monkeypatch):
+def test_symox_capability_warning(monkeypatch):
     from kernox import _symox_compat as compat
 
     r = kp.diagnostics(backends=())
     s = r["symox"]
     assert s["revision"] in (None, *_SYMOX_CORE_FINGERPRINTS.values())
-    if s["revision"] == compat.PINNED_SYMOX:
+    if all(v is True for v in s["capabilities"].values()):
         assert not s["warnings"]
-    monkeypatch.setattr(compat, "PINNED_SYMOX", "0" * 40)
-    assert kp.diagnostics(backends=())["warnings"]
+    monkeypatch.setattr(compat, "cuda_logic", lambda: False)
+    assert any("cuda_logic" in w for w in kp.diagnostics(backends=())["warnings"])

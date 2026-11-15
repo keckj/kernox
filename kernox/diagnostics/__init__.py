@@ -2,9 +2,9 @@
 
 Reports, without installing or modifying anything:
 
-- versions: Python, Torch (CUDA/ROCm/XPU runtime), NumPy, symox (revision
-  identified by the fingerprint of its native library, warning if it
-  is not ``PINNED_SYMOX``) and detected symox capabilities;
+- versions: Python, Torch (CUDA/ROCm/XPU runtime), NumPy, symox (with the
+  development revision when its native library is a known build) and the
+  detected symox capabilities, with a warning if one is missing;
 - native backends (cuda, hip, sycl): available, or exact reason
   for unavailability (module, device, rejected dtype); device, arch, actual FP64;
 - caches: compilation and wisdom directories (number of valid entries);
@@ -27,9 +27,9 @@ import platform
 import sys
 from pathlib import Path
 
-# Fingerprints (RECORD sha256 of symox/_core.abi3.so) of the reference wheels
-# built by the project; builds are not reproducible from one machine to
-# another, so any other build is reported as "unidentified revision".
+# Fingerprints (RECORD sha256 of symox/_core.abi3.so) of development builds of
+# symox, reported for information only. PyPI wheels are identified by their
+# version; the warnings rely on the capability probes, not on the revision.
 _SYMOX_CORE_FINGERPRINTS = {
     "3LfAlFu09abIJM7NAM6Gvlf9Wc-j4FiuVDsNbHPEs3A": "53d9576e9f39db16e9ca8b3483d754385ebaf986",
     "i1Jmdslg76QrkR3k1NH9ZVCbIWCqLtKMRAWBQv4F2kM": "b8d7adda11b40e027ac6880f5f82bdc39f6a1082",
@@ -48,7 +48,7 @@ def _symox_info() -> dict:
         import symox
     except ImportError as exc:
         out.update(available=False, error=str(exc))
-        out["warnings"].append("symox not found: see the symox installation section of the README")
+        out["warnings"].append("symox not found: install it with `pip install symox`")
         return out
     out.update(available=True, version=getattr(symox, "__version__", "?"), path=os.path.dirname(symox.__file__))
     fingerprint, source = None, None
@@ -64,22 +64,19 @@ def _symox_info() -> dict:
         pass
     revision = _SYMOX_CORE_FINGERPRINTS.get(fingerprint)
     out.update(core_fingerprint=fingerprint, installed_from=source, revision=revision)
-    if revision is None:
-        out["warnings"].append(
-            f"unidentified symox revision (fingerprint {fingerprint}): Kernox is pinned to "
-            f"{compat.PINNED_SYMOX[:8]} (installation: see the README)")
-    elif revision != compat.PINNED_SYMOX:
-        out["warnings"].append(
-            f"symox {revision[:8]} is not the pinned revision {compat.PINNED_SYMOX[:8]} "
-            "(reinstall symox at the pinned commit: see the README)")
     caps = {}
-    for name in ("cuda_logic", "cudacode_function", "lambdify_broadcasts"):
+    for name in ("cuda_logic", "cuda_reciprocal_sqrt", "cudacode_function", "lambdify_broadcasts", "sycl_half"):
         fn = getattr(compat, name, None)
         if callable(fn):
             try:
                 caps[name] = bool(fn())
             except Exception as exc:  # noqa: BLE001 - probe
                 caps[name] = f"error: {type(exc).__name__}: {exc}"
+    missing = [name for name, ok in caps.items() if ok is not True]
+    if missing:
+        out["warnings"].append(
+            f"symox {out['version']} lacks {', '.join(missing)}: kernox falls back to slower code "
+            "paths (upgrade with `pip install -U symox`)")
     out["capabilities"] = caps
     return out
 
@@ -297,8 +294,8 @@ def format_report(r: dict) -> str:
         lines.append(f"Torch not found: {t['error']}")
     s = r["symox"]
     if s["available"]:
-        rev = s["revision"][:8] if s["revision"] else "unidentified"
-        lines.append(f"symox {s['version']} revision {rev} (pinned {s['pinned'][:8]}): {s['path']}")
+        rev = f" (revision {s['revision'][:8]})" if s["revision"] else ""
+        lines.append(f"symox {s['version']}{rev}: {s['path']}")
         lines.append("  capabilities: " + ", ".join(f"{k}={v}" for k, v in s.get("capabilities", {}).items()))
     lines.append("")
     for name, b in r["backends"].items():

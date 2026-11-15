@@ -5,7 +5,6 @@
 ```sh
 git clone https://github.com/keckj/kernox
 cd kernox
-pip install "symox @ git+https://github.com/keckj/symox@53d9576e9f39db16e9ca8b3483d754385ebaf986"
 pip install torch --index-url https://download.pytorch.org/whl/cu126   # or rocm10.0, xpu
 pip install -e ".[cuda,test]"                                          # or [rocm,test], [xpu,test]
 ```

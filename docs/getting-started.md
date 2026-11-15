@@ -11,22 +11,16 @@ a first reduction.
 - **A supported GPU**: NVIDIA (CUDA), AMD (ROCm) or Intel (XPU). kernox has no
   native CPU backend, and none is planned. A slow CPU reference exists for
   testing (see [Trying kernox without a GPU](#trying-kernox-without-a-gpu)).
-- A Rust toolchain, to build symox (for example with
-  [rustup](https://rustup.rs/)).
 
 The [Backends and hardware](backends.md) page lists the tested cards and the
 exact versions.
 
-## Install symox
+## About symox
 
-symox is the symbolic engine kernox is built on. It is not on PyPI: install it
-from GitHub, at the commit kernox is pinned on. pip fetches
-[maturin](https://www.maturin.rs/) automatically; the Rust compiler must
-already be installed.
-
-```sh
-pip install "symox @ git+https://github.com/keckj/symox@53d9576e9f39db16e9ca8b3483d754385ebaf986"
-```
+symox is the symbolic engine kernox is built on. It is published on
+[PyPI](https://pypi.org/project/symox/) as prebuilt wheels and pip installs it
+automatically with kernox. No Rust toolchain is needed, unless pip has to build
+symox from source on a platform without a wheel.
 
 ## Install PyTorch and kernox
 

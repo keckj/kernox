@@ -1,8 +1,8 @@
 """Detection of the symox capabilities used by Kernox.
 
-Kernox is pinned to symox ``53d9576e`` (GitHub main), which contains the
-codegen extensions below, and remains compatible with ``2e623e66``
-(minimum revision), which lacks them:
+Kernox targets symox 0.1.1 from PyPI (built from ``53d9576e`` or later),
+which contains the codegen extensions below, and remains compatible with the
+older development revision ``2e623e66``, which lacks them:
 
 - ``cudacode``: logical operators ``And/Or/Xor/Not``;
 - ``cudacode``: ``reciprocal_sqrt`` option (``1/sqrt(x)``, opt-in);
@@ -12,8 +12,8 @@ codegen extensions below, and remains compatible with ``2e623e66``
 
 Detection tests the **behavior** (not a version number: both revisions
 carry version 0.1.1). Each probe is cached; the environment variable
-``KERNOX_SYMOX_COMPAT=pinned`` forces the pinned-commit code path
-(regression tests).
+``KERNOX_SYMOX_COMPAT=pinned`` forces the compatibility code path, without
+the extensions (regression tests).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from functools import lru_cache
 from ._env import getenv
 
 PINNED_SYMOX = "53d9576e9f39db16e9ca8b3483d754385ebaf986"  # https://github.com/keckj/symox (main, printer SYCL sycl::half)
-# Minimum revision still supported (compatibility path, without the
+# Oldest revision still supported (compatibility path, without the
 # codegen extensions); KERNOX_SYMOX_COMPAT=pinned forces this path.
 MIN_SUPPORTED_SYMOX = "2e623e66bb31882e31f6dbfff6f77ae4bd945408"
 

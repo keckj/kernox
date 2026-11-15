@@ -12,16 +12,9 @@ license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY.md"]
 requires-python = ">=3.10"
 authors = [{ name = "Jean-Baptiste Keck" }]
 classifiers = ["Programming Language :: Python :: 3"]
-# symox is not on PyPI: install it separately, from GitHub, at the pinned commit
-# (kernox/_symox_compat.py: PINNED_SYMOX; see "Installation" in the README):
-#
-#   symox @ git+https://github.com/keckj/symox@53d9576e9f39db16e9ca8b3483d754385ebaf986
-#
-# This direct reference (PEP 508) is not declared in `dependencies`: PyPI rejects
-# packages whose dependencies point to a URL.
 # torch: installed from the platform-specific index (CUDA, ROCm, XPU); the extras
 # only set its minimum version, the index is chosen at install time.
-dependencies = ["numpy>=2.3"]
+dependencies = ["numpy>=2.3", "symox>=0.1.1"]
 
 [project.optional-dependencies]
 # Lower bounds = versions actually tested.

@@ -15,8 +15,8 @@ backend is a slow reference used by the tests.
 | `hip` | AMD | hipRTC shipped with the ROCm build of PyTorch: no system ROCm needed | ≥ 2.15, ROCm build (`rocm10.0` index) |
 | `sycl` | Intel | oneAPI DPC++ compiler `icpx` 2026.2 installed on the host, with the matching SYCL runtime | ≥ 2.15, XPU build (`xpu` index) |
 
-All backends also need Python ≥ 3.10, NumPy ≥ 2.3 and symox at the pinned
-commit (see [Getting started](getting-started.md)). The `cuda`, `rocm` and
+All backends also need Python ≥ 3.10, NumPy ≥ 2.3 and symox ≥ 0.1.1 from
+PyPI (installed with kernox, see [Getting started](getting-started.md)). The `cuda`, `rocm` and
 `xpu` extras of the kernox package pull the right minimum versions.
 
 ## Tested cards
@@ -75,7 +75,7 @@ disk.
 | `KERNOX_CUDA_LIBRARY`, `KERNOX_NVRTC_LIBRARY` | explicit paths to the CUDA driver and NVRTC libraries |
 | `KERNOX_ONEAPI_ROOT` | oneAPI installation root, to find `icpx` |
 | `KERNOX_SYCL_TARGET` | force the SYCL compilation target |
-| `KERNOX_SYMOX_COMPAT` | `pinned` forces the code path of the pinned symox commit (for tests) |
+| `KERNOX_SYMOX_COMPAT` | `pinned` forces the compatibility code path for older symox builds (for tests) |
 
 An empty variable counts as unset. `python -m kernox.diagnostics` shows the
 cache locations and sizes.
