@@ -1,7 +1,7 @@
 # kernox
 
 <p align="center">
-  <img src="docs/images/kernox-banner.png" alt="kernox logo" width="480">
+  <img src="docs/images/kernox-banner.png" alt="kernox logo" width="560">
 </p>
 
 kernox computes pairwise reductions on GPUs (Gaussian kernel sums, nearest
