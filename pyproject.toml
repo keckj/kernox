@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kernox"
-version = "1.0.1"
+version = "1.0.2"
 description = "Fused symbolic reductions on GPUs (CUDA, ROCm/HIP, SYCL), built on symox"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
@@ -30,9 +30,12 @@ dependencies = ["numpy>=2.3", "symox>=0.1.1"]
 cuda = ["torch>=2.11", "nvidia-cuda-nvrtc-cu12>=12.6"]
 # ROCm: torch 2.15.0+rocm10.0 (index download.pytorch.org/whl/rocm10.0), hipRTC shipped with torch.
 rocm = ["torch>=2.15"]
-# XPU: torch 2.15.0+xpu and SYCL runtime aligned with icpx 2026.2;
-# icpx (oneAPI DPC++ 2026.2) must be installed on the host.
-xpu = ["torch>=2.15", "intel-sycl-rt>=2026.2.0", "intel-cmplr-lib-ur>=2026.2.0"]
+# XPU: torch 2.15.0+xpu (index download.pytorch.org/whl/xpu). The SYCL runtime
+# must be at least as recent as the host icpx (2026.2): it is upgraded with
+# `pip install --no-deps` (docs/getting-started.md, "Intel GPUs"), not here,
+# because torch pins its runtime exactly and pip would replace the XPU build of
+# torch with the CUDA one to satisfy a newer runtime requirement.
+xpu = ["torch>=2.15"]
 test = ["pytest>=8.4"]
 
 [project.urls]

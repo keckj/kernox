@@ -154,6 +154,31 @@ def _device_index(device) -> int:
     return d.index if d.index is not None else torch.xpu.current_device()
 
 
+def _sycl_runtime_version() -> str:
+    from importlib import metadata
+
+    try:
+        return metadata.version("intel-sycl-rt")
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def _load_module(path):
+    """Load a compiled module, explaining the usual cause of a failure: a SYCL
+    runtime older than the icpx that compiled the module."""
+    try:
+        return ctypes.CDLL(str(path), mode=ctypes.RTLD_LOCAL)
+    except OSError as exc:
+        if "undefined symbol" not in str(exc):
+            raise
+        runtime = _sycl_runtime_version()
+        raise OSError(
+            f"{exc}\nThe SYCL runtime loaded by PyTorch (intel-sycl-rt {runtime}) is older than "
+            f"the compiler ({toolchain.compiler_version()}). Install the runtime that matches "
+            "icpx in this environment, as described in "
+            "https://keckj.github.io/kernox/getting-started/#intel-gpus") from exc
+
+
 class CompiledSyclReduction:
     def __init__(self, plan: Plan, device_index: int, lib, layout, info: CompileInfo,
                  target_groups: int = TARGET_GROUPS):
@@ -565,7 +590,7 @@ class SyclBackend:
             cache_hit, secs = True, 0.0
         else:
             build = toolchain.build_shared_object(source, target, bool(plan.fp_contract))
-            lib = ctypes.CDLL(str(build.path), mode=ctypes.RTLD_LOCAL)
+            lib = _load_module(build.path)
             _probe(lib, idx)  # UnsupportedError if the driver rejects the kernels
             with self._lock:
                 self._mem[mem_key] = (lib, build)

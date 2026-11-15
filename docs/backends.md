@@ -13,7 +13,7 @@ backend is a slow reference used by the tests.
 | --- | --- | --- | --- |
 | `cuda` | NVIDIA | NVRTC (PyPI wheel `nvidia-cuda-nvrtc-cu12` ≥ 12.6) and the CUDA driver | ≥ 2.11, CUDA build (for example the `cu126` index) |
 | `hip` | AMD | hipRTC shipped with the ROCm build of PyTorch: no system ROCm needed | ≥ 2.15, ROCm build (`rocm10.0` index) |
-| `sycl` | Intel | oneAPI DPC++ compiler `icpx` 2026.2 installed on the host, with the matching SYCL runtime | ≥ 2.15, XPU build (`xpu` index) |
+| `sycl` | Intel | oneAPI DPC++ compiler `icpx` 2026.2 installed on the host, and a SYCL runtime at least as recent (see [Intel GPUs](getting-started.md#intel-gpus)) | ≥ 2.15, XPU build (`xpu` index) |
 
 All backends also need Python ≥ 3.10, NumPy ≥ 2.3 and symox ≥ 0.1.1 from
 PyPI (installed with kernox, see [Getting started](getting-started.md)). The

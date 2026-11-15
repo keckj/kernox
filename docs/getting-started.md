@@ -36,14 +36,39 @@ pip install "kernox[cuda]"
 # AMD (no system ROCm needed: kernox uses the one shipped with PyTorch)
 pip install torch --index-url https://download.pytorch.org/whl/rocm10.0
 pip install "kernox[rocm]"
-
-# Intel (the oneAPI DPC++ compiler icpx 2026.2 must be installed on the host)
-pip install torch --index-url https://download.pytorch.org/whl/xpu
-pip install "kernox[xpu]"
 ```
+
+Intel GPUs need one more step, described just below.
 
 From a source checkout, use an editable install with the test extra, for
 example `pip install -e ".[cuda,test]"`.
+
+### Intel GPUs
+
+The `sycl` backend compiles kernels with the oneAPI DPC++ compiler `icpx`,
+which must be installed on the host (tested with 2026.2). The compiled kernels
+are loaded by the SYCL runtime that comes with PyTorch, and that runtime must
+be **at least as recent as `icpx`**. PyTorch 2.15 for XPU ships the 2026.1
+runtime, so with `icpx` 2026.2, upgrade the runtime in the same environment:
+
+```sh
+pip install torch --index-url https://download.pytorch.org/whl/xpu
+pip install "kernox[xpu]"
+pip install --no-deps intel-sycl-rt==2026.2.0 intel-cmplr-lib-rt==2026.2.0 \
+    intel-cmplr-lib-ur==2026.2.0 intel-cmplr-lic-rt==2026.2.0 \
+    intel-opencl-rt==2026.2.0 intel-openmp==2026.2.0 umf==1.2.0 tcmlib==1.6.0
+```
+
+Use the version of your `icpx` (`icpx --version`) in the last command. The
+`--no-deps` install is deliberate: PyTorch pins the exact runtime it was built
+with, so `pip check` reports a conflict afterwards, but PyTorch runs correctly
+on a newer runtime (the opposite direction, a runtime older than the compiler,
+is what fails). If the versions do not match, compiling a reduction fails with
+an `undefined symbol` error that points to this section.
+
+Do not install the SYCL runtime packages without `--no-deps`, and do not let
+pip resolve them together with `kernox[xpu]` from PyPI only: to satisfy the
+pin, pip would replace the XPU build of PyTorch with the CUDA build.
 
 ## Check the installation
 
