@@ -31,15 +31,15 @@ chosen by the index URL.
 ```sh
 # NVIDIA
 pip install torch --index-url https://download.pytorch.org/whl/cu126
-pip install "kernox[cuda] @ git+https://github.com/keckj/kernox"
+pip install "kernox[cuda]"
 
 # AMD (no system ROCm needed: kernox uses the one shipped with PyTorch)
 pip install torch --index-url https://download.pytorch.org/whl/rocm10.0
-pip install "kernox[rocm] @ git+https://github.com/keckj/kernox"
+pip install "kernox[rocm]"
 
 # Intel (the oneAPI DPC++ compiler icpx 2026.2 must be installed on the host)
 pip install torch --index-url https://download.pytorch.org/whl/xpu
-pip install "kernox[xpu] @ git+https://github.com/keckj/kernox"
+pip install "kernox[xpu]"
 ```
 
 From a source checkout, use an editable install with the test extra, for

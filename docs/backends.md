@@ -16,8 +16,9 @@ backend is a slow reference used by the tests.
 | `sycl` | Intel | oneAPI DPC++ compiler `icpx` 2026.2 installed on the host, with the matching SYCL runtime | ≥ 2.15, XPU build (`xpu` index) |
 
 All backends also need Python ≥ 3.10, NumPy ≥ 2.3 and symox ≥ 0.1.1 from
-PyPI (installed with kernox, see [Getting started](getting-started.md)). The `cuda`, `rocm` and
-`xpu` extras of the kernox package pull the right minimum versions.
+PyPI (installed with kernox, see [Getting started](getting-started.md)). The
+`cuda`, `rocm` and `xpu` extras of the kernox package pull the right minimum
+versions.
 
 ## Tested cards
 

@@ -4,14 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kernox"
-version = "1.0.0"
+version = "1.0.1"
 description = "Fused symbolic reductions on GPUs (CUDA, ROCm/HIP, SYCL), built on symox"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY.md"]
 requires-python = ">=3.10"
 authors = [{ name = "Jean-Baptiste Keck" }]
-classifiers = ["Programming Language :: Python :: 3"]
+keywords = ["gpu", "cuda", "rocm", "sycl", "kernel", "reduction", "pytorch", "keops"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Mathematics",
+  "Environment :: GPU :: NVIDIA CUDA",
+]
 # torch: installed from the platform-specific index (CUDA, ROCm, XPU); the extras
 # only set its minimum version, the index is chosen at install time.
 dependencies = ["numpy>=2.3", "symox>=0.1.1"]
@@ -28,7 +36,11 @@ xpu = ["torch>=2.15", "intel-sycl-rt>=2026.2.0", "intel-cmplr-lib-ur>=2026.2.0"]
 test = ["pytest>=8.4"]
 
 [project.urls]
+Homepage = "https://github.com/keckj/kernox"
+Documentation = "https://keckj.github.io/kernox/"
 Source = "https://github.com/keckj/kernox"
+Issues = "https://github.com/keckj/kernox/issues"
+Changelog = "https://github.com/keckj/kernox/releases"
 symox = "https://github.com/keckj/symox"
 
 [tool.setuptools.packages.find]
