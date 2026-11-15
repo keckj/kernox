@@ -13,55 +13,10 @@ added later.
 
 kernox is a successor to [PyKeOps](https://github.com/getkeops/keops), built on
 the [symox](https://github.com/keckj/symox) symbolic engine. It works with
-PyTorch tensors. Documentation: <https://keckj.github.io/kernox/>.
+PyTorch tensors.
 
-## A first example
-
-A weighted Gaussian sum, `out[i] = Σ_j exp(-s |x_i - y_j|²) b_j`:
-
-```python
-import torch
-import kernox as kp
-from kernox import Param, Vi, Vj
-
-x, y, b, s = Vi("x", 3), Vj("y", 3), Vj("b", 2), Param("s")
-d2 = ((x - y) ** 2).sum()                                    # squared distance
-gauss = (kp.exp(-d2 * s[0]) * b).sum_over("j")               # reduction over j
-
-if torch.cuda.is_available():                                # NVIDIA or AMD
-    device, backend = "cuda", "auto"
-elif hasattr(torch, "xpu") and torch.xpu.is_available():     # Intel
-    device, backend = "xpu", "auto"
-else:                                                        # no GPU: CPU reference
-    device, backend = "cpu", "oracle"
-
-run = kp.compile(gauss, dtype="float32", backend=backend)
-X = torch.randn(2000, 3, device=device)
-Y = torch.randn(3000, 3, device=device)
-B = torch.randn(3000, 2, device=device)
-out = run(x=X, y=Y, b=B, s=0.5)                              # (2000, 2), float32
-```
-
-The same distance gives the 8 nearest neighbours of each point, or the number
-of points within a radius:
-
-```python
-knn = d2.argkmin(8, over="j")                                # int64 indices (M, 8)
-idx = kp.compile(knn, dtype="float32", backend=backend)(x=X, y=Y)
-near = (d2 < 0.25).sum_over("j")                             # int64 counts (M, 1)
-counts = kp.compile(near, dtype="float32", backend=backend)(x=X, y=Y)
-```
-
-Gradients flow through `torch.autograd`. Here `where` guards a square root: the
-inactive branch affects neither the value nor the gradient.
-
-```python
-r = kp.where(d2 > 1.0, kp.sqrt(d2 - 1.0), 0.0)
-energy = kp.compile((r * b).sum_over("j"), dtype="float64", backend=backend)
-X64 = X.double().requires_grad_(True)
-loss = energy(x=X64, y=Y.double(), b=B.double()).sum()
-loss.backward()                                              # X64.grad: (2000, 3)
-```
+- Documentation: <https://keckj.github.io/kernox/>
+- Getting started: <https://keckj.github.io/kernox/getting-started/>
 
 ## Why kernox
 

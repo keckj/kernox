@@ -8,7 +8,7 @@ unchanged, so they read exactly as a user would type them.
 
 A block preceded by the comment ``<!-- skip-test -->`` is not run (PyKeOps
 code, shell-like snippets, optional dependencies such as SciPy). The home
-page is README.md, covered by ``tests/test_readme.py``.
+page is README.md, which has no code example.
 """
 
 import re

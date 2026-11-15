@@ -19,8 +19,7 @@ KP_CONFORMANCE_BACKENDS=hip pytest -m slow tests/conformance   # long profile, o
 ```
 
 The core tests run everywhere: they use the CPU oracle. The examples of this
-documentation are tests too (`tests/test_docs_examples.py` and
-`tests/test_readme.py`): every `python` block runs on the oracle, unless it is
+documentation are tests too (`tests/test_docs_examples.py`): every `python` block runs on the oracle, unless it is
 preceded by a `<!-- skip-test -->` comment.
 
 GPU tests are correctness tests and can run on a shared GPU, but not on a GPU
