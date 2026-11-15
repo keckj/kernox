@@ -1,8 +1,8 @@
-<p align="center">
-  <img src="docs/images/kernox-banner.png" alt="kernox: fused symbolic reductions on GPUs" width="720">
-</p>
-
 # kernox
+
+<p align="center">
+  <img src="docs/images/kernox-banner.png" alt="kernox logo" width="720">
+</p>
 
 kernox computes pairwise reductions on GPUs (Gaussian kernel sums, nearest
 neighbours, log-sum-exp, softmax-weighted sums, ...) without ever building the
