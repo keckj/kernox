@@ -29,6 +29,12 @@ hooks:
 
 plugins:
   - search
+  - redirects:
+      redirect_maps:
+        # Pages of the first version of the site
+        api.md: concepts.md
+        support-matrix.md: backends.md
+        pykeops-parity.md: pykeops.md
   - mkdocstrings:
       handlers:
         python:
