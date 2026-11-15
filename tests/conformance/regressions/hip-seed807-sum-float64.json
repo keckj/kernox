@@ -17,6 +17,6 @@
   "x[0]"
  ],
  "backend": "hip",
- "error": "UnsupportedError: expression non réelle : Piecewise((y[2]*Piecewise((x[0], Ne(x[0], 0)), (zoo, True)), Ne(x[0], 0)), (0, True))",
+ "error": "UnsupportedError: non-real expression: Piecewise((y[2]*Piecewise((x[0], Ne(x[0], 0)), (zoo, True)), Ne(x[0], 0)), (0, True))",
  "original_seed": 807
 }

@@ -1,4 +1,4 @@
-"""Preuve d'interop M1 : queue Torch XPU, USM, ordre, durée de vie, cache."""
+"""M1 interop proof: Torch XPU queue, USM, ordering, lifetime, cache."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _gauss_plan(dtype="float32", d=3):
 
 
 def _ref(X, Y):
-    """Référence par blocs de lignes : mémoire hôte O(bloc·N), jamais O(M·N)."""
+    """Reference computed in row blocks: O(block·N) host memory, never O(M·N)."""
     Yd = Y.double()
     bi = max(1, HOST_BLOCK_ELEMS // max(1, Yd.shape[0] * Yd.shape[1]))
     return torch.cat([torch.exp(-((X[i0:i0 + bi].double()[:, None] - Yd[None]) ** 2).sum(-1)).sum(1, keepdim=True)
@@ -38,7 +38,7 @@ def test_single_sycl_runtime_shared_with_torch():
     c = backend().compile(_gauss_plan(), DEV)
     assert c is not None
     libs = {line.split()[-1] for line in open("/proc/self/maps") if "libsycl.so" in line}
-    assert len(libs) == 1, libs  # un seul runtime SYCL : celui de Torch XPU
+    assert len(libs) == 1, libs  # a single SYCL runtime: the Torch XPU one
 
 
 def test_non_default_stream_and_cross_stream_dependency():
@@ -47,7 +47,7 @@ def test_non_default_stream_and_cross_stream_dependency():
     assert s1.sycl_queue != torch.xpu.current_stream().sycl_queue
     M, N = 4096, 8192
     with torch.xpu.stream(s1):
-        # entrées produites sur s1 par une chaîne d'opérations non triviale
+        # inputs produced on s1 by a non-trivial chain of operations
         X = torch.randn(M, 3, device=DEV)
         Y = torch.randn(N, 3, device=DEV)
         for _ in range(20):
@@ -58,7 +58,7 @@ def test_non_default_stream_and_cross_stream_dependency():
     with torch.xpu.stream(s2):
         out = alloc_outputs(c.plan, M)
         c.launch({"x": X, "y": Y}, out)
-        consumed = out["value"] * 2.0  # consommation sur le même stream
+        consumed = out["value"] * 2.0  # consumed on the same stream
     s2.synchronize()
     ref = _ref(X.cpu(), Y.cpu())
     assert torch.allclose(out["value"].double().cpu(), ref, rtol=1e-4)
@@ -70,19 +70,19 @@ def test_launch_is_asynchronous_no_host_sync():
     M, N = 65536, 262144
     X, Y = torch.randn(M, 3, device=DEV), torch.randn(N, 3, device=DEV)
     out = alloc_outputs(c.plan, M)
-    c.launch({"x": X, "y": Y}, out)  # échauffement
+    c.launch({"x": X, "y": Y}, out)  # warm-up
     torch.xpu.synchronize()
     t0 = time.perf_counter()
     c.launch({"x": X, "y": Y}, out)
     t_launch = time.perf_counter() - t0
     torch.xpu.synchronize()
     t_total = time.perf_counter() - t0
-    assert t_total > 0.02, "cas trop petit pour conclure"
+    assert t_total > 0.02, "case too small to conclude"
     assert t_launch < 0.25 * t_total, (t_launch, t_total)
 
 
 def test_no_host_device_copy_in_launch():
-    """Profileur Torch : la seule activité device de launch est le kernel."""
+    """Torch profiler: the only device activity of launch is the kernel."""
     from torch.profiler import ProfilerActivity, profile
 
     c = backend().compile(_gauss_plan(), DEV)
@@ -98,7 +98,7 @@ def test_no_host_device_copy_in_launch():
 
 
 def test_input_lifetime_after_launch():
-    """Les entrées peuvent être libérées juste après launch (allocateur ordonné par stream)."""
+    """Inputs can be freed right after launch (stream-ordered allocator)."""
     c = backend().compile(_gauss_plan(), DEV)
     M, N = 2048, 100000
     Xc, Yc = torch.randn(M, 3), torch.randn(N, 3)
@@ -106,7 +106,7 @@ def test_input_lifetime_after_launch():
     out = alloc_outputs(c.plan, M)
     c.launch({"x": X, "y": Y}, out)
     del X, Y
-    junk = [torch.full((N, 3), float("nan"), device=DEV) for _ in range(4)]  # réutilise la mémoire
+    junk = [torch.full((N, 3), float("nan"), device=DEV) for _ in range(4)]  # reuses the memory
     torch.xpu.synchronize()
     del junk
     assert torch.allclose(out["value"].double().cpu(), _ref(Xc, Yc), rtol=1e-4)
@@ -122,7 +122,7 @@ def test_compiled_object_destruction_and_reload():
     gc.collect()
     from kernox.backends.sycl import SyclBackend
 
-    c2 = SyclBackend().compile(p, DEV)  # nouveau backend : cache disque
+    c2 = SyclBackend().compile(p, DEV)  # new backend: disk cache
     assert c2.info.cache_hit
     out2 = alloc_outputs(p, 10)
     c2.launch({"x": X, "y": Y}, out2)
@@ -137,13 +137,13 @@ def test_input_validation_errors():
     with pytest.raises(ValueError):
         c.launch({"x": torch.randn(4, 3), "y": good}, out)  # CPU
     with pytest.raises(ValueError):
-        c.launch({"x": torch.randn(3, 4, device=DEV).T, "y": good}, out)  # non contigu
+        c.launch({"x": torch.randn(3, 4, device=DEV).T, "y": good}, out)  # not contiguous
     with pytest.raises(ValueError):
         c.launch({"x": good.double(), "y": good}, out)  # dtype
     with pytest.raises(ValueError):
         c.launch({"x": good, "y": torch.randn(4, 2, device=DEV)}, out)  # dim
     with pytest.raises(ValueError):
-        c.launch({"x": good, "y": good}, alloc_outputs(c.plan, 5))  # forme de sortie
+        c.launch({"x": good, "y": good}, alloc_outputs(c.plan, 5))  # output shape
 
 
 def test_cpu_device_refused():
@@ -179,7 +179,7 @@ def test_fast_math_plan_refused():
 
 
 def test_concurrent_cold_compilation(tmp_path):
-    """Deux processus compilent le même plan sur un cache vide : un seul binaire, pas d'artefact partiel."""
+    """Two processes compile the same plan on an empty cache: a single binary, no partial artifact."""
     src = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     script = textwrap.dedent(f"""
         import sys; sys.path.insert(0, {src!r})
@@ -197,17 +197,17 @@ def test_concurrent_cold_compilation(tmp_path):
     for p, (o, e) in zip(procs, results):
         assert p.returncode == 0, e
     lines = [o.split() for o, _ in results]
-    assert sum(1 for l in lines if l[0] == "False") == 1  # une seule compilation
+    assert sum(1 for l in lines if l[0] == "False") == 1  # a single compilation
     assert len({l[1] for l in lines}) == 1
     files = sorted(os.listdir(tmp_path / "sycl"))
     assert len([f for f in files if f.endswith(".so")]) == 1
-    assert not [f for f in files if f.startswith(".")], files  # pas de temporaire résiduel
+    assert not [f for f in files if f.startswith(".")], files  # no leftover temporary file
 
 
 def test_kernel_names_unique_across_modules():
-    """Régression : le runtime SYCL indexe les kernels par nom pour tout le processus.
-    Deux plans de même formule mais de réductions différentes, chargés dans le même
-    processus, ne doivent pas se confondre (MAX renvoyait le résultat de MIN)."""
+    """Regression: the SYCL runtime indexes kernels by name for the whole process.
+    Two plans with the same formula but different reductions, loaded in the same
+    process, must not be confused (MAX used to return the MIN result)."""
     from ._helpers import run
 
     x, y = arg("x", "i", 1), arg("y", "j", 1)

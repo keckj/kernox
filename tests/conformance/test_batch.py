@@ -1,11 +1,11 @@
-"""Dimensions de batch (avenant v0.6), sur l'oracle et sur chaque backend GPU.
+"""Batch dimensions (amendment v0.6), on the oracle and on each GPU backend.
 
-Un backend qui ne prend pas encore le batch en charge répond
-``Support(False)`` : ses cas sont **sautés explicitement** (motif affiché),
-jamais simulés. L'oracle (référence Torch, CPU) exécute toujours la suite.
-Critère : égalité au bit près avec une boucle d'appels v0 sur le même backend
-pour COUNT/MIN/MAX/ARG*/K* ; SUM et LOGSUMEXP dans la tolérance relative à la
-norme L1 (ordre de sommation libre) ; dans tous les cas, accord avec l'oracle.
+A backend that does not support batching yet answers ``Support(False)``:
+its cases are **explicitly skipped** (reason shown), never simulated. The
+oracle (Torch reference, CPU) always runs the suite.
+Criterion: bit-for-bit equality with a loop of v0 calls on the same backend
+for COUNT/MIN/MAX/ARG*/K*; SUM and LOGSUMEXP within the tolerance relative to
+the L1 norm (free summation order); in all cases, agreement with the oracle.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def target(request):
         return name, "cpu"
     dev, reason = backend_status(name)
     if dev is None:
-        pytest.skip(f"backend {name} absent : {reason}")
+        pytest.skip(f"backend {name} unavailable: {reason}")
     return name, dev
 
 
@@ -38,7 +38,7 @@ def _compile_or_skip(red, dtype, name, probe):
     except UnsupportedError as exc:
         if "batch" not in str(exc):
             raise
-        pytest.skip(f"{name} : {exc}")
+        pytest.skip(f"{name}: {exc}")
     return run
 
 

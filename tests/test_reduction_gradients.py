@@ -1,11 +1,11 @@
-"""Gradients des réductions autres que SUM (parité PyKeOps).
+"""Gradients of reductions other than SUM (PyKeOps parity).
 
-- LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT : plan SUM substitut, réductions
-  fusionnées (``autograd.surrogate``) ;
-- MIN, MAX, KMIN et valeurs de MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN : dérivée au
-  terme retenu (``autograd.SelectGradient``).
+- LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT: surrogate SUM plan, fused
+  reductions (``autograd.surrogate``);
+- MIN, MAX, KMIN and the values of MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN: derivative
+  at the selected term (``autograd.SelectGradient``).
 
-Référence : la même fonction en Torch dense (tailles petites), ``torch.autograd``.
+Reference: the same function in dense Torch (small sizes), ``torch.autograd``.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def _vars():
 
 
 def _dense(X, Y, P):
-    """f[i, j] (M, N, 2) : exp(-|x - y|²)·p + sin(x·y)."""
+    """f[i, j] (M, N, 2): exp(-|x - y|²)·p + sin(x·y)."""
     d2 = ((X[:, None] - Y[None]) ** 2).sum(-1, keepdim=True)
     return torch.exp(-d2) * P + torch.sin((X[:, None] * Y[None]).sum(-1, keepdim=True))
 
@@ -89,11 +89,11 @@ def test_sumsoftmaxweight_gradient():
 
 
 def test_logsumexp_gradient_empty_rows_are_zero():
-    """Ligne sans contribution (ranges) : L = −∞, gradient nul et non NaN."""
+    """Row without any contribution (ranges): L = −∞, gradient is zero, not NaN."""
     x, y, b, p = _vars()
     t = _inputs(m=6, n=8)
     li, lj = torch.tensor([0, 0, 0, 1, 1, 1]), torch.tensor([0, 0, 0, 0, 1, 1, 1, 1])
-    keep = torch.tensor([[True, False], [False, False]])  # groupe i=1 : aucun j
+    keep = torch.tensor([[True, False], [False, False]])  # group i=1: no j
     r = kp.ranges_from_labels(li, lj, keep)
     run = _kp_f(x, y, p).logsumexp(over="j").compile("float64", backend="oracle").with_ranges(r)
     X = t["x"].clone().requires_grad_(True)
@@ -116,7 +116,7 @@ def test_min_max_gradient(kind, over):
     def dense(x, y, b, p):
         D = _dense(x, y, p)
         idx = (D.argmin if kind.startswith("min") else D.argmax)(dim=dim, keepdim=True)
-        return torch.gather(D, dim, idx).squeeze(dim)  # gradient au seul indice retenu
+        return torch.gather(D, dim, idx).squeeze(dim)  # gradient only at the selected index
 
     if kind in ("min", "max"):
         _check(red, dense, t)
@@ -160,7 +160,7 @@ def test_min_gradient_batch_and_no_candidate():
     run = ((x - y) ** 2).min(over="j").compile("float64", backend="oracle")
     g = _gen(4)
     X = torch.randn(2, 5, 1, dtype=F64, generator=g).requires_grad_(True)
-    Y = torch.randn(1, 6, 1, dtype=F64, generator=g).requires_grad_(True)  # diffusé sur le batch
+    Y = torch.randn(1, 6, 1, dtype=F64, generator=g).requires_grad_(True)  # broadcast over the batch
     out = run(x=X, y=Y)
     gx, gy = torch.autograd.grad(out.sum(), (X, Y))
     Xr, Yr = X.detach().clone().requires_grad_(True), Y.detach().clone().requires_grad_(True)
@@ -168,7 +168,7 @@ def test_min_gradient_batch_and_no_candidate():
     wx, wy = torch.autograd.grad(ref.sum(), (Xr, Yr))
     torch.testing.assert_close(gx, wx, rtol=1e-12, atol=1e-12)
     torch.testing.assert_close(gy, wy, rtol=1e-12, atol=1e-12)
-    # ligne sans candidat (NaN partout) : indice −1, gradient nul
+    # row without candidates (NaN everywhere): index −1, zero gradient
     Yn = torch.full((4, 1), float("nan"), dtype=F64)
     X1 = torch.randn(3, 1, dtype=F64).requires_grad_(True)
     (g1,) = torch.autograd.grad(run(x=X1, y=Yn).sum(), X1)

@@ -1,10 +1,10 @@
-"""Ranges block-sparse (avenant v0.6 §2), sur l'oracle et sur chaque backend GPU.
+"""Block-sparse ranges (amendment v0.6 §2), on the oracle and on each GPU backend.
 
-Un backend qui ne prend pas encore les ranges en charge répond
-``Support(False)`` : ses cas sont **sautés explicitement** (motif affiché).
-L'oracle exécute toujours la suite. Critères : ``Ranges.dense`` ≡ appel sans
-ranges (bit à bit hors SUM) ; masques par étiquettes contre une référence
-dense masquée FP64 calculée sur l'hôte ; gradients contre Torch dense masqué.
+A backend that does not support ranges yet answers ``Support(False)``: its
+cases are **explicitly skipped** (reason shown). The oracle always runs the
+suite. Criteria: ``Ranges.dense`` ≡ call without ranges (bit for bit except
+SUM); label masks against a dense masked FP64 reference computed on the host;
+gradients against masked dense Torch.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def target(request):
         return name, "cpu"
     dev, reason = backend_status(name)
     if dev is None:
-        pytest.skip(f"backend {name} absent : {reason}")
+        pytest.skip(f"backend {name} unavailable: {reason}")
     return name, dev
 
 
@@ -34,7 +34,7 @@ def _call_or_skip(run, r, name, **kw):
     try:
         return run.with_ranges(r)(**kw)
     except UnsupportedError as exc:
-        pytest.skip(f"{name} : {exc}")
+        pytest.skip(f"{name}: {exc}")
 
 
 def _setup(dev, dtype, density, m=257, n=1031, seed=0):

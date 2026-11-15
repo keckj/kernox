@@ -1,12 +1,11 @@
-"""Conformance des opérations de parité PyKeOps (``kernox/ops.py``).
+"""Conformance of the PyKeOps parity operations (``kernox/ops.py``).
 
-Le DAG symox de chaque opération est imprimé par le backend et jugé contre la
-référence FP64 commune (``run_case``). La sémantique keopscore elle-même est
-vérifiée sur l'oracle dans ``tests/test_ops.py``. Pour les opérations
-discontinues (round, mod, step, one_hot, bspline d'ordre 0), les données sont
-prises sur une grille dyadique où chaque opération intermédiaire est exacte
-en float32 comme en float64 : le jugement par bornes d'erreur ne peut pas
-dépendre d'un saut de discontinuité.
+The symox DAG of each operation is printed by the backend and judged against
+the shared FP64 reference (``run_case``). The keopscore semantics themselves
+are checked on the oracle in ``tests/test_ops.py``. For discontinuous
+operations (round, mod, step, one_hot, order-0 bspline), the data are taken
+on a dyadic grid where every intermediate operation is exact in float32 as in
+float64: the error-bound judgment cannot depend on a jump at a discontinuity.
 """
 
 from __future__ import annotations
@@ -46,7 +45,7 @@ def test_smooth_elementwise(backend, dtype):
     expr = f.sum().sum_over("j")
     rng = np.random.default_rng(4)
     arrays = {"x": rng.standard_normal((300, 2)), "y": rng.standard_normal((250, 2))}
-    arrays["y"][:3] = arrays["x"][:3]  # d = 0 : branches sinxdivx(0) = 1
+    arrays["y"][:3] = arrays["x"][:3]  # d = 0: sinxdivx(0) = 1 branches
     run_case(name, dev, expr, arrays, dtype)
 
 
@@ -72,7 +71,7 @@ def test_one_hot_elem_extract(backend, dtype):
     f, x, b = kp.Vi("f", 1), kp.Vi("x", 4), kp.Vj("b", 5)
     expr = (f.one_hot(5) * b + x.elem(2) * b.extract(1, 3).sum() + x.extract(1, 2).sum()).sum_over("j")
     rng = np.random.default_rng(6)
-    F = rng.integers(0, 9, size=(160, 1)) * 0.5  # demi-entiers : bornes exactes de one_hot
+    F = rng.integers(0, 9, size=(160, 1)) * 0.5  # half-integers: exact one_hot boundaries
     F[F > 4.0] -= 4.0
     arrays = {"f": F, "x": rng.standard_normal((160, 4)), "b": rng.standard_normal((140, 5))}
     run_case(name, dev, expr, arrays, dtype)
@@ -83,11 +82,11 @@ def test_linear_algebra(backend, dtype):
     name, dev = backend
     x, y, A = kp.Vi("x", 3), kp.Vj("y", 2), kp.Vj("A", 6)
     v = A.matvecmult(x)                     # (2,)
-    w = x.vecmatmult(A)                     # (2,) avec A vue (3, 2)
+    w = x.vecmatmult(A)                     # (2,) with A viewed as (3, 2)
     t = x.tensorprod(y)                     # (6,)
     k = x.keops_kron(y, [3], [2])           # (6,)
     td = A.keops_tensordot(x, [2, 3], [3], [1], [0])  # (2,)
-    tp = x.keops_tensordot(A, [3], [3, 2], [], [], [2, 0, 1])  # (18,), permuté
+    tp = x.keops_tensordot(A, [3], [3, 2], [], [], [2, 0, 1])  # (18,), permuted
     f = kp.exp(-(v - y).sqnorm2() * 0.1) * (w.dot(y) + t.dot(k) * 0.1 + td.sum() + tp.sum() * 0.01)
     expr = f.sum_over("j")
     rng = np.random.default_rng(7)
@@ -103,7 +102,7 @@ def test_bspline(backend, dtype, k):
     t, x, b = kp.Vj("t", 8), kp.Vi("x", 1), kp.Vj("b", 8 - k - 1)
     expr = t.bspline(x, k).dot(b).sum_over("j")
     rng = np.random.default_rng(8)
-    T = np.sort(_grid(rng, (120, 8), step=1 / 8, span=16), axis=1)  # nœuds multiples possibles
+    T = np.sort(_grid(rng, (120, 8), step=1 / 8, span=16), axis=1)  # repeated knots possible
     arrays = {"t": T, "x": _grid(rng, (150, 1), step=1 / 32, span=72), "b": rng.standard_normal((120, 8 - k - 1))}
     run_case(name, dev, expr, arrays, dtype)
 

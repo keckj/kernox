@@ -1,7 +1,7 @@
-"""LOGSUMEXP et SUMSOFTMAXWEIGHT (contrat v0.5) : frontend, plan, oracles.
+"""LOGSUMEXP and SUMSOFTMAXWEIGHT (v0.5 contract): frontend, plan, oracles.
 
-Oracle Torch par blocs (fusion d'états par décalage) contre l'oracle NumPy
-FP64 indépendant (``math.fsum``) et contre ``torch.logsumexp`` / softmax dense.
+Block-wise Torch oracle (state merging with a running shift) against the
+independent FP64 NumPy oracle (``math.fsum``) and against ``torch.logsumexp`` / dense softmax.
 """
 import math
 
@@ -52,7 +52,7 @@ def test_plan_shapes_and_kinds():
 def test_frontend_validation():
     x, y = kp.Vi("x", 2), kp.Vj("y", 2)
     with pytest.raises(ValidationError):
-        (x - y).sumsoftmaxweight(y, over="j")          # score non scalaire
+        (x - y).sumsoftmaxweight(y, over="j")          # non-scalar score
     with pytest.raises(TypeError):
         (x - y).sum().sumsoftmaxweight(x < y, over="j")
     with pytest.raises(TypeError):
@@ -65,8 +65,8 @@ def test_frontend_validation():
 
 
 def test_backward_first_order_only():
-    """Gradient d'ordre 1 (plan SUM substitut, cf. test_reduction_gradients.py) ;
-    la dérivée seconde est refusée (once_differentiable)."""
+    """First-order gradient (surrogate SUM plan, see test_reduction_gradients.py);
+    the second derivative is refused (once_differentiable)."""
     x = torch.randn(5, 2, dtype=torch.float64, requires_grad=True)
     y = torch.randn(7, 2, dtype=torch.float64)
     f = -((kp.Vi("x", 2) - kp.Vj("y", 2)) ** 2).sum()
@@ -114,7 +114,7 @@ def test_oracle_vs_torch_dense():
     D = -((X[:, None] - Y[None]) ** 2).sum(-1) * 30.0
     f = -((x - y) ** 2).sum() * 30.0
     lse = run_oracle(_lse(f).to_plan("float64"), {"x": X, "y": Y}, 1000)
-    # LSE proche de 0 possible : l'erreur d'arrondi suit l'échelle des termes |f|, pas |LSE|
+    # LSE may be close to 0: the rounding error follows the scale of the terms |f|, not |LSE|
     np.testing.assert_allclose(lse[:, 0], torch.logsumexp(D, 1).numpy(), rtol=1e-14,
                                atol=1e-15 * float(D.abs().max()))
     sw = run_oracle(_ssmw(f, v).to_plan("float64"), {"x": X, "y": Y, "v": V}, 1000)
@@ -123,16 +123,16 @@ def test_oracle_vs_torch_dense():
 
 def _special_plan(kind, E=2):
     x, y = kp.Vi("x", 1), kp.Vj("y", 1)
-    f = x - y                                    # x = 0 : f_ij = -y_j exactement
+    f = x - y                                    # x = 0: f_ij = -y_j exactly
     if kind is R.LOGSUMEXP:
         return _lse(f).to_plan("float64")
     return _ssmw(f, kp.Vj("w", E) * 1.0).to_plan("float64")
 
 
 SPECIAL = {
-    "big": [-1e4, -1e4 + 1, -9990.0],            # f = 1e4 : sans débordement
+    "big": [-1e4, -1e4 + 1, -9990.0],            # f = 1e4: no overflow
     "very_negative": [1e4, 1e4 - 2, 1e4 + 3],
-    "neg_inf_mix": [INF, 1.0, INF, -2.0],        # f = -inf : poids nul
+    "neg_inf_mix": [INF, 1.0, INF, -2.0],        # f = -inf: zero weight
     "all_neg_inf": [INF, INF, INF],
     "pos_inf": [-INF, 0.0, 3.0],
     "two_pos_inf": [-INF, 0.0, -INF],
@@ -175,12 +175,12 @@ def test_special_values(kind, case):
     ref = reference_numpy(plan, inp)["value"]
     for row in ref:
         np.testing.assert_allclose(row, want, rtol=1e-15, equal_nan=True)
-    for bp in (2, 3, 1 << 20):  # tranches de j : vides (tout −inf), à +inf, à NaN
+    for bp in (2, 3, 1 << 20):  # j slices: empty (all −inf), with +inf, with NaN
         np.testing.assert_allclose(run_oracle(plan, inp, bp), ref, rtol=1e-15, equal_nan=True)
 
 
 def test_empty_slices_in_partition():
-    """Tranches de j entièrement à −inf entre deux tranches vivantes : neutres."""
+    """j slices entirely at −inf between two live slices: neutral."""
     plan = _special_plan(R.SUMSOFTMAXWEIGHT, E=1)
     yv = [INF] * 6 + [0.0, 1.0] + [INF] * 6 + [2.0]
     n = len(yv)
@@ -193,7 +193,7 @@ def test_empty_slices_in_partition():
 
 
 def test_nan_weight_with_zero_weight_term_ignored():
-    """g NaN sur un terme f = −inf (poids nul) : ignoré ; sur un terme vivant : NaN."""
+    """NaN g on a term with f = −inf (zero weight): ignored; on a live term: NaN."""
     plan = _special_plan(R.SUMSOFTMAXWEIGHT, E=1)
     inp = {"x": torch.zeros(1, 1, dtype=torch.float64), "y": torch.tensor([[INF], [0.0]], dtype=torch.float64),
            "w": torch.tensor([[NAN], [3.0]], dtype=torch.float64)}

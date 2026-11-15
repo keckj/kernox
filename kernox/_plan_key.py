@@ -1,27 +1,27 @@
-"""Clé stable d'un :class:`kernox.plan.Plan` (contrat v0).
+"""Stable key of a :class:`kernox.plan.Plan` (contract v0).
 
-La clé est le sha256 hexadécimal d'une sérialisation JSON canonique :
+The key is the hexadecimal sha256 of a canonical JSON serialization of:
 
-- version du format de clé (``PLAN_KEY_FORMAT``) ;
-- pour chaque argument, dans l'ordre de ``plan.args`` : nom, rôle, dimension
-  et ``srepr`` symox de chaque symbole de composante (nom + hypothèses) ;
-- ``srepr`` symox de chaque sortie, dans l'ordre ; si l'arbre déplié d'une
-  sortie dépasse ``DAG_THRESHOLD`` nœuds (DAG profond partagé : ``srepr`` serait
-  exponentiel), la sortie est sérialisée comme graphe : ``["dag", nœuds]``, la
-  liste des nœuds distincts en ordre postfixe, chacun ``srepr`` pour un atome
-  ou ``[classe, tête, indices des enfants]`` sinon. Les clés des plans
-  existants (arbres plus petits) sont inchangées ;
-- réduction (type, K), ``dtype``, ``acc_dtype``, ``index_dtype``, ``fast_math``, ``fp_contract`` ;
-- ``sum_scheme`` (avenant v0.7) seulement s'il diffère de ``"direct"`` : la
-  clé d'un plan existant est inchangée.
-- ``batch_rank`` (avenant v0.6) seulement s'il est non nul : la clé d'un plan
-  sans batch est inchangée ;
-- ``ranges`` (avenant v0.6 §2) seulement s'il est vrai.
+- the key format version (``PLAN_KEY_FORMAT``);
+- for each argument, in ``plan.args`` order: name, role, dimension and the
+  symox ``srepr`` of each component symbol (name + assumptions);
+- the symox ``srepr`` of each output, in order; if the unfolded tree of an
+  output exceeds ``DAG_THRESHOLD`` nodes (deep shared DAG: ``srepr`` would be
+  exponential), the output is serialized as a graph: ``["dag", nodes]``, the
+  list of distinct nodes in postfix order, each one being ``srepr`` for an atom
+  or ``[class, head, child indices]`` otherwise. Keys of existing plans
+  (smaller trees) are unchanged;
+- reduction (kind, K), ``dtype``, ``acc_dtype``, ``index_dtype``, ``fast_math``, ``fp_contract``;
+- ``sum_scheme`` (amendment v0.7) only if it differs from ``"direct"``: the
+  key of an existing plan is unchanged.
+- ``batch_rank`` (amendment v0.6) only if nonzero: the key of a plan
+  without batch is unchanged;
+- ``ranges`` (amendment v0.6 §2) only if true.
 
-``plan.meta`` n'entre pas dans la clé (informations de diagnostic seulement).
-La clé ne dépend ni de ``PYTHONHASHSEED`` ni de l'ordre de création des objets
-(testé dans ``tests/test_plan_key.py``). Les backends y ajoutent la version du
-générateur, le compilateur, les options et l'architecture (cf. contrat).
+``plan.meta`` is not part of the key (diagnostic information only).
+The key depends neither on ``PYTHONHASHSEED`` nor on object creation order
+(tested in ``tests/test_plan_key.py``). Backends add the generator version,
+compiler, options and architecture to it (see the contract).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ import json
 PLAN_KEY_FORMAT = "kernox-plan-key-v1"
 
 
-#: taille d'arbre déplié au-delà de laquelle une sortie est sérialisée comme graphe
+#: unfolded tree size beyond which an output is serialized as a graph
 DAG_THRESHOLD = 200_000
 
 
@@ -43,7 +43,7 @@ def _srepr(expr) -> str:
 
 
 def _tree_size(expr, limit):
-    """Nœuds de l'arbre déplié (mémoïsé par sous-expression), plafonné à ``limit``."""
+    """Node count of the unfolded tree (memoized per subexpression), capped at ``limit``."""
     memo = {}
 
     def size(e):
@@ -57,7 +57,7 @@ def _tree_size(expr, limit):
 
 
 def _dag(expr) -> list:
-    """Sérialisation canonique du graphe : nœuds distincts en ordre postfixe."""
+    """Canonical graph serialization: distinct nodes in postfix order."""
     from symox import srepr
 
     index, nodes = {}, []
@@ -86,7 +86,7 @@ def _output(expr):
 
 
 def plan_payload(plan) -> dict:
-    """Structure JSON canonique hachée par :func:`plan_key` (utile au débogage)."""
+    """Canonical JSON structure hashed by :func:`plan_key` (useful for debugging)."""
     payload = {
         "format": PLAN_KEY_FORMAT,
         "args": [
@@ -113,6 +113,6 @@ def plan_payload(plan) -> dict:
 
 
 def plan_key(plan) -> str:
-    """sha256 hex de :func:`plan_payload`, sérialisé de façon canonique."""
+    """Hex sha256 of :func:`plan_payload`, canonically serialized."""
     text = json.dumps(plan_payload(plan), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(text.encode("ascii")).hexdigest()

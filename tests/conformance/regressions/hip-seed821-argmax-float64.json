@@ -16,6 +16,6 @@
   "kp.where(kp.where((y[2] <= x[0]), -1, 0.5) >= 0, kp.sqrt(kp.where((y[2] <= x[0]), -1, 0.5)), y[1])"
  ],
  "backend": "hip",
- "error": "UnsupportedError: expression non réelle : Piecewise((Piecewise((I, x[0] >= y[2]), (0.707106781186548, True)), x[0] < y[2]), (y[1], True))",
+ "error": "UnsupportedError: non-real expression: Piecewise((Piecewise((I, x[0] >= y[2]), (0.707106781186548, True)), x[0] < y[2]), (y[1], True))",
  "original_seed": 821
 }

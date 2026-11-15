@@ -45,7 +45,7 @@ from .expr import (
     tanh,
     where,
 )
-from .ops import (  # noqa: E402 - attache aussi les méthodes PyKeOps à Formula
+from .ops import (  # noqa: E402 - also attaches the PyKeOps methods to Formula
     bspline,
     clampint,
     elem,
@@ -82,7 +82,7 @@ from .linalg import LinearOperator, conjugate_gradient
 from .ranges import Ranges, ranges_from_labels
 from .runtime import RangedReduction, Reduction, compile, get_backend, register_backend
 from .tuning import export_wisdom, forget_wisdom, import_wisdom
-from .diagnostics import diagnostics  # noqa: E402 - aussi `python -m kernox.diagnostics`
+from .diagnostics import diagnostics  # noqa: E402 - also `python -m kernox.diagnostics`
 
 __all__ = [
     "Vi", "Vj", "Param", "Formula", "ReductionExpr", "Reduction", "RangedReduction", "compile",

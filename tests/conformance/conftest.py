@@ -1,8 +1,8 @@
-"""Suite de conformance commune aux backends GPU (cuda, hip, sycl).
+"""Conformance suite shared by the GPU backends (cuda, hip, sycl).
 
-Chaque test est paramétré par backend ; un backend sans device ou sans module
-est **sauté** (jamais simulé). ``KP_CONFORMANCE_BACKENDS=hip,cuda`` restreint
-la liste. Profil rapide (CI) : ``-m "not slow"`` ; profil long :
+Each test is parametrized by backend; a backend without a device or without
+its module is **skipped** (never simulated). ``KP_CONFORMANCE_BACKENDS=hip,cuda``
+restricts the list. Quick profile (CI): ``-m "not slow"``; long profile:
 ``-m slow``.
 """
 
@@ -15,7 +15,7 @@ from ._support import BACKENDS, backend_status
 
 @pytest.fixture(scope="session", autouse=True)
 def _isolated_cache(tmp_path_factory):
-    # caches de compilation et wisdom isolés : rien n'est écrit chez l'utilisateur
+    # isolated compilation and wisdom caches: nothing is written to the user's directories
     if "KERNOX_CACHE_DIR" in os.environ:
         yield None
         return
@@ -27,10 +27,10 @@ def _isolated_cache(tmp_path_factory):
 
 @pytest.fixture(params=BACKENDS)
 def backend(request):
-    """``(nom, device)`` d'un backend réellement disponible."""
+    """``(name, device)`` of an actually available backend."""
     dev, reason = backend_status(request.param)
     if dev is None:
-        pytest.skip(f"backend {request.param} absent : {reason}")
+        pytest.skip(f"backend {request.param} unavailable: {reason}")
     return request.param, dev
 
 

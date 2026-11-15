@@ -1,5 +1,5 @@
-"""Gradients des réductions LOGSUMEXP/SUMSOFTMAXWEIGHT (plan SUM substitut) et
-MIN/MAX/KMIN (terme retenu) sur chaque backend, contre l'oracle (FP64)."""
+"""Gradients of the LOGSUMEXP/SUMSOFTMAXWEIGHT reductions (substitute SUM plan) and
+MIN/MAX/KMIN (selected term) on each backend, against the oracle (FP64)."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def test_gradients_match_oracle(backend, name):
             G = torch.randn(out.shape, dtype=torch.float64, generator=torch.Generator().manual_seed(1)).to(device)
             grads = torch.autograd.grad((out * G).sum(), list(leaves.values()))
         except UnsupportedError as e:
-            pytest.skip(f"{target} : {e}")
+            pytest.skip(f"{target}: {e}")
         synchronize(device)
         results.append([out.cpu(), *(t.cpu() for t in grads)])
     for a, w in zip(*results):

@@ -1,8 +1,8 @@
-"""Backend ``hip`` (AMD ROCm) conforme au contrat v0.
+"""``hip`` backend (AMD ROCm), compliant with contract v0.
 
-Toolchain : hipRTC **du même paquet ROCm que Torch** (compilation en processus),
-chargement par ``hipModuleLoadData`` et lancement par ``hipModuleLaunchKernel``
-sur ``torch.cuda.current_stream(device)``. Voir ``docs/backend-hip.md``.
+Toolchain: hipRTC **from the same ROCm package as Torch** (in-process compilation),
+loading through ``hipModuleLoadData`` and launching through ``hipModuleLaunchKernel``
+on ``torch.cuda.current_stream(device)``. See ``docs/backend-hip.md``.
 """
 
 from __future__ import annotations
@@ -23,27 +23,27 @@ from ._kernel import (COOP_K_MIN, GENERATOR_VERSION, KMIN_KINDS, S_MAX, TOPK_SPL
 KERNEL_NAME = "kp_reduce"
 MERGE_NAME = "kp_merge"
 RANGES_NAME = "kp_reduce_ranges"
-GRID_Z_MAX = 65535  # éléments de batch par lancement (dimension z de la grille)
-K_MAX = 1024  # coop G=32, 32 rangs/lane ; au-delà : UnsupportedError
+GRID_Z_MAX = 65535  # batch elements per launch (z dimension of the grid)
+K_MAX = 1024  # coop G=32, 32 ranks/lane; beyond that: UnsupportedError
 _DT_RANK = {"float16": -1, "float32": 0, "float64": 1}
 
-MEASURE_MAX, PATIENT_MAX = 4, 32  # contrat v0.2 (fd98ec0)
+MEASURE_MAX, PATIENT_MAX = 4, 32  # contract v0.2
 
 
 @dataclass(frozen=True)
 class HipCompileInfo(CompileInfo):
-    """``CompileInfo`` + variante effective (contrat v0.2 ; champ absent de base.py)."""
+    """``CompileInfo`` + effective variant (contract v0.2; field missing from base.py)."""
 
     variant: Variant | None = None
 
 
 _modules_lock = threading.Lock()
-# (clé, device) -> (module, kp_reduce, kp_merge) ; jamais déchargés (cf. docs : durée de vie)
+# (key, device) -> (module, kp_reduce, kp_merge); never unloaded (see docs: lifetime)
 _modules: dict = {}
 
 
 def _default_pair_provider(plan: Plan):
-    from ...codegen.pair import pair_function  # fonction de paire du noyau (symox)
+    from ...codegen.pair import pair_function  # pair function from the core (symox)
 
     return pair_function(plan, "hip")
 
@@ -58,45 +58,45 @@ def _device_index(device) -> int:
     torch = _torch()
     dev = torch.device(device)
     if dev.type != "cuda":
-        raise UnsupportedError(f"backend hip : device {dev} non ROCm")
+        raise UnsupportedError(f"hip backend: device {dev} is not a ROCm device")
     return dev.index if dev.index is not None else torch.cuda.current_device()
 
 
 def _plan_key_or_none(plan: Plan):
     try:
         return plan.key()
-    except ImportError:  # _plan_key pas encore livré par le noyau
+    except ImportError:  # _plan_key not yet provided by the core
         return None
 
 
 @dataclass(frozen=True)
 class HipOptions:
-    """Options de compilation ; toutes entrent dans la clé de cache.
+    """Compilation options; all of them are part of the cache key.
 
-    ``fp_contract`` (contrat v0.3) : ``None`` = suit ``plan.fp_contract``
-    (``True`` par défaut → ``-ffp-contract=on`` : contraction FMA à l'intérieur
-    d'une expression seulement, jamais ``fast``) ; ``False`` → ``-ffp-contract=off``.
-    ``"on"``/``"off"`` : forçage explicite (diagnostic). Les drapeaux effectifs
-    entrent dans la clé de cache.
+    ``fp_contract`` (contract v0.3): ``None`` = follow ``plan.fp_contract``
+    (``True`` by default → ``-ffp-contract=on``: FMA contraction within a single
+    expression only, never ``fast``); ``False`` → ``-ffp-contract=off``.
+    ``"on"``/``"off"``: explicit override (diagnostics). The effective flags are
+    part of the cache key.
     """
 
     fp_contract: str | None = None
     block: int = 256
     opt_level: str = "-O3"
-    # Variante de parcours : "auto" | "thread" | "coop" (KMIN/ARGKMIN) ; groupe coop (None = auto).
+    # Traversal variant: "auto" | "thread" | "coop" (KMIN/ARGKMIN); coop group (None = auto).
     strategy: str = "auto"
     group: int | None = None
-    tile_j: int | None = None  # None : borne LDS (32 KiB) et taille de bloc
-    # Partition de j (décision au lancement, sans recompilation) :
-    # "auto" (M petit), "off", "force" (tests/benchmarks) ; jchunk impose la taille des plages.
+    tile_j: int | None = None  # None: bounded by the LDS (32 KiB) and the block size
+    # j partition (decided at launch time, no recompilation):
+    # "auto" (small M), "off", "force" (tests/benchmarks); jchunk sets the range size.
     split: str = "auto"
     jchunk: int | None = None
-    # Blocs visés par CU avant de partitionner j : 32 bat 8 dans tous les cas gauss/count
-    # mesurés sur R9700 (−7 à −15 %) ; à confirmer sur d'autres cartes.
+    # Target blocks per CU before partitioning j: 32 beats 8 in every gauss/count case
+    # measured on R9700 (−7 to −15 %); to be confirmed on other cards.
     split_blocks_per_cu: int = 32
-    temp_max_bytes: int = 256 << 20  # borne publiée des temporaires de partition
-    # LSE/SSMW : 1 = insertion directe dans l'état de ligne, 2 = état local par tuile
-    # puis fusion ; None = selon la taille d'état (``soft_levels_auto``).
+    temp_max_bytes: int = 256 << 20  # published bound on the partition temporaries
+    # LSE/SSMW: 1 = direct insertion into the row state, 2 = local state per tile
+    # then merge; None = depends on the state size (``soft_levels_auto``).
     soft_levels: int | None = None
 
     def flags(self, arch: str, plan: Plan | None = None) -> list[str]:
@@ -104,7 +104,7 @@ class HipOptions:
         if fc is None:
             fc = "on" if getattr(plan, "fp_contract", True) else "off"
         if fc not in ("off", "on"):
-            raise ValueError("fp_contract doit valoir None, 'off' ou 'on'")
+            raise ValueError("fp_contract must be None, 'off' or 'on'")
         return [f"--offload-arch={arch}", self.opt_level, "-std=c++17",
                 f"-ffp-contract={fc}", "-fno-fast-math",
                 "-fno-gpu-flush-denormals-to-zero"]
@@ -115,7 +115,7 @@ _ACC_KINDS = (ReductionKind.SUM, ReductionKind.LOGSUMEXP, ReductionKind.SUMSOFTM
 
 
 def _scheme_options(plan: Plan, cfg: KernelConfig) -> tuple:
-    """Schéma de sommation effectif (avenant v0.7) ; ``sum_block=T`` pour block."""
+    """Effective summation scheme (amendment v0.7); ``sum_block=T`` for block."""
     if plan.reduction.kind not in _ACC_KINDS:
         return ()
     return (f"sum_scheme={plan.sum_scheme}",) + (
@@ -130,9 +130,9 @@ class HipCompiledReduction:
         fns = tuple(fns) if fns is not None else (None, None)
         self._fn, self._merge = fns[0], fns[1]
         self._franges = fns[2] if len(fns) > 2 else None
-        # avenant v0.6 §2 : hauteur des tuiles de travail = lignes i par bloc
+        # amendment v0.6 §2: work tile height = i rows per block
         self.ranges_tile_m = cfg.rows_per_block
-        self._boff = None  # (layout, table (nargs, nb) int64) du dernier appel batché
+        self._boff = None  # (layout, (nargs, nb) int64 table) of the last batched call
         self.options = options or HipOptions()
         self.cu_count = cu_count
         self.last_launch: dict = {}
@@ -155,7 +155,7 @@ class HipCompiledReduction:
         }
 
     def split_plan(self, M: int, N: int, nb: int = 1) -> tuple[int, int]:
-        """(S, jchunk) pour (M, N) et ``nb`` éléments de batch ; S = 1 : pas de partition de j."""
+        """(S, jchunk) for (M, N) and ``nb`` batch elements; S = 1: no j partition."""
         o, cfg = self.options, self.config
         TJ = cfg.tile_j
         if N == 0 or o.split == "off":
@@ -164,7 +164,7 @@ class HipCompiledReduction:
             jchunk = max(1, int(o.jchunk))
             S = -(-N // jchunk)
             if S > S_MAX:
-                raise UnsupportedError(f"jchunk={jchunk} donne S={S} > S_MAX={S_MAX}")
+                raise UnsupportedError(f"jchunk={jchunk} gives S={S} > S_MAX={S_MAX}")
         else:
             gx = -(-M // cfg.rows_per_block) * max(nb, 1)
             if o.split == "force":
@@ -179,7 +179,7 @@ class HipCompiledReduction:
             jchunk = -(-(-(-N // S)) // TJ) * TJ
             S = -(-N // jchunk)
         if S > 1 and partial_bytes(self.plan, S, M) * nb > o.temp_max_bytes:
-            raise UnsupportedError("temporaires de partition au-delà de temp_max_bytes")
+            raise UnsupportedError("partition temporaries exceed temp_max_bytes")
         return S, jchunk
 
     def temp_bytes(self, M: int, N: int) -> int:
@@ -187,11 +187,11 @@ class HipCompiledReduction:
         return partial_bytes(self.plan, S, M) if S > 1 else 0
 
     def _check(self, inputs: dict, outputs: dict, batch=None) -> tuple[int, int]:
-        """Revalidation bon marché de ce dont dépend la sûreté mémoire.
+        """Cheap revalidation of everything memory safety depends on.
 
-        ``batch`` (avenant v0.6 §1) : entrées ``(*B, L, d)`` dont seules les deux dernières
-        dimensions sont contiguës (les offsets de batch viennent de la table du runtime),
-        params ``(*Bp, d)`` ou ``(d,)`` ; sorties ``(nb, M, ·)`` contiguës."""
+        ``batch`` (amendment v0.6 §1): inputs ``(*B, L, d)`` of which only the last two
+        dimensions are contiguous (the batch offsets come from the runtime table),
+        params ``(*Bp, d)`` or ``(d,)``; contiguous ``(nb, M, ·)`` outputs."""
         torch = _torch()
         plan = self.plan
         dt = getattr(torch, plan.dtype)
@@ -199,45 +199,45 @@ class HipCompiledReduction:
         for a in plan.args:
             t = inputs.get(a.name)
             if t is None:
-                raise ValueError(f"entrée manquante : {a.name}")
+                raise ValueError(f"missing input: {a.name}")
             if t.device.type != "cuda" or t.device.index != self.device_index:
-                raise ValueError(f"{a.name} : device {t.device}, attendu cuda:{self.device_index}")
+                raise ValueError(f"{a.name}: expected device cuda:{self.device_index}, got {t.device}")
             if batch is not None:
                 if t.dtype != dt:
-                    raise ValueError(f"{a.name} : dtype {t.dtype} invalide")
+                    raise ValueError(f"{a.name}: invalid dtype {t.dtype}")
                 if a.name not in batch.offsets or tuple(batch.offsets[a.name].shape) != (batch.nb,):
-                    raise ValueError(f"{a.name} : table d'offsets de batch absente ou mal formée")
+                    raise ValueError(f"{a.name}: batch offset table missing or malformed")
                 if t.shape[-1] != a.dim or (a.dim > 1 and t.stride(-1) != 1):
-                    raise ValueError(f"{a.name} : dernière dimension {a.dim} contiguë attendue")
+                    raise ValueError(f"{a.name}: expected a contiguous last dimension of size {a.dim}")
                 if a.role == "param":
                     continue
                 if t.dim() < 2 or (t.shape[-2] > 1 and t.stride(-2) != a.dim):
-                    raise ValueError(f"{a.name} : deux dernières dimensions contiguës attendues")
+                    raise ValueError(f"{a.name}: expected the last two dimensions to be contiguous")
                 L_ = t.shape[-2]
                 if a.role == "i":
                     if M is not None and L_ != M:
-                        raise ValueError("arguments i de longueurs différentes")
+                        raise ValueError("i arguments have different lengths")
                     M = L_
                 else:
                     if N is not None and L_ != N:
-                        raise ValueError("arguments j de longueurs différentes")
+                        raise ValueError("j arguments have different lengths")
                     N = L_
                 continue
             if t.dtype != dt or not t.is_contiguous():
-                raise ValueError(f"{a.name} : dtype {t.dtype}/contiguïté invalides")
+                raise ValueError(f"{a.name}: invalid dtype {t.dtype} or non-contiguous tensor")
             if a.role == "param":
                 if tuple(t.shape) != (a.dim,):
-                    raise ValueError(f"{a.name} : forme {tuple(t.shape)}, attendu ({a.dim},)")
+                    raise ValueError(f"{a.name}: expected shape ({a.dim},), got {tuple(t.shape)}")
                 continue
             if t.dim() != 2 or t.shape[1] != a.dim:
-                raise ValueError(f"{a.name} : forme {tuple(t.shape)}, attendu (·, {a.dim})")
+                raise ValueError(f"{a.name}: expected shape (·, {a.dim}), got {tuple(t.shape)}")
             if a.role == "i":
                 if M is not None and t.shape[0] != M:
-                    raise ValueError("arguments i de longueurs différentes")
+                    raise ValueError("i arguments have different lengths")
                 M = t.shape[0]
             else:
                 if N is not None and t.shape[0] != N:
-                    raise ValueError("arguments j de longueurs différentes")
+                    raise ValueError("j arguments have different lengths")
                 N = t.shape[0]
         first_out = outputs[self._out_names[0]]
         if M is None:
@@ -246,17 +246,17 @@ class HipCompiledReduction:
         for name, (shape, odt) in expected.items():
             t = outputs.get(name)
             if t is None:
-                raise ValueError(f"sortie manquante : {name}")
+                raise ValueError(f"missing output: {name}")
             if (tuple(t.shape) != shape or t.dtype != getattr(torch, odt) or not t.is_contiguous()
                     or t.device.type != "cuda" or t.device.index != self.device_index):
-                raise ValueError(f"sortie {name} : attendu {shape} {odt} contiguë sur cuda:{self.device_index}")
-        if N is None:  # exclu par supports()
-            raise UnsupportedError("plan sans argument j : N indéterminé")
+                raise ValueError(f"output {name}: expected a contiguous {shape} {odt} tensor on cuda:{self.device_index}")
+        if N is None:  # ruled out by supports()
+            raise UnsupportedError("plan without a j argument: N is undetermined")
         return M, N
 
     def launch(self, inputs: dict, outputs: dict, batch=None, ranges=None) -> None:
         if batch is not None and ranges is not None:
-            raise UnsupportedError("ranges et batch combinés : refusé (avenant v0.6)")
+            raise UnsupportedError("ranges combined with batch: rejected (amendment v0.6)")
         if batch is not None:
             self._launch_batched(inputs, outputs, batch)
             return
@@ -273,7 +273,7 @@ class HipCompiledReduction:
         cfg = self.config
         gx = -(-M // cfg.rows_per_block)
         if gx > 2**31 - 1:
-            raise UnsupportedError("M trop grand pour la grille")
+            raise UnsupportedError("M too large for the grid")
         ins = [ctypes.c_void_p(inputs[a.name].data_ptr()) for a in self.plan.args]
         outs = [ctypes.c_void_p(outputs[n].data_ptr()) for n in self._out_names]
         rt = _hip.hip_runtime()
@@ -285,8 +285,8 @@ class HipCompiledReduction:
                 rt.launch(self._fn, (gx, 1, 1), (cfg.block, 1, 1), 0, stream, args)
                 self.last_launch = {"S": 1, "jchunk": jchunk, "temp_bytes": 0, "grid": (gx, 1)}
                 return
-            # Partition de j : partiels [S, M, W] alloués par Torch sur ce device et ce
-            # stream (réutilisation ordonnée par le stream, cf. docs), puis fusion.
+            # j partition: [S, M, W] partials allocated by Torch on this device and this
+            # stream (reuse ordered by the stream, see docs), then merge.
             pv, pi = self._partials(S * M)
             pptr = [ctypes.c_void_p(pv.data_ptr()), ctypes.c_void_p(pi.data_ptr() if pi is not None else 0)]
             args = ins + [ctypes.c_longlong(M), ctypes.c_longlong(N), ctypes.c_longlong(jchunk),
@@ -309,12 +309,12 @@ class HipCompiledReduction:
         return pv, pi
 
     def _launch_batched(self, inputs: dict, outputs: dict, batch) -> None:
-        """Avenant v0.6 §1 : grille (gx, S, éléments de batch), offsets lus par bloc dans la
-        table ``(nargs, nb)`` ; partiels ``(nb, S, M, W)`` ; lancements par paquets de
-        ``GRID_Z_MAX`` éléments."""
+        """Addendum v0.6 §1: grid (gx, S, batch elements), offsets read per block from the
+        ``(nargs, nb)`` table; partials ``(nb, S, M, W)``; launches in chunks of
+        ``GRID_Z_MAX`` elements."""
         torch = _torch()
         if not self.plan.batch_rank:
-            raise UnsupportedError("plan non batché lancé avec un BatchLayout")
+            raise UnsupportedError("non-batched plan launched with a BatchLayout")
         M, N = self._check(inputs, outputs, batch)
         nb = int(batch.nb)
         if M == 0 or nb == 0:
@@ -325,7 +325,7 @@ class HipCompiledReduction:
         cfg = self.config
         gx = -(-M // cfg.rows_per_block)
         if gx > 2**31 - 1:
-            raise UnsupportedError("M trop grand pour la grille")
+            raise UnsupportedError("M too large for the grid")
         hit = self._boff
         if hit is not None and hit[0] is batch:
             table = hit[1]
@@ -356,20 +356,20 @@ class HipCompiledReduction:
                             if pv is not None else 0}
 
     def _launch_ranges(self, inputs: dict, outputs: dict, M: int, ranges) -> None:
-        """Avenant v0.6 §2 : neutres sur toutes les lignes (lancement N = 0), puis un bloc par
-        tuile de travail ``(i0, i1, k0, k1)`` ; égalités au plus petit j (départage par j)."""
+        """Addendum v0.6 §2: neutral elements on every row (N = 0 launch), then one block per
+        work tile ``(i0, i1, k0, k1)``; ties go to the smallest j (broken by j)."""
         torch = _torch()
         if self._franges is None:
-            raise UnsupportedError("plan sans ranges lancé avec un RangesLayout")
+            raise UnsupportedError("plan without ranges launched with a RangesLayout")
         if int(ranges.tile_m) != self.ranges_tile_m:
-            raise ValueError(f"tile_m={ranges.tile_m}, attendu {self.ranges_tile_m} (ranges_tile_m)")
+            raise ValueError(f"expected tile_m={self.ranges_tile_m} (ranges_tile_m), got {ranges.tile_m}")
         work, red = ranges.work, ranges.redranges
         for nm, t in (("work", work), ("redranges", red)):
             if (t.dtype != torch.int64 or not t.is_contiguous() or t.device.type != "cuda"
                     or t.device.index != self.device_index or t.dim() != 2):
-                raise ValueError(f"ranges.{nm} : int64 contigu (·, ·) sur cuda:{self.device_index} attendu")
+                raise ValueError(f"ranges.{nm}: expected a contiguous int64 (·, ·) tensor on cuda:{self.device_index}")
         if work.shape[1] != 4 or red.shape[1] != 2:
-            raise ValueError("ranges : work (W, 4) et redranges (R, 2) attendus")
+            raise ValueError("ranges: expected work of shape (W, 4) and redranges of shape (R, 2)")
         cfg = self.config
         gx = -(-M // cfg.rows_per_block)
         ins = [ctypes.c_void_p(inputs[a.name].data_ptr()) for a in self.plan.args]
@@ -380,7 +380,7 @@ class HipCompiledReduction:
             stream = torch.cuda.current_stream(self.device_index).cuda_stream
             args = ins + [ctypes.c_longlong(M), ctypes.c_longlong(0), ctypes.c_longlong(1),
                           ctypes.c_int(0)] + outs + [ctypes.c_void_p(0), ctypes.c_void_p(0)]
-            rt.launch(self._fn, (gx, 1, 1), (cfg.block, 1, 1), 0, stream, args)   # neutres
+            rt.launch(self._fn, (gx, 1, 1), (cfg.block, 1, 1), 0, stream, args)   # neutral elements
             if nw:
                 rargs = ins + [ctypes.c_longlong(M), ctypes.c_void_p(work.data_ptr()),
                                ctypes.c_void_p(red.data_ptr())] + outs
@@ -390,12 +390,12 @@ class HipCompiledReduction:
 
 class HipBackend:
     name = "hip"
-    fp_contract_off = True  # contrat v0.3 : plan.fp_contract=False → -ffp-contract=off
-    # avenant v0.7 (SUM, LSE, SSMW) : block = tuile de j (T = tile_j, publiée « sum_block=T »
-    # dans CompileInfo.options) sommée dans un accumulateur neuf ; kahan = Neumaier.
+    fp_contract_off = True  # contract v0.3: plan.fp_contract=False → -ffp-contract=off
+    # amendment v0.7 (SUM, LSE, SSMW): block = j tile (T = tile_j, published as "sum_block=T"
+    # in CompileInfo.options) summed into a fresh accumulator; kahan = Neumaier.
     sum_schemes = ("direct", "block", "kahan")
-    batch = True    # avenant v0.6 §1 : offsets par bloc (grille z), sorties (nb, M, ·)
-    ranges = True   # avenant v0.6 §2 : liste de travail en tuiles de hauteur ranges_tile_m
+    batch = True    # amendment v0.6 §1: per-block offsets (grid z), (nb, M, ·) outputs
+    ranges = True   # amendment v0.6 §2: work list in tiles of height ranges_tile_m
 
     def __init__(self, options: HipOptions | None = None, pair_provider=None):
         self.options = options or HipOptions()
@@ -403,7 +403,7 @@ class HipBackend:
         self._mem: dict = {}
         self._lock = threading.Lock()
 
-    # -- capacités -----------------------------------------------------------
+    # -- capabilities --------------------------------------------------------
     @staticmethod
     def _lds_limit(dev: int) -> int:
         torch = _torch()
@@ -417,37 +417,37 @@ class HipBackend:
         except UnsupportedError as e:
             return Support(False, str(e))
         if torch.version.hip is None or not torch.cuda.is_available():
-            return Support(False, "Torch ROCm indisponible")
+            return Support(False, "Torch ROCm unavailable")
         if plan.dtype not in _DT_RANK or plan.acc_dtype not in _DT_RANK:
-            return Support(False, f"dtype non supporté : {plan.dtype}/{plan.acc_dtype}")
+            return Support(False, f"unsupported dtype: {plan.dtype}/{plan.acc_dtype}")
         if _DT_RANK[plan.acc_dtype] < _DT_RANK[plan.dtype]:
-            return Support(False, "acc_dtype inférieur à dtype")
+            return Support(False, "acc_dtype is narrower than dtype")
         if plan.fast_math:
-            return Support(False, "fast_math non supporté par le backend hip")
+            return Support(False, "fast_math is not supported by the hip backend")
         if plan.sum_scheme not in self.sum_schemes:
-            return Support(False, f"sum_scheme={plan.sum_scheme!r} inconnu (avenant v0.7)")
+            return Support(False, f"unknown sum_scheme={plan.sum_scheme!r} (amendment v0.7)")
         if plan.batch_rank and plan.ranges:
-            return Support(False, "ranges et batch combinés : refusé (avenant v0.6)")
+            return Support(False, "ranges combined with batch: rejected (amendment v0.6)")
         if plan.index_dtype != "int64":
-            return Support(False, "index_dtype doit être int64")
+            return Support(False, "index_dtype must be int64")
         if not plan.args_of("j"):
-            return Support(False, "plan sans argument j : N indéterminé dans launch (cf. notes)")
+            return Support(False, "plan without a j argument: N is undetermined in launch (see notes)")
         if plan.out_dim < 1:
-            return Support(False, "formule sans sortie")
+            return Support(False, "formula has no output")
         kind, k = plan.reduction.kind, plan.reduction.k
         if kind in KMIN_KINDS:
             if not isinstance(k, int) or isinstance(k, bool) or k < 0:
-                return Support(False, f"K invalide : {k!r}")
+                return Support(False, f"invalid K: {k!r}")
             if plan.out_dim != 1:
-                return Support(False, "KMIN/ARGKMIN : formule scalaire uniquement (v0)")
+                return Support(False, "KMIN/ARGKMIN: scalar formulas only (v0)")
             if k > K_MAX:
-                return Support(False, f"K={k} > K_MAX={K_MAX} pour le backend hip v0")
+                return Support(False, f"K={k} > K_MAX={K_MAX} for the hip backend v0")
         try:
             cfg = self._config(plan, dev)
         except ValueError as e:
             return Support(False, str(e))
         if cfg is None:
-            return Support(False, "ligne j trop large pour la mémoire partagée")
+            return Support(False, "j row too wide for shared memory")
         return Support(True)
 
     def _config(self, plan: Plan, dev: int, o: HipOptions | None = None):
@@ -455,17 +455,17 @@ class HipBackend:
         return choose_config(plan, self._lds_limit(dev), o.block, o.strategy, o.group, o.tile_j,
                              o.soft_levels)
 
-    # -- variantes (contrat v0.2) ---------------------------------------------
-    # name : "row" (un thread par i, sans partition de j), "jsplit" (partition de j
-    # décidée au lancement, seuil blocks_per_cu), "coop_topk" (KMIN, liste répartie
-    # sur `group` lanes ; split "off" ou "auto"). Paramètres : block, tile_j, group,
-    # split, blocks_per_cu. Tous concrets : une variante ne dépend pas des défauts.
+    # -- variants (contract v0.2) ---------------------------------------------
+    # name: "row" (one thread per i, no j partition), "jsplit" (j partition decided
+    # at launch time, blocks_per_cu threshold), "coop_topk" (KMIN, list distributed
+    # over `group` lanes; split "off" or "auto"). Parameters: block, tile_j, group,
+    # split, blocks_per_cu. All concrete: a variant does not depend on the defaults.
     @staticmethod
     def _variant_of(cfg: KernelConfig, o: HipOptions) -> Variant:
         params = {"block": cfg.block, "tile_j": cfg.tile_j, "split": o.split}
         if o.split == "auto":
             params["blocks_per_cu"] = o.split_blocks_per_cu
-        if cfg.levels:  # LSE/SSMW seulement
+        if cfg.levels:  # LSE/SSMW only
             params["levels"] = cfg.levels
         if cfg.strategy == "coop":
             params["group"] = cfg.group
@@ -478,10 +478,10 @@ class HipBackend:
         p = dict(variant.params)
         unknown = set(p) - {"block", "tile_j", "split", "blocks_per_cu", "group", "levels"}
         if unknown or variant.name not in ("row", "jsplit", "coop_topk"):
-            raise UnsupportedError(f"variante hip inconnue : {variant}")
+            raise UnsupportedError(f"unknown hip variant: {variant}")
         split = p.get("split", "off" if variant.name == "row" else "auto")
         if (variant.name == "row") != (split == "off") and variant.name != "coop_topk":
-            raise UnsupportedError(f"variante incohérente : {variant}")
+            raise UnsupportedError(f"inconsistent variant: {variant}")
         return replace(self.options, block=int(p.get("block", self.options.block)),
                        tile_j=int(p["tile_j"]) if "tile_j" in p else None,
                        strategy="coop" if variant.name == "coop_topk" else "thread",
@@ -502,24 +502,25 @@ class HipBackend:
         return cfg
 
     def default_variant(self, plan: Plan, device, sizes: Sizes) -> Variant:
-        """Heuristique ESTIMATE (déterministe ; seuils d'une seule série de mesures, à confirmer) :
+        """ESTIMATE heuristic (deterministic; thresholds from a single measurement series,
+        to be confirmed):
 
-        - KMIN/ARGKMIN, K >= ``coop_k_min`` (32 ; 48 si la ligne j compte >= 64 dimensions) :
-          ``coop_topk``, G tel que <= 24 rangs par lane (G=16 au-delà de K=64) ;
-        - partition de j si la grille compte moins de ``32 × CU`` blocs et N > tuile, S
-          dimensionné sur ``32 × CU`` blocs ; top-K à K >= 32 : moins de ``4 × CU`` blocs,
-          S dimensionné sur ``8 × CU`` (coût de fusion S·M·K) ;
-        - bloc 256, tuile = min(256, 32 KiB / ligne j) ;
-        - LSE/SSMW : insertion à un niveau (``levels`` 1) en accumulation FP64 ou si l'état
-          par ligne dépasse 256 o, sinon deux niveaux (mesuré sur R9700 ; bloc 128 non retenu :
-          SSMW FP64 E64 un niveau 100,9 ms en bloc 256 contre 103,6 en bloc 128).
+        - KMIN/ARGKMIN, K >= ``coop_k_min`` (32; 48 if the j row has >= 64 dimensions):
+          ``coop_topk``, with G such that there are <= 24 ranks per lane (G=16 above K=64);
+        - j partition if the grid has fewer than ``32 × CU`` blocks and N > tile, with S
+          sized for ``32 × CU`` blocks; top-K with K >= 32: fewer than ``4 × CU`` blocks,
+          S sized for ``8 × CU`` (merge cost S·M·K);
+        - block 256, tile = min(256, 32 KiB / j row);
+        - LSE/SSMW: one-level insertion (``levels`` 1) with FP64 accumulation or if the
+          per-row state exceeds 256 B, otherwise two levels (measured on R9700; block 128 not
+          kept: SSMW FP64 E64 one level 100.9 ms with block 256 vs 103.6 with block 128).
         """
         dev = _device_index(device)
         cu = _torch().cuda.get_device_properties(dev).multi_processor_count
         o = replace(self.options, strategy="auto", group=None, tile_j=None, jchunk=None)
         cfg = self._config(plan, dev, o)
         if cfg is None:
-            raise UnsupportedError("ligne j trop large pour la mémoire partagée")
+            raise UnsupportedError("j row too wide for shared memory")
         gx = -(-max(sizes.m, 1) // cfg.rows_per_block) * max(getattr(sizes, "nb", 1), 1)
         k = plan.reduction.k
         if plan.reduction.kind in KMIN_KINDS and k is not None and k >= COOP_K_MIN:
@@ -530,9 +531,9 @@ class HipBackend:
         return self._variant_of(cfg, replace(o, split="auto" if split else "off", split_blocks_per_cu=bpc))
 
     def variants(self, plan: Plan, device, sizes: Sizes, effort: str) -> list[Variant]:
-        """``measure`` : <= 4 variantes discriminantes ; ``patient`` : <= 32 ; défaut en tête."""
+        """``measure``: <= 4 discriminating variants; ``patient``: <= 32; default first."""
         if effort not in ("measure", "patient"):
-            raise ValueError(f"effort inconnu : {effort!r}")
+            raise ValueError(f"unknown effort: {effort!r}")
         dev = _device_index(device)
         base = self.default_variant(plan, device, sizes)
         bp = dict(base.params)
@@ -551,7 +552,7 @@ class HipBackend:
             o = self._options_for(v)
             cfg = self._valid(plan, dev, o)
             if cfg is not None:
-                v = self._variant_of(cfg, o)  # forme canonique (tuile effective)
+                v = self._variant_of(cfg, o)  # canonical form (effective tile)
                 if v not in cands:
                     cands.append(v)
 
@@ -561,35 +562,35 @@ class HipBackend:
         bpc = self.options.split_blocks_per_cu
         alt_bpc = 8 if bpc != 8 else 32
         if effort == "measure":
-            # Choix pour gfx1201 (wave32, LDS 64 KiB/WGP, 32 CU signalés) :
+            # Choices for gfx1201 (wave32, 64 KiB LDS/WGP, 32 CUs reported):
             if kmin:
                 g = coop_group(k, plan.dtype)
                 if base.name == "coop_topk":
-                    if k <= 128:  # thread : spills mesurés (FP64 dès 64, FP32 dès 128)
+                    if k <= 128:  # thread: spills measured (FP64 from 64, FP32 from 128)
                         add(jname(split_now), block=256, split=split_now, blocks_per_cu=bpc)
-                    else:         # plus de rangs par lane (32), moins de shuffles
+                    else:         # more ranks per lane (32), fewer shuffles
                         add("coop_topk", block=256, group=max(2, bp["group"] // 2), split=split_now,
                             blocks_per_cu=bpc)
                     add("coop_topk", block=256, group=min(32, bp["group"] * 2), split=split_now,
-                        blocks_per_cu=bpc)                                                   # moins de rangs/lane
+                        blocks_per_cu=bpc)                                                   # fewer ranks/lane
                 elif k >= 16:
-                    add("coop_topk", block=256, group=g, split=split_now, blocks_per_cu=bpc)  # coop dès K moyen
+                    add("coop_topk", block=256, group=g, split=split_now, blocks_per_cu=bpc)  # coop from medium K
                     add(jname(split_now), block=128, split=split_now, blocks_per_cu=bpc)
                 else:
                     add(jname(split_now), block=128, split=split_now, blocks_per_cu=bpc)
                     add(jname(split_now), block=512, split=split_now, blocks_per_cu=bpc)
                 inv_bpc = TOPK_SPLIT_BLOCKS_PER_CU if k >= COOP_K_MIN else bpc
-                add(base.name, **{**bp, "split": other_split, "blocks_per_cu": inv_bpc})   # partition inverse
+                add(base.name, **{**bp, "split": other_split, "blocks_per_cu": inv_bpc})   # opposite partition
             else:
-                if "levels" in bp:  # LSE/SSMW : autre niveau d'insertion (registres)
+                if "levels" in bp:  # LSE/SSMW: other insertion level (registers)
                     add(jname(split_now), block=bp["block"], split=split_now, blocks_per_cu=bpc,
                         levels=3 - bp["levels"])
-                add(jname(split_now), block=128, split=split_now, blocks_per_cu=bpc)        # occupation
-                add(jname(other_split), block=256, split=other_split, blocks_per_cu=bpc)    # partition inverse
+                add(jname(split_now), block=128, split=split_now, blocks_per_cu=bpc)        # occupancy
+                add(jname(other_split), block=256, split=other_split, blocks_per_cu=bpc)    # opposite partition
                 if split_now == "auto":
-                    add("jsplit", block=256, split="auto", blocks_per_cu=alt_bpc)         # autre finesse de partition
+                    add("jsplit", block=256, split="auto", blocks_per_cu=alt_bpc)         # other partition granularity
                 else:
-                    add("row", block=256, tile_j=max(1, bp["tile_j"] // 4), split="off")  # petite tuile (D grand)
+                    add("row", block=256, tile_j=max(1, bp["tile_j"] // 4), split="off")  # small tile (large D)
             return cands[:MEASURE_MAX]
         blocks = (128, 256, 512)
         splits = (("off", None), ("auto", 8), ("auto", 32))
@@ -610,7 +611,7 @@ class HipBackend:
                     add(jname(sp), block=b, split=sp, blocks_per_cu=bpc, tile_j=max(1, b // 4))
             for sp, bpc in splits:
                 add(jname(sp), block=64, split=sp, blocks_per_cu=bpc)
-            if "levels" in bp:  # LSE/SSMW : l'autre niveau d'insertion, tuile par défaut
+            if "levels" in bp:  # LSE/SSMW: the other insertion level, default tile
                 for b in blocks:
                     for sp, bpc in splits:
                         add(jname(sp), block=b, split=sp, blocks_per_cu=bpc, levels=3 - bp["levels"])
@@ -628,12 +629,12 @@ class HipBackend:
         opts = self.options if variant is None else self._options_for(variant)
         cfg = self._valid(plan, dev, opts) if variant is not None else self._config(plan, dev, opts)
         if cfg is None:
-            raise UnsupportedError(f"variante invalide pour {arch} : {variant}")
+            raise UnsupportedError(f"invalid variant for {arch}: {variant}")
         eff_variant = self._variant_of(cfg, opts)
         cu = props.multi_processor_count
         temp_bound = 0 if opts.split == "off" else opts.temp_max_bytes
         if plan.reduction.kind in KMIN_KINDS and plan.reduction.k == 0:
-            # K = 0 : aucun lancement, donc rien à compiler (objet sans fonction native).
+            # K = 0: no launch, hence nothing to compile (object without a native function).
             info = HipCompileInfo("hip", props.name, arch, self._compiler_id(), tuple(opts.flags(arch, plan)),
                                    True, 0.0, 0, "", eff_variant)
             return HipCompiledReduction(plan, dev, None, info, cfg, opts, cu)
@@ -692,7 +693,7 @@ class HipBackend:
                 try:
                     mod = rt.module_load(code)
                 except _hip.HipError:
-                    # artefact corrompu : invalidation puis recompilation
+                    # corrupted artifact: invalidate, then recompile
                     _cache.invalidate(key)
                     code, _ = _cache.get_or_build(key, build)
                     mod = rt.module_load(code)

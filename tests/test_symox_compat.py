@@ -1,4 +1,4 @@
-"""Détection des capacités symox : chemin épinglé (2e623e66) et chemin récent équivalents."""
+"""symox capability detection: the pinned path (2e623e66) and the recent path are equivalent."""
 import pytest
 
 from kernox import _symox_compat as compat
@@ -19,8 +19,8 @@ def test_capabilities_and_forced_pinned(monkeypatch):
 def test_same_abi_on_both_paths(name, dialect, monkeypatch):
     plan = reductions()[name].to_plan("float32")
     from symox.extra.codegen.pytorch import _contains_conditionals
-    # Les formules conditionnelles passent par la CSE par régions de pair.py
-    # (cudacode_function n'applique aucune CSE en présence de Piecewise).
+    # Conditional formulas go through the region-based CSE of pair.py
+    # (cudacode_function applies no CSE in the presence of Piecewise).
     conditional = _contains_conditionals(list(plan.outputs))
     use_recent = compat.cudacode_function() and dialect != "sycl" and not conditional
     recent = pair_function(plan, dialect)
@@ -31,8 +31,8 @@ def test_same_abi_on_both_paths(name, dialect, monkeypatch):
     if use_recent:
         assert "symox cudacode_function" in recent.source
     else:
-        # Opérateurs logiques : cudacode récent les imprime nativement, le chemin
-        # épinglé passe par un contournement ; seules les parenthèses diffèrent.
+        # Logical operators: recent cudacode prints them natively, the pinned path
+        # goes through a workaround; only the parentheses differ.
         def tokens(src):
             return "".join(c for c in src if c not in "() \n\t")
         assert tokens(recent.source) == tokens(pinned.source)

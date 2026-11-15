@@ -1,10 +1,10 @@
-"""LOGSUMEXP et SUMSOFTMAXWEIGHT (avenant v0.5) sur chaque backend GPU.
+"""LOGSUMEXP and SUMSOFTMAXWEIGHT (amendment v0.5) on each GPU backend.
 
-Formules réelles (noyau gaussien en log, attention softmax E = 1, 4, 16) et
-cas adverses de l'avenant : grands f (1e4), f très négatifs (−1e4), mélanges
-±inf, NaN, N = 0, N = 1, ligne dominante, partition de j avec tranches vides.
-Un backend qui ne met pas encore ces réductions en œuvre répond
-``Support(False)`` : le test est alors sauté (jamais simulé).
+Real formulas (log Gaussian kernel, softmax attention E = 1, 4, 16) and the
+amendment's adversarial cases: large f (1e4), very negative f (-1e4), ±inf
+mixes, NaN, N = 0, N = 1, dominant row, partition of j with empty slices.
+A backend that does not implement these reductions yet answers
+``Support(False)``: the test is then skipped (never simulated).
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def _run(backend, expr, arrays, dtype, **kw):
     try:
         return run_case(name, dev, expr, arrays, dtype, **kw)
     except UnsupportedError as exc:
-        pytest.skip(f"{name} : {exc}")
+        pytest.skip(f"{name}: {exc}")
 
 
 def _gauss(D):
@@ -78,9 +78,9 @@ def test_vector_lse_over_i_and_acc64(backend, dtype):
 
 
 POOLS = {
-    "big": [-1e4, -1e4 + 1.0, -9990.0, -9999.5],     # f = -y = 1e4 : décalage indispensable
+    "big": [-1e4, -1e4 + 1.0, -9990.0, -9999.5],     # f = -y = 1e4: shift is required
     "very_negative": [1e4, 1e4 - 2.0, 1e4 + 3.0],
-    "neg_inf_mix": [INF, 1.0, -2.0, 0.5],             # f = -inf : poids nul
+    "neg_inf_mix": [INF, 1.0, -2.0, 0.5],             # f = -inf: zero weight
     "inf_mix": [INF, -INF, 1.0, -1.0, 0.0],
     "nan": [NAN, 1.0, -2.0, 0.0],
     "mixed": [NAN, INF, -INF, -0.0, 0.0, 1e4, -1e4, 1.0],
@@ -90,7 +90,7 @@ POOLS = {
 
 def _special(kind, E=3):
     x, y = kp.Vi("x", 1), kp.Vj("y", 1)
-    f = x - y  # x = 0 : f_ij = -y_j exactement
+    f = x - y  # x = 0: f_ij = -y_j exactly
     if kind == "lse":
         return f.logsumexp(over="j")
     return f.sumsoftmaxweight(kp.Vj("w", E) * 1.0, over="j")
@@ -130,7 +130,7 @@ def test_empty_and_single(backend, kind, dtype):
 @pytest.mark.parametrize("kind", ["lse", "ssmw"])
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_partition_with_empty_slices(backend, kind, dtype):
-    """M petit, N grand (partition de j) : longues plages f = −inf, une valeur vivante isolée."""
+    """Small M, large N (partition of j): long runs of f = -inf, one isolated live value."""
     n = 50000
     y = np.full((n, 1), INF)
     y[[123, 31000, 49999]] = [[1.0], [-2.0], [0.5]]
@@ -139,6 +139,6 @@ def test_partition_with_empty_slices(backend, kind, dtype):
     if kind == "lse":
         arrays.pop("w")
     _run(backend, _special(kind), arrays, dtype)
-    y2 = np.full((n, 1), INF)  # toutes tranches vides : −inf / NaN
+    y2 = np.full((n, 1), INF)  # all slices empty: -inf / NaN
     arrays["y"] = y2
     _run(backend, _special(kind), arrays, dtype)

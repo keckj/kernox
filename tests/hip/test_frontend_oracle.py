@@ -1,7 +1,7 @@
-"""Bout en bout : frontend kernox → backend hip sur R9700, comparé à l'oracle du noyau.
+"""End to end: kernox frontend → hip backend on R9700, compared to the core oracle.
 
-L'oracle Torch par blocs tourne sur le même device (référence indépendante du
-kernel) ; ``reference_numpy`` (FP64, grille complète) sert pour les petits cas.
+The blockwise Torch oracle runs on the same device (a reference independent of
+the kernel); ``reference_numpy`` (FP64, full grid) is used for small cases.
 """
 
 import math
@@ -12,7 +12,7 @@ import pytest
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-import corpus  # noqa: E402  (corpus partagé du noyau, tests/corpus.py)
+import corpus  # noqa: E402  (shared core corpus, tests/corpus.py)
 
 import kernox as kp  # noqa: E402
 from kernox.oracle import reference_numpy  # noqa: E402
@@ -45,8 +45,8 @@ def _compare(plan, got, ref, F_l1=None):
         if g.dtype == torch.int64 and kind in (R.COUNT,):
             assert torch.equal(g, r)
         elif g.dtype == torch.int64:
-            # indices : égalité exacte attendue hors quasi-égalités d'arrondi ; on
-            # tolère des indices différents seulement si les valeurs coïncident.
+            # indices: exact equality expected except for rounding near-ties; we
+            # tolerate different indices only if the values coincide.
             if not torch.equal(g, r):
                 return False
         else:
@@ -69,10 +69,10 @@ def test_corpus_vs_oracle(name, dtype):
     ref = orc(**dev_in)
     torch.cuda.synchronize()
     if dtype == "float32" and plan.reduction.kind is R.SUM:
-        # FP32, critère du contrat : erreur relative à la norme L1 des termes,
-        # mesurée contre une référence FP64 sur les mêmes entrées FP32 élargies.
-        # Borne : sommation (TJ + N/TJ)·eps·L1, plus l'erreur propre des termes
-        # (conditionnement de la formule) estimée par celle de l'oracle FP32.
+        # FP32, contract criterion: error relative to the L1 norm of the terms,
+        # measured against an FP64 reference on the same widened FP32 inputs.
+        # Bound: summation (TJ + N/TJ)·eps·L1, plus the intrinsic error of the terms
+        # (conditioning of the formula) estimated by that of the FP32 oracle.
         d64 = {k: v.double() for k, v in dev_in.items()}
         ref64 = red.compile("float64", backend="oracle")(**d64)
         l1 = kp.abs(red.formula).sum_over("j").compile("float64", backend="oracle")(**d64)
@@ -83,7 +83,7 @@ def test_corpus_vs_oracle(name, dtype):
         return
     ok = _compare(plan, got, ref)
     if not ok:
-        pytest.fail(f"{name}/{dtype} : indices différents de l'oracle")
+        pytest.fail(f"{name}/{dtype}: indices differ from the oracle")
 
 
 @pytest.mark.parametrize("dtype", ["float64", "float32"])
@@ -109,7 +109,7 @@ def test_small_vs_numpy_fp64_oracle(dtype):
 def test_auto_backend_is_hip_and_over_i():
     x, y = kp.Vi("x", 3), kp.Vj("y", 3)
     red = ((x - y) ** 2).sum().argkmin(2, over="i")
-    run = red.compile("float64")  # auto → hip sur Torch ROCm
+    run = red.compile("float64")  # auto → hip on Torch ROCm
     X = torch.randn(40, 3, dtype=torch.float64, device=DEV)
     Y = torch.randn(25, 3, dtype=torch.float64, device=DEV)
     got = run(x=X, y=Y)

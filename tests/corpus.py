@@ -1,4 +1,4 @@
-"""Corpus de formules partagé par les tests de génération / compilation."""
+"""Formula corpus shared by the code generation / compilation tests."""
 import symox
 
 import kernox as kp
@@ -23,17 +23,17 @@ def reductions():
         "where_sqrt": where(d2 > 1.0, 1 / kp.sqrt(d2 - 1.0), 0.0).sum_over("j"),
         "where_inf": where(x[0] < y[0], x[1], float("-inf")).max(over="j"),
         "funcs": funcs.sum_over("j"),
-        # where dans une condition : symox crée un ITE booléen (régression de la conformance)
+        # where inside a condition: symox builds a boolean ITE (conformance regression)
         "where_in_cond": where(where(x[0] <= y[1], x[0], y[0]) > 0,
                                kp.log(where(x[0] <= y[1], x[0], y[0])), y[0]).max(over="j"),
-        # artefacts complexes du moteur dans des branches gardées (builder.realify)
+        # complex-valued engine artifacts in guarded branches (builder.realify)
         "guarded_sqrt_branch": where(where(y[1] >= 0, kp.sqrt(y[1]), -1.5) >= 0,
                                      kp.sqrt(where(y[1] >= 0, kp.sqrt(y[1]), -1.5)), x[1]).max(over="j"),
         "guarded_div_branch": where(kp.ne(where(kp.ne(x[0], y[0]), 0, y[2]), 0),
                                     x[2] / where(kp.ne(x[0], y[0]), 0, y[2]), 0).sum_over("j"),
-        # constantes symboliques non atomiques (cos(1) ambigu pour NVRTC en double)
+        # non-atomic symbolic constants (cos(1) is ambiguous for NVRTC in double)
         "const_calls": kp.maximum(kp.cos(-1), where(x[2] <= y[1], y[2], x[1] * kp.log(3) + kp.sqrt(2))).max(over="j"),
-        # CSE par régions : sous-expressions hissées hors des where, NaN/inf/1/0 dans la branche inactive
+        # region-based CSE: subexpressions hoisted out of where, NaN/inf/1/0 in the inactive branch
         "where_cse_inactive": (where(d2 > 1.0, kp.log(d2 - 1.0) * kp.exp(-d2), kp.exp(-d2) * kp.sqrt(1.0 - d2))
                                + where(kp.eq(x[0], y[0]), 0.0, 1 / (x[0] - y[0]))
                                + where(x[0] > y[0], 1 / (x[0] - y[0]), 2.0)).sum_over("j"),

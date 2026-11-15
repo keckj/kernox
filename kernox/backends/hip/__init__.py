@@ -1,10 +1,10 @@
-"""Backend AMD ROCm/HIP (hipRTC + runtime HIP de Torch). Voir docs/backend-hip.md."""
+"""AMD ROCm/HIP backend (hipRTC + Torch's HIP runtime). See docs/backend-hip.md."""
 
 from .backend import HipBackend, HipCompiledReduction, HipOptions
 
 
 def get_backend() -> HipBackend:
-    """Point d'entrée du registre ``kernox.runtime`` (options par défaut)."""
+    """Entry point for the ``kernox.runtime`` registry (default options)."""
     return HipBackend()
 
 

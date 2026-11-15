@@ -1,10 +1,10 @@
-"""FP16 (avenant v0.9) sur le backend CUDA : type kp_h (binary16 en mémoire, chaque
-opération évaluée en FP32 puis arrondie en FP16, y compris sur sm_52).
+"""FP16 (amendment v0.9) on the CUDA backend: kp_h type (binary16 in memory, each
+operation evaluated in FP32 then rounded to FP16, including on sm_52).
 
-Calcul en FP16 prouvé par débordement (identique à l'oracle), MIN/ARG*/K* et
-COUNT au bit près contre l'oracle, sommes à l'ordre de sommation près
-(accumulateur FP32 par défaut, FP16 + block), sortie FP16 à ±inf au-delà de
-65504, partition de j forcée, top-K coopératif, batch et ranges.
+FP16 arithmetic proven by overflow (identical to the oracle), MIN/ARG*/K* and
+COUNT bitwise against the oracle, sums up to summation order
+(FP32 accumulator by default, FP16 + block), FP16 output at ±inf beyond
+65504, forced j partition, cooperative top-K, batch and ranges.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 import kernox as kp  # noqa: E402
 from kernox.backends.base import Variant  # noqa: E402
@@ -66,7 +66,7 @@ SPLITS = [dict(), dict(split="off"), dict(split="x8", tile=8)]
 @pytest.mark.parametrize("name", ["min", "max", "argmin", "min_argmin", "count", "kmin_argkmin5", "argkmin32"])
 def test_exact_vs_oracle(name, opts):
     x, y, b, d2 = _exprs()
-    f = kp.sqrt(d2) * 3.0 + kp.log(d2 + 1.0)            # chaîne d'opérations arrondies en FP16
+    f = kp.sqrt(d2) * 3.0 + kp.log(d2 + 1.0)            # chain of operations rounded to FP16
     expr = {"min": f.min(over="j"), "max": f.max(over="j"), "argmin": f.argmin(over="j"),
             "min_argmin": f.min_argmin(over="j"), "count": (f < 4.0).sum_over("j"),
             "kmin_argkmin5": f.kmin_argkmin(5, over="j"), "argkmin32": f.argkmin(32, over="j")}[name]
@@ -80,15 +80,15 @@ def test_exact_vs_oracle(name, opts):
 
 
 def test_fp16_overflow_proves_half_arithmetic():
-    """x²/y avec x = 300 : x² = 90000 déborde en FP16 (> 65504) mais pas en FP32 ;
-    le résultat (90 en FP32) vaut +inf comme dans l'oracle."""
+    """x²/y with x = 300: x² = 90000 overflows in FP16 (> 65504) but not in FP32;
+    the result (90 in FP32) is +inf, as in the oracle."""
     x, y = kp.Vi("x", 1), kp.Vj("y", 1)
     plan = ((x * x) / y).max(over="j").to_plan("float16")
     inp = {"x": torch.tensor([[300.0], [100.0], [-300.0]]).half(), "y": torch.tensor([[1000.0], [2000.0]]).half()}
     got, _ = _launch(plan, inp)
     ref = _oracle(plan, inp)
-    # ligne 1 : l'oracle (torch_lambdify) imprime x²·y^-1 (10,0078), la paire x·x/y (10) :
-    # écart d'impression des générateurs, pas de sémantique FP16
+    # row 1: the oracle (torch_lambdify) prints x²·y^-1 (10.0078), the pair x·x/y (10):
+    # a printing difference between generators, not FP16 semantics
     assert torch.equal(got["value"][[0, 2]], ref["value"][[0, 2]])
     assert got["value"][0, 0] == math.inf and got["value"][2, 0] == math.inf and got["value"][1, 0] == 10.0
 
@@ -108,8 +108,8 @@ def test_sums_vs_oracle(name, opts, acc):
     ref = _oracle(plan, inp)["value"].float()
     g = got["value"]
     assert g.dtype == torch.float16
-    # Termes : l'oracle (torch_lambdify) et la paire (cudacode) associent d² dans des
-    # ordres différents, d'où quelques ulp FP16 par terme ; accumulateur FP16 : ~N·u_16.
+    # Terms: the oracle (torch_lambdify) and the pair (cudacode) associate d² in
+    # different orders, hence a few FP16 ulp per term; FP16 accumulator: ~N·u_16.
     rel = 16 * 2.0 ** -11 if acc is None else 900 * 2.0 ** -11
     assert torch.all((g.float() - ref).abs() <= rel * (1 + ref.abs())), (g.float() - ref).abs().max()
     if acc == "float16":
@@ -117,12 +117,12 @@ def test_sums_vs_oracle(name, opts, acc):
 
 
 def test_output_rounds_to_inf():
-    """Accumulateur FP32 au-delà de 65504 : sortie FP16 +inf (conversion au plus proche)."""
+    """FP32 accumulator beyond 65504: FP16 output +inf (round to nearest)."""
     x, y = kp.Vi("x", 1), kp.Vj("y", 1)
     plan = (x * y).sum_over("j").to_plan("float16")
     inp = {"x": torch.tensor([[1000.0], [0.5]]).half(), "y": torch.full((100, 1), 1000.0).half()}
     got, _ = _launch(plan, inp)
-    assert got["value"][0, 0] == math.inf and got["value"][1, 0] == 49984.0   # 50000 : égalité, pair
+    assert got["value"][0, 0] == math.inf and got["value"][1, 0] == 49984.0   # 50000: tie, even
     assert torch.equal(got["value"], _oracle(plan, inp)["value"])
 
 

@@ -1,9 +1,9 @@
-"""Opérations de formule de parité PyKeOps (``kernox/ops.py``) sur l'oracle.
+"""PyKeOps-parity formula operations (``kernox/ops.py``) on the oracle.
 
-Chaque opération est comparée à une transcription NumPy **indépendante** du
-code C de keopscore (``keopscore/utils/math_functions.py`` et
-``keopscore/formulas/maths/*.py``), évaluée en float64. La conformance des
-backends (même DAG imprimé en CUDA/HIP/SYCL) est dans
+Each operation is compared with an **independent** NumPy transcription of the
+keopscore C code (``keopscore/utils/math_functions.py`` and
+``keopscore/formulas/maths/*.py``), evaluated in float64. Backend conformance
+(the same DAG printed as CUDA/HIP/SYCL) lives in
 ``tests/conformance/test_ops.py``.
 """
 
@@ -21,10 +21,10 @@ from kernox.errors import ValidationError
 
 
 def evaluate(formula, **arrays):
-    """Valeur de ``formula`` en chaque ligne i (une seule ligne j) : tableau (M, dim).
+    """Value of ``formula`` at each row i (a single row j): array (M, dim).
 
-    Les variables ``Vj`` sont passées avec une seule ligne ; ``z`` (Vj, nul)
-    garantit la présence d'un axe j. ``+ 0`` ne change aucune valeur non nulle.
+    ``Vj`` variables are passed with a single row; ``z`` (Vj, zero)
+    guarantees that a j axis exists. ``+ 0`` leaves every nonzero value unchanged.
     """
     red = (formula + kp.Vj("z", 1)).sum_over("j")
     fn = red.compile("float64", backend="oracle")
@@ -34,9 +34,9 @@ def evaluate(formula, **arrays):
     return fn(**feed).numpy()
 
 
-# ------------------------------------------------- références keopscore
+# ------------------------------------------------- keopscore references
 def c_round(v):
-    """``round`` de C : moitié loin de zéro (exact via Decimal)."""
+    """C ``round``: half away from zero (exact through Decimal)."""
     return np.array([float(Decimal(float(a)).to_integral_value(ROUND_HALF_UP)) if np.isfinite(a) else a
                      for a in np.ravel(v)]).reshape(np.shape(v))
 
@@ -48,17 +48,17 @@ def keops_round(x, d):
 
 
 def keops_one_hot(f, D):
-    """``out[(int)(f + .5)] = 1`` avec ``f + .5`` **exact** (cas float32 de keopscore,
-    où la somme en double est exacte ; en float64 keopscore arrondit la somme)."""
+    """``out[(int)(f + .5)] = 1`` with ``f + .5`` **exact** (the keopscore float32 case,
+    where the sum in double is exact; in float64 keopscore rounds the sum)."""
     out = np.zeros((len(f), D))
     for r, v in enumerate(f):
-        k = int(Fraction(float(v)) + Fraction(1, 2))  # troncature vers zéro
+        k = int(Fraction(float(v)) + Fraction(1, 2))  # truncation toward zero
         out[r, k] = 1.0
     return out
 
 
 def keops_bspline(t, x, k):
-    """Transcription de ``keopscore/formulas/maths/BSpline.py`` (De Boor en place)."""
+    """Transcription of ``keopscore/formulas/maths/BSpline.py`` (in-place De Boor)."""
     nk = len(t)
     B = [1.0 if (t[j] <= x and x < t[j + 1]) else 0.0 for j in range(nk - 1)]
     for kk in range(1, k + 1):
@@ -71,7 +71,7 @@ def keops_bspline(t, x, k):
 
 
 def bspline_cox_de_boor(t, x, k):
-    """Récurrence de Cox-de Boor classique (référence mathématique indépendante)."""
+    """Classic Cox-de Boor recursion (independent mathematical reference)."""
     def b(i, kk):
         if kk == 0:
             return 1.0 if t[i] <= x < t[i + 1] else 0.0
@@ -95,7 +95,7 @@ def same(got, want, rtol=0.0, atol=0.0):
 
 
 def keops_softdtw(x, y, gamma):
-    """``SoftDTW_SqDist::Op`` de keopscore transcrit ligne à ligne (une paire x, y)."""
+    """keopscore ``SoftDTW_SqDist::Op`` transcribed line by line (one x, y pair)."""
     n, m = len(x), len(y)
     rjm1 = np.zeros(n)
     rij = (x[0] - y[0]) ** 2
@@ -120,7 +120,7 @@ def keops_softdtw(x, y, gamma):
 
 
 def torch_softdtw(x, y, gamma):
-    """Soft-DTW (Cuturi & Blondel 2017) en Torch, tableau R complet, pour autograd."""
+    """Soft-DTW (Cuturi & Blondel 2017) in Torch, full R table, for autograd."""
     n, m = x.shape[-1], y.shape[-1]
     D = (x[:, None, :, None] - y[None, :, None, :]) ** 2  # (M, N, n, m)
     R = [[None] * m for _ in range(n)]
@@ -138,7 +138,7 @@ def torch_softdtw(x, y, gamma):
     return R[n - 1][m - 1]
 
 
-# ------------------------------------------------------------- scalaires
+# ------------------------------------------------------------- scalars
 @pytest.mark.parametrize("name, ref", [
     ("relu", lambda x: np.where(x < 0, 0.0, x)),
     ("step", lambda x: np.where(x < 0, 0.0, 1.0)),
@@ -153,7 +153,7 @@ def test_unary_exact(name, ref):
 def test_relu_step_nan():
     nan = np.array([[np.nan, 1.0, -1.0]])
     same(evaluate(xi.relu(), x=nan), [[np.nan, 1.0, 0.0]])
-    same(evaluate(xi.step(), x=nan), [[1.0, 1.0, 0.0]])  # keopscore : NaN < 0 faux → 1
+    same(evaluate(xi.step(), x=nan), [[1.0, 1.0, 0.0]])  # keopscore: NaN < 0 is false → 1
 
 
 def test_sinxdivx_sinc_xlogx():
@@ -170,16 +170,16 @@ def test_sinxdivx_sinc_xlogx():
 def test_round(d):
     halves = np.array([[0.5, 1.5, 2.5], [-0.5, -1.5, -2.5], [0.05, 0.15, -0.25], [123.456, -9.995, 1e300]])
     data = np.concatenate([X, halves])
-    # d ≠ 0 : symox réécrit « / 10^d » en « × 10^-d » (constante arrondie) ;
-    # écart d'au plus 1 ulp sur la division finale (consigné dans la parité).
+    # d ≠ 0: symox rewrites "/ 10^d" as "× 10^-d" (rounded constant);
+    # at most 1 ulp of difference on the final division (recorded in the parity notes).
     with np.errstate(invalid="ignore", over="ignore"):
         same(evaluate(xi.round(d), x=data), keops_round(data, d), rtol=0 if d == 0 else 2.3e-16)
 
 
 def test_round_signed_zero():
     with np.errstate(divide="ignore"):
-        got = evaluate(1 / xi.round(), x=[[-0.3, 0.3, -0.0]])  # 1/±0 = ±inf (evaluate ajoute +0)
-    assert list(got[0]) == [-np.inf, np.inf, -np.inf]  # round de C : −0 pour ]−1/2, 0]
+        got = evaluate(1 / xi.round(), x=[[-0.3, 0.3, -0.0]])  # 1/±0 = ±inf (evaluate adds +0)
+    assert list(got[0]) == [-np.inf, np.inf, -np.inf]  # C round: −0 for (−1/2, 0]
 
 
 def test_round_rejects_non_integer():
@@ -209,7 +209,7 @@ def test_clampint_ifelse():
     same(evaluate(xi.ifelse(y, -y), x=X, y=Y), np.where(X >= 0, Y, -Y))
 
 
-# --------------------------------------------------------------- vecteurs
+# --------------------------------------------------------------- vectors
 def test_normalize_sqdist():
     Xf = X[np.isfinite(X).all(1)]
     Z = np.concatenate([Xf, np.zeros((1, 3))])
@@ -246,7 +246,7 @@ def test_one_hot():
     f = np.concatenate([RNG.uniform(-0.49, D - 0.51, 60), [0.5, 1.5, 3.5, -0.5, 4.49999, 0.49999999999999994]])
     xs = kp.Vi("f", 1)
     same(evaluate(xs.one_hot(D), f=f[:, None]), keops_one_hot(f, D))
-    # hors de [0, D) et NaN : comportement non défini dans keopscore, vecteur nul ici
+    # outside [0, D) and NaN: undefined behavior in keopscore, zero vector here
     out = evaluate(xs.one_hot(D), f=np.array([[-2.0], [5.5], [np.nan], [np.inf]]))
     assert np.all(out == 0)
     with pytest.raises(ValidationError):
@@ -311,7 +311,7 @@ def test_kron(dimfa, dimfb):
 
 @pytest.mark.parametrize("k", (0, 1, 2, 3))
 def test_bspline(k):
-    t = np.array([0.0, 0.0, 0.5, 1.0, 1.0, 2.0, 3.5, 4.0, 4.0])  # nœuds multiples inclus
+    t = np.array([0.0, 0.0, 0.5, 1.0, 1.0, 2.0, 3.5, 4.0, 4.0])  # includes repeated knots
     knots = kp.Vj("t", len(t))
     xs = np.concatenate([RNG.uniform(-0.5, 4.5, 80), t, [np.nextafter(1.0, 0.0)]])
     got = evaluate(knots.bspline(kp.Vi("x", 1), k), x=xs[:, None], t=t[None])
@@ -343,7 +343,7 @@ def test_softdtw_sqdist(n, m, gamma):
 
 
 def test_softdtw_sqdist_gradients_including_gamma():
-    """x, y **et** γ (keopscore refuse γ) contre torch.autograd sur la récurrence complète."""
+    """x, y **and** γ (keopscore refuses γ) against torch.autograd on the full recursion."""
     n, m = 5, 4
     x = torch.randn(6, n, dtype=torch.float64, requires_grad=True)
     y = torch.randn(3, m, dtype=torch.float64, requires_grad=True)
@@ -365,7 +365,7 @@ def test_softdtw_sqdist_validation():
 
 # ------------------------------------------------------------- autograd
 def test_gradients_through_new_ops():
-    """Gradients symboliques (DAG différencié) contre torch.autograd sur la même fonction."""
+    """Symbolic gradients (differentiated DAG) against torch.autograd on the same function."""
     x = torch.randn(9, 3, dtype=torch.float64, requires_grad=True)
     y = torch.randn(6, 3, dtype=torch.float64)
     s = torch.randn(6, 9, dtype=torch.float64)
@@ -396,7 +396,7 @@ def test_module_functions_match_methods():
 
 
 def test_factorize_and_auto_factorize_are_semantic_identities():
-    """keopscore ``Factorize``/``AutoFactorize`` : la CSE du générateur factorise déjà."""
+    """keopscore ``Factorize``/``AutoFactorize``: the generator's CSE already factorizes."""
     import re
 
     from kernox.codegen.pair import pair_function
@@ -410,6 +410,6 @@ def test_factorize_and_auto_factorize_are_semantic_identities():
     plan = f.sum_over("j").to_plan("float64")
     for dialect in ("cuda", "hip", "sycl"):
         src = pair_function(plan, dialect).source
-        assert len(re.findall(r"\bexp\(", src)) == 1, src  # g évaluée une seule fois
+        assert len(re.findall(r"\bexp\(", src)) == 1, src  # g evaluated only once
     z = kp.Vi("z", 1, complex=True)
     assert z.factorize(g).auto_factorize() is z

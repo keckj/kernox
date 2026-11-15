@@ -19,7 +19,7 @@ _ROLE_ORDER = {"i": 0, "j": 1, "param": 2}
 
 
 # --------------------------------------------------------------------------
-# Constantes Python -> symox
+# Python constants -> symox
 # --------------------------------------------------------------------------
 
 
@@ -63,11 +63,11 @@ def constant(value, *, boolean: bool = False):
     if isinstance(value, symox.Basic):
         if value.free_symbols:
             raise TypeError(
-                "expression symox libre non acceptée comme constante : utiliser Vi/Vj/Param "
+                "symox expression with free symbols is not accepted as a constant: use Vi/Vj/Param "
                 f"({sorted(map(str, value.free_symbols))})"
             )
         return value
-    raise TypeError(f"constante non prise en charge : {value!r} ({type(value).__name__})")
+    raise TypeError(f"unsupported constant: {value!r} ({type(value).__name__})")
 
 
 # --------------------------------------------------------------------------
@@ -81,8 +81,8 @@ def _merge_vars(*maps):
         for name, spec in m.items():
             if out.setdefault(name, spec) != spec:
                 raise ValidationError(
-                    f"variable {name!r} déclarée avec des rôles/dimensions incompatibles : "
-                    f"{out[name]} et {spec}"
+                    f"variable {name!r} declared with incompatible roles/dimensions: "
+                    f"{out[name]} and {spec}"
                 )
     return out
 
@@ -94,7 +94,7 @@ def _complex_cls():
 
 
 def _complex_operand(o) -> bool:
-    """Opérande complexe : ComplexFormula ou scalaire Python complexe non réel."""
+    """Complex operand: ComplexFormula or non-real Python complex scalar."""
     if isinstance(o, numbers.Complex) and not isinstance(o, numbers.Real):
         return True
     return type(o).__name__ == "ComplexFormula" and isinstance(o, _complex_cls())
@@ -108,15 +108,15 @@ class Formula:
     """
 
     __slots__ = ("_comps", "_vars", "_bool")
-    __array_priority__ = 1000  # pour que ndarray.__add__ délègue
+    __array_priority__ = 1000  # so that ndarray.__add__ defers to us
 
     def __init__(self, components, variables):
         comps = tuple(components)
         if not comps:
-            raise ValidationError("formule vide")
+            raise ValidationError("empty formula")
         kinds = {is_boolean(c) for c in comps}
         if len(kinds) != 1:
-            raise ValidationError("formule mélangeant composantes booléennes et réelles")
+            raise ValidationError("formula mixes boolean and real components")
         self._comps = comps
         self._vars = dict(variables)
         self._bool = kinds.pop()
@@ -142,31 +142,31 @@ class Formula:
         return len(self._comps)
 
     def __repr__(self):
-        kind = "bool" if self._bool else "réel"
+        kind = "bool" if self._bool else "real"
         return f"Formula(dim={self.dim}, {kind}, {list(self._comps)})"
 
     def __bool__(self):
         raise TypeError(
-            "une Formula n'a pas de valeur de vérité ; utiliser &, |, ~ et where(...) "
-            "au lieu de and/or/not/if"
+            "a Formula has no truth value; use &, |, ~ and where(...) "
+            "instead of and/or/not/if"
         )
 
-    __hash__ = None  # non hachable : une formule n'est pas une clé ; == reste l'identité
+    __hash__ = None  # unhashable: a formula is not a key; == stays identity
 
-    # ---- construction interne
+    # ---- internal construction
     @staticmethod
     def _lift(value, boolean=False) -> "Formula":
         if isinstance(value, Formula):
             return value
         if isinstance(value, ReductionExpr):
-            raise TypeError("une réduction ne peut pas être utilisée dans une formule (v0)")
+            raise TypeError("a reduction cannot be used inside a formula (v0)")
         return Formula((constant(value, boolean=boolean),), {})
 
     @staticmethod
     def _broadcast(*formulas):
         dims = {f.dim for f in formulas} - {1}
         if len(dims) > 1:
-            raise ValidationError(f"dimensions incompatibles : {[f.dim for f in formulas]}")
+            raise ValidationError(f"incompatible dimensions: {[f.dim for f in formulas]}")
         d = dims.pop() if dims else 1
         return d, [f._comps * d if f.dim == 1 and d != 1 else f._comps for f in formulas]
 
@@ -177,15 +177,15 @@ class Formula:
             for f in fs:
                 if f._bool != boolean_in:
                     if boolean_in:
-                        raise TypeError("opérande booléen attendu")
+                        raise TypeError("expected a boolean operand")
                     raise TypeError(
-                        "opération arithmétique sur une formule booléenne : utiliser "
+                        "arithmetic operation on a boolean formula: use "
                         "where(pred, a, b)"
                     )
         _, comps = cls._broadcast(*fs)
         return Formula((fn(*args) for args in zip(*comps)), _merge_vars(*(f._vars for f in fs)))
 
-    # ---- arithmétique
+    # ---- arithmetic
     def __add__(self, o):
         if _complex_operand(o):
             return self.real2complex() + o
@@ -243,8 +243,8 @@ class Formula:
 
         return Formula._map(symox.Abs, self, boolean_in=False)
 
-    # ---- comparaisons (prédicats). == / != restent l'identité Python :
-    # utiliser eq()/ne().
+    # ---- comparisons (predicates). == / != stay Python identity:
+    # use eq()/ne().
     def __lt__(self, o):
         return Formula._map(lambda a, b: a < b, self, o, boolean_in=False)
 
@@ -267,7 +267,7 @@ class Formula:
 
         return Formula._map(symox.Ne, self, o, boolean_in=False)
 
-    # ---- logique
+    # ---- logic
     def __and__(self, o):
         import symox
 
@@ -294,35 +294,35 @@ class Formula:
 
         return Formula._map(symox.Not, self, boolean_in=True, boolean=True)
 
-    # ---- composantes
+    # ---- components
     def __getitem__(self, index):
         d = self.dim
         if isinstance(index, bool):
-            raise TypeError("index booléen non pris en charge")
+            raise TypeError("boolean index not supported")
         if isinstance(index, numbers.Integral):
             i = int(index)
             if not -d <= i < d:
-                raise IndexError(f"composante {i} hors de [0, {d})")
+                raise IndexError(f"component {i} out of [0, {d})")
             comps = (self._comps[i],)
         elif isinstance(index, slice):
             comps = self._comps[index]
         elif isinstance(index, (list, tuple)):
             comps = tuple(self[i]._comps[0] for i in index)
         else:
-            raise TypeError(f"index non pris en charge : {index!r}")
+            raise TypeError(f"unsupported index: {index!r}")
         if not comps:
-            raise IndexError("sélection vide de composantes")
+            raise IndexError("empty component selection")
         return Formula(comps, self._vars)
 
     def sum(self, *args, **kwargs) -> "Formula":
         """Sum of the **components** (scalar). To reduce an axis: ``sum_over``."""
         if args or kwargs:
             raise TypeError(
-                "Formula.sum() somme les composantes et ne prend pas d'argument ; "
-                "pour réduire un axe pairwise utiliser .sum_over('j') ou .sum_over('i')"
+                "Formula.sum() sums the components and takes no argument; "
+                "to reduce a pairwise axis use .sum_over('j') or .sum_over('i')"
             )
         if self._bool:
-            raise TypeError("somme de composantes booléennes : utiliser where(...)")
+            raise TypeError("sum of boolean components: use where(...)")
         import symox
 
         return Formula((symox.Add(*self._comps),), self._vars)
@@ -336,10 +336,10 @@ class Formula:
     def dot(self, other) -> "Formula":
         other = Formula._lift(other)
         if self.dim != other.dim and 1 not in (self.dim, other.dim):
-            raise ValidationError(f"dot : dimensions {self.dim} et {other.dim}")
+            raise ValidationError(f"dot: incompatible dimensions {self.dim} and {other.dim}")
         return (self * other).sum()
 
-    # ---- réductions pairwise
+    # ---- pairwise reductions
     def sum_over(self, axis: str) -> "ReductionExpr":
         """Sum over the axis ``axis``; a boolean formula gives a count (COUNT)."""
         kind = ReductionKind.COUNT if self._bool else ReductionKind.SUM
@@ -383,10 +383,10 @@ class Formula:
         if weight is None:
             return ReductionExpr(self, ReductionKind.LOGSUMEXP, over)
         if self.dim != 1:
-            raise ValidationError(f"logsumexp(weight=) : score scalaire attendu (dim={self.dim})")
+            raise ValidationError(f"logsumexp(weight=): expected a scalar score (dim={self.dim})")
         g = Formula._lift(weight)
         if g.is_boolean:
-            raise TypeError("logsumexp(weight=) : poids booléens, utiliser where(...)")
+            raise TypeError("logsumexp(weight=): boolean weights, use where(...)")
         return ReductionExpr(cat(self, g), ReductionKind.LOGSUMEXPWEIGHT, over)
 
     def sumsoftmaxweight(self, g, *, over: str) -> "ReductionExpr":
@@ -395,17 +395,17 @@ class Formula:
         ``self``: scalar score ``f``; ``g``: weights of dimension ``E >= 1``.
         """
         if self.dim != 1:
-            raise ValidationError(f"sumsoftmaxweight : score scalaire attendu (dim={self.dim})")
+            raise ValidationError(f"sumsoftmaxweight: expected a scalar score (dim={self.dim})")
         g = Formula._lift(g)
         if g.is_boolean:
-            raise TypeError("sumsoftmaxweight : poids booléens, utiliser where(...)")
+            raise TypeError("sumsoftmaxweight: boolean weights, use where(...)")
         return ReductionExpr(cat(self, g), ReductionKind.SUMSOFTMAXWEIGHT, over)
 
 
 def _variable(name, role, dim, is_complex=False):
     check_name(name)
     if isinstance(dim, bool) or not isinstance(dim, numbers.Integral) or dim < 1:
-        raise ValidationError(f"dimension invalide {dim!r} pour {name!r}")
+        raise ValidationError(f"invalid dimension {dim!r} for {name!r}")
     dim = int(dim)
     if is_complex:
         from .complex import ComplexDim, ComplexFormula
@@ -435,7 +435,7 @@ def Param(name: str, dim: int = 1, *, complex: bool = False) -> Formula:  # noqa
 
 
 # --------------------------------------------------------------------------
-# Réductions
+# Reductions
 # --------------------------------------------------------------------------
 
 
@@ -446,11 +446,11 @@ class ReductionExpr:
 
     def __init__(self, formula: Formula, kind: ReductionKind, over: str, k=None):
         if over not in ("i", "j"):
-            raise ValidationError(f"axe de réduction invalide {over!r} (attendu 'i' ou 'j')")
+            raise ValidationError(f"invalid reduction axis {over!r} (expected 'i' or 'j')")
         if kind in (ReductionKind.KMIN, ReductionKind.ARGKMIN, ReductionKind.KMIN_ARGKMIN):
             k = check_k(k)
         if formula.is_boolean and kind is not ReductionKind.COUNT:
-            raise TypeError(f"{kind.value} sur une formule booléenne : utiliser where(...)")
+            raise TypeError(f"{kind.value} on a boolean formula: use where(...)")
         self.formula, self.kind, self.over, self.k = formula, kind, over, k
 
     def __repr__(self):
@@ -493,7 +493,7 @@ class ReductionExpr:
 
 
 # --------------------------------------------------------------------------
-# Fonctions usuelles (composante par composante)
+# Common functions (component-wise)
 # --------------------------------------------------------------------------
 
 
@@ -504,7 +504,7 @@ def _unary(symox_name, doc):
         if _complex_operand(x):
             if symox_name == "exp":
                 return x.exp()
-            raise TypeError(f"{doc} d'une formule complexe non défini (exp, abs, angle, conj, real, imag le sont)")
+            raise TypeError(f"{doc} of a complex formula is not defined (exp, abs, angle, conj, real, imag are)")
         return Formula._map(getattr(symox, symox_name), x, boolean_in=False)
 
     fn.__name__ = fn.__qualname__ = doc
@@ -529,7 +529,7 @@ floor = _unary("floor", "floor")
 ceiling = _unary("ceiling", "ceiling")
 
 
-def abs(x):  # noqa: A001 - nom public voulu
+def abs(x):  # noqa: A001 - intended public name
     """Component-wise absolute value (modulus for a complex formula)."""
     import symox
 
@@ -589,10 +589,10 @@ def where(cond, a, b):
 
     c = Formula._lift(cond, boolean=True)
     if not c.is_boolean:
-        raise TypeError("where : la condition doit être un prédicat booléen")
+        raise TypeError("where: the condition must be a boolean predicate")
     fa, fb = Formula._lift(a), Formula._lift(b)
     if fa.is_boolean != fb.is_boolean:
-        raise TypeError("where : branches booléenne et réelle mélangées")
+        raise TypeError("where: mixed boolean and real branches")
     _, (cc, ca, cb) = Formula._broadcast(c, fa, fb)
     comps = (symox.Piecewise((x, k), (y, True)) for k, x, y in zip(cc, ca, cb))
     return Formula(comps, _merge_vars(c._vars, fa._vars, fb._vars))
@@ -602,7 +602,7 @@ def cat(*formulas):
     """Concatenation of the components."""
     fs = [Formula._lift(f) for f in formulas]
     if not fs:
-        raise ValidationError("cat() sans argument")
+        raise ValidationError("cat() called without arguments")
     comps = tuple(c for f in fs for c in f.components)
     return Formula(comps, _merge_vars(*(f._vars for f in fs)))
 

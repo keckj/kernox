@@ -1,21 +1,21 @@
-"""Avenant v0.10 : ``fast_math=True`` (exp/log approchés, opt-in).
+"""Amendment v0.10: ``fast_math=True`` (approximate exp/log, opt-in).
 
-Référence : FP64 sur CPU (Torch), sur les mêmes entrées FP32. Tolérances
-(``u = 2⁻²⁴``) :
+Reference: FP64 on CPU (Torch), on the same FP32 inputs. Tolerances
+(``u = 2⁻²⁴``):
 
-- ``exp`` approché (CUDA : ``ex2.approx.f32(x·log₂e)``) : erreur relative
-  ≤ 2⁻²¹ (instruction, marge ×3 sur la spécification PTX) + |x|·u (arrondi du
-  produit x·log₂e, amplifié par 2^· : ln 2·|x·log₂e|·u = |x|·u) ;
-- ``log`` approché (``lg2.approx.f32(x)·ln 2``) : erreur absolue ≤ 2⁻²¹ ;
-- sommes de N termes positifs : + N·u (schéma direct, comme les tests IEEE).
+- approximate ``exp`` (CUDA: ``ex2.approx.f32(x·log₂e)``): relative error
+  ≤ 2⁻²¹ (instruction, ×3 margin over the PTX specification) + |x|·u (rounding
+  of the product x·log₂e, amplified by 2^·: ln 2·|x·log₂e|·u = |x|·u);
+- approximate ``log`` (``lg2.approx.f32(x)·ln 2``): absolute error ≤ 2⁻²¹;
+- sums of N positive terms: + N·u (direct scheme, as in the IEEE tests).
 
-D'où, avec X = max |argument d'exp| : ``tol = 8·(2⁻²¹ + X·u) + 2·N·u``,
-relative pour les sommes de termes positifs, absolue/(1 + |ref|) pour
-LOGSUMEXP ; pour une somme à annulation (log de signe variable) :
-``|err| ≤ tol·Σ|terme| + 2·2⁻²¹·Σ|b|``. Les tests IEEE
-existants (``fast_math=False``, défaut) ne changent pas : ils restent comparés
-au bit près là où ils l'étaient. Un backend qui n'implémente pas v0.10 lève
-``UnsupportedError`` (hip, sycl à ce jour) : vérifié, pas sauté en silence.
+Hence, with X = max |exp argument|: ``tol = 8·(2⁻²¹ + X·u) + 2·N·u``,
+relative for sums of positive terms, absolute/(1 + |ref|) for LOGSUMEXP;
+for a sum with cancellation (log of varying sign):
+``|err| ≤ tol·Σ|term| + 2·2⁻²¹·Σ|b|``. The existing IEEE tests
+(``fast_math=False``, the default) do not change: they are still compared
+bit for bit where they were. A backend that does not implement v0.10 raises
+``UnsupportedError`` (hip, sycl so far): checked, not silently skipped.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from kernox.errors import UnsupportedError
 from ._support import synchronize
 
 U = 2.0**-24
-M, N, S = 700, 2000, 4.0  # |arguments d'exp| ≤ S·D·1 + |h| ≤ 3·4 + 3
+M, N, S = 700, 2000, 4.0  # |exp arguments| ≤ S·D·1 + |h| ≤ 3·4 + 3
 
 
 def _data(dev):
@@ -61,7 +61,7 @@ def _ref(name, t):
         return torch.exp(-d2 * S) @ b
     if name == "log":
         return torch.log(d2 + 0.5) @ b
-    if name == "log_l1":  # Σ|terme| et Σ|b| : bornes des sommes à annulation
+    if name == "log_l1":  # Σ|term| and Σ|b|: bounds for sums with cancellation
         return torch.log(d2 + 0.5).abs() @ b.abs(), b.abs().sum(0, keepdim=True)
     f = h.view(1, -1) - d2 * S
     if name == "lse":
@@ -83,21 +83,21 @@ def test_fast_math(backend, name):
         run = red.compile("float32", backend=bname, fast_math=True)
         got = run(**inputs)
     except UnsupportedError:
-        assert bname in ("hip", "sycl"), f"{bname} doit implémenter l'avenant v0.10"
-        pytest.skip(f"{bname} : fast_math non implémenté (UnsupportedError, avenant v0.10)")
+        assert bname in ("hip", "sycl"), f"{bname} must implement amendment v0.10"
+        pytest.skip(f"{bname}: fast_math not implemented (UnsupportedError, amendment v0.10)")
     synchronize(dev)
     got = got.double().cpu()
     ref = _ref(name, f32)
     if name == "lse":
         err = ((got - ref).abs() / (1 + ref.abs())).max().item()
-    elif name == "log":  # termes de signes variés : borne absolue en L1 (log : erreur absolue)
+    elif name == "log":  # terms of varying signs: absolute L1 bound (log: absolute error)
         l1, bsum = _ref("log_l1", f32)
         bound = TOL * l1 + 2 * 2.0**-21 * bsum
         err = ((got - ref).abs() / bound).max().item() * TOL
     else:
         err = ((got - ref).abs() / ref.abs().clamp_min(1e-30)).max().item()
     assert err <= TOL, (name, err, TOL)
-    if bname == "cuda":  # l'approximation est bien active : sorties distinctes de l'IEEE
+    if bname == "cuda":  # the approximation is actually active: outputs differ from IEEE
         ieee = red.compile("float32", backend=bname)(**inputs).double().cpu()
         assert not torch.equal(ieee, got), name
 

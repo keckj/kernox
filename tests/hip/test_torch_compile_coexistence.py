@@ -1,10 +1,10 @@
-"""Cohabitation hip / torch.compile (triton) dans un même processus.
+"""Coexistence of hip and torch.compile (triton) in the same process.
 
-Régression : rouvrir les bibliothèques HIP de Torch avec RTLD_GLOBAL promouvait
-libLLVM.so (_rocm_sdk_core, via libamd_comgr) dans la portée globale ; l'import
-de ``torch._dynamo`` (donc ``libtriton.so``, LLVM embarquée) plantait alors en
-SIGSEGV dans ``llvm::cl::Option::addArgument``. Chaque scénario tourne dans un
-sous-processus : un plantage natif est un échec du test, pas de la suite.
+Regression: reopening Torch's HIP libraries with RTLD_GLOBAL promoted
+libLLVM.so (_rocm_sdk_core, via libamd_comgr) into the global scope; importing
+``torch._dynamo`` (hence ``libtriton.so``, with its embedded LLVM) then crashed with
+SIGSEGV in ``llvm::cl::Option::addArgument``. Each scenario runs in a
+subprocess: a native crash fails the test, not the whole suite.
 """
 
 import os
@@ -42,7 +42,7 @@ def _run(code):
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [ROOT, os.environ.get("PYTHONPATH")])))
     p = subprocess.run([sys.executable, "-c", "import torch\n" + textwrap.dedent(code) + "\nprint('ok')"],
                        capture_output=True, text=True, timeout=900, env=env)
-    assert p.returncode == 0 and p.stdout.strip().endswith("ok"), f"code {p.returncode} ; {p.stderr[-800:]}"
+    assert p.returncode == 0 and p.stdout.strip().endswith("ok"), f"code {p.returncode}; {p.stderr[-800:]}"
 
 
 @pytest.mark.parametrize("order", ["hip_then_compile", "compile_then_hip", "interleaved"])
@@ -55,7 +55,7 @@ def test_torch_compile_after_or_before_hip(order):
 
 
 def test_hip_libraries_opened_locally():
-    """Les handles ctypes du runtime/hipRTC ne doivent jamais être ouverts en RTLD_GLOBAL."""
+    """The ctypes handles of the runtime/hipRTC must never be opened with RTLD_GLOBAL."""
     from kernox.backends.hip import _hip
 
     assert _hip._DLOPEN_MODE & os.RTLD_GLOBAL == 0

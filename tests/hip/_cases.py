@@ -1,10 +1,10 @@
-"""Cas de test du backend hip : Plans construits à la main + références Torch CPU.
+"""Test cases for the hip backend: hand-built Plans + CPU Torch references.
 
-Tant que ``codegen/pair.py`` (noyau) n'est pas livré, les fonctions de paire de
-ces cas sont écrites à la main au format du contrat (``kp_out``/``kp_pair``)
-et injectées via ``pair_provider``. Chaque cas fournit une fonction Torch qui
-calcule la même formule dans le même ordre d'opérations (référence bit à bit
-pour + − × en IEEE, ``-ffp-contract=off``).
+Until ``codegen/pair.py`` (core) is delivered, the pair functions of these
+cases are written by hand in the contract format (``kp_out``/``kp_pair``)
+and injected through ``pair_provider``. Each case provides a Torch function that
+computes the same formula in the same order of operations (bitwise reference
+for + − × in IEEE, ``-ffp-contract=off``).
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ class Case:
     name: str
     args: tuple  # Arg
     out_dim: int
-    pair_body: str  # corps C++ : remplit r.o0.. à partir des pointeurs
-    torch_f: Callable  # (dict nom -> tenseur CPU élargi) -> (M, N, d)
+    pair_body: str  # C++ body: fills r.o0.. from the pointers
+    torch_f: Callable  # (dict name -> widened CPU tensor) -> (M, N, d)
     boolean: bool = False
 
 
@@ -49,10 +49,10 @@ def make_plan(case: Case, kind: ReductionKind, dtype: str, k=None, acc_dtype=Non
               fp_contract: bool = False) -> Plan:
     import symox
 
-    # symboles factices (des Expr : la clé de plan parcourt leurs ``args``)
+    # dummy symbols (Expr instances: the plan key walks their ``args``)
     outs = tuple(symox.Symbol(f"{case.name}_o{c}") for c in range(case.out_dim))
-    # fp_contract=False : références Torch bit à bit (même ordre d'opérations, sans FMA) ;
-    # le mode par défaut (contraction autorisée, v0.3) est couvert par test_fp_contract.py.
+    # fp_contract=False: bitwise Torch references (same order of operations, no FMA);
+    # the default mode (contraction allowed, v0.3) is covered by test_fp_contract.py.
     return Plan(args=case.args, outputs=outs, reduction=Reduction(kind, k), dtype=dtype,
                 acc_dtype=acc_dtype or dtype, fp_contract=fp_contract, meta={"case": case})
 
@@ -74,7 +74,7 @@ SQDIST = Case(
                + (t["x"][:, None, 2] - t["y"][None, :, 2]) ** 2)[..., None],
 )
 
-# Gaussienne pondérée à sortie vectorielle, paramètre placé entre i et j.
+# Weighted Gaussian with vector output, parameter placed between i and j.
 GAUSS = Case(
     "gauss", (A("x", "i", 3), A("s", "param", 1), A("y", "j", 3), A("b", "j", 2)), 2,
     "  kp_t d0 = x[0] - y[0]; kp_t d1 = x[1] - y[1]; kp_t d2 = x[2] - y[2];\n"
@@ -93,7 +93,7 @@ COUNT_BALL = Case(
     boolean=True,
 )
 
-# Formule vectorielle signée (min/max/argmin/argmax par composante).
+# Signed vector formula (per-component min/max/argmin/argmax).
 VEC = Case(
     "vec", (A("x", "i", 2), A("y", "j", 2)), 2,
     "  r.o0 = x[0] - y[0]; r.o1 = x[1] * y[1];",
@@ -101,7 +101,7 @@ VEC = Case(
                            t["x"][:, None, 1] * t["y"][None, :, 1]], -1),
 )
 
-# Scalaire 1D : sert aux égalités et NaN (valeurs entières répétées).
+# 1D scalar: used for ties and NaN (repeated integer values).
 ABS1 = Case(
     "abs1", (A("x", "i", 1), A("y", "j", 1)), 1,
     "  r.o0 = fabs(x[0] - y[0]);",
@@ -109,9 +109,9 @@ ABS1 = Case(
 )
 
 
-# ---------------------------------------------------------------- références
+# ---------------------------------------------------------------- references
 def ref_reduce(F: torch.Tensor, kind: ReductionKind, k=None, acc=torch.float64):
-    """Sémantique du contrat v0 sur F (M, N, d), CPU. Retourne dict de sorties."""
+    """Contract v0 semantics on F (M, N, d), CPU. Returns a dict of outputs."""
     M, N, d = F.shape
     if kind is ReductionKind.SUM:
         return {"value": F.to(acc).sum(1) if N else torch.zeros(M, d, dtype=acc)}
@@ -145,7 +145,7 @@ def ref_reduce(F: torch.Tensor, kind: ReductionKind, k=None, acc=torch.float64):
         if kind in (ReductionKind.ARGKMIN, ReductionKind.KMIN_ARGKMIN):
             out["index"] = idx
         return out
-    # ARGMIN/ARGMAX : plus petit j valide atteignant l'extremum, -1 sinon
+    # ARGMIN/ARGMAX: smallest valid j reaching the extremum, -1 otherwise
     ar = torch.arange(N, dtype=torch.int64)[None, :, None].expand(M, N, d)
     big = torch.full_like(ar, 2**62)
     j = torch.where(valid, ar, big).amin(1) if N else torch.full((M, d), -1, dtype=torch.int64)

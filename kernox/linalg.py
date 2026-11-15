@@ -21,7 +21,7 @@ import warnings
 from .errors import UnsupportedError, ValidationError
 from .plan import ReductionKind
 
-#: Valeurs par défaut de PyKeOps (``LazyTensor.solve``, ``ConjugateGradientSolver``).
+#: PyKeOps defaults (``LazyTensor.solve``, ``ConjugateGradientSolver``).
 DEFAULT_ALPHA = 1e-10
 DEFAULT_EPS = 1e-6
 
@@ -39,7 +39,7 @@ def conjugate_gradient(linop, b, *, x0=None, eps: float = DEFAULT_EPS, maxiter: 
     atol = max(eps, eps * float(torch.linalg.vector_norm(b)))
     maxiter = 10 * b.shape[0] if maxiter is None else int(maxiter)
     if maxiter < 0:
-        raise ValidationError(f"maxiter >= 0 attendu, reçu {maxiter}")
+        raise ValidationError(f"expected maxiter >= 0, got {maxiter}")
     x = torch.zeros_like(b) if x0 is None else x0.clone()
     r = b.clone() if x0 is None else b - linop(x0)
     nr2 = (r * r).sum()
@@ -58,8 +58,8 @@ def conjugate_gradient(linop, b, *, x0=None, eps: float = DEFAULT_EPS, maxiter: 
             p = r + (nr2new / nr2) * p
             nr2 = nr2new
         if not converged:
-            warnings.warn(f"kernox solve : {maxiter} itérations de gradient conjugué sans convergence "
-                          f"(résidu {float(nr2.sqrt()):.3e} > {atol:.3e})", RuntimeWarning, stacklevel=3)
+            warnings.warn(f"kernox solve: conjugate gradient did not converge in {maxiter} iterations "
+                          f"(residual {float(nr2.sqrt()):.3e} > {atol:.3e})", RuntimeWarning, stacklevel=3)
     info = {"converged": converged, "niter": niter, "residual_norm": float(nr2.sqrt()), "atol": atol,
             "maxiter": maxiter}
     return x, info
@@ -72,30 +72,30 @@ def check_linear(plan, var: str):
     from .autograd import derivative
 
     if plan.reduction.kind is not ReductionKind.SUM:
-        raise ValidationError(f"opérateur linéaire : réduction SUM attendue, reçu {plan.reduction.kind.value}")
+        raise ValidationError(f"linear operator: expected a SUM reduction, got {plan.reduction.kind.value}")
     if plan.batch_rank:
-        raise UnsupportedError("opérateur linéaire : plan déjà batché (batch_rank) ; compiler sans batch, "
-                               "le batch vient des entrées")
+        raise UnsupportedError("linear operator: plan is already batched (batch_rank); compile without batch, "
+                               "the batch comes from the inputs")
     arg = next((a for a in plan.args if a.name == var), None)
     if arg is None:
-        raise ValidationError(f"opérateur linéaire : {var!r} n'est pas une entrée ({[a.name for a in plan.args]})")
+        raise ValidationError(f"linear operator: {var!r} is not an input ({[a.name for a in plan.args]})")
     if arg.role != "j":
-        raise ValidationError(f"opérateur linéaire : {var!r} doit être une variable j (réduite), "
-                              f"rôle {arg.role!r}")
+        raise ValidationError(f"linear operator: {var!r} must be a j (reduced) variable, "
+                              f"got role {arg.role!r}")
     syms = set(arg.symbols)
     zero = {s: symox.Integer(0) for s in arg.symbols}
     for k, out in enumerate(plan.outputs):
         if not syms & out.free_symbols:
             if out != 0:
-                raise ValidationError(f"opérateur linéaire : composante {k} indépendante de {var!r} et non nulle "
-                                      "(application affine, pas linéaire)")
+                raise ValidationError(f"linear operator: component {k} is independent of {var!r} and nonzero "
+                                      "(affine map, not linear)")
             continue
         if out.xreplace(zero) != 0:
-            raise ValidationError(f"opérateur linéaire : composante {k} non nulle en {var}=0 ; "
-                                  "linéarité non démontrée")
+            raise ValidationError(f"linear operator: component {k} is nonzero at {var}=0; "
+                                  "linearity not proven")
         for s in arg.symbols:
             if syms & derivative(out, s).free_symbols:
-                raise ValidationError(f"opérateur linéaire : composante {k} non linéaire en {var!r}")
+                raise ValidationError(f"linear operator: component {k} is not linear in {var!r}")
     return arg
 
 
@@ -116,7 +116,7 @@ class LinearOperator:
         plan = red.plan
         self._arg = check_linear(plan, var)
         if var in inputs:
-            raise ValidationError(f"opérateur linéaire : {var!r} est l'inconnue, ne pas la fournir")
+            raise ValidationError(f"linear operator: {var!r} is the unknown, do not provide it")
         self.red, self.var, self.plan = red, var, plan
         self._raw = dict(inputs)
         n = rank = None
@@ -127,11 +127,11 @@ class LinearOperator:
                 if a.role == "j" and n is None:
                     n = v.shape[-2]
         if n is None:
-            raise ValidationError(f"opérateur linéaire : N indéterminé ({var!r} est la seule variable j)")
+            raise ValidationError(f"linear operator: N is undetermined ({var!r} is the only j variable)")
         dt = _torch_dtype(plan.dtype)
         dev = next((v.device for v in inputs.values() if isinstance(v, torch.Tensor)), None)
         if dev is None:
-            raise ValidationError("opérateur linéaire : aucune entrée tenseur pour fixer le device")
+            raise ValidationError("linear operator: no tensor input to determine the device")
         self.rank = max(rank, 0)
         probe = torch.zeros((1,) * self.rank + (n, self._arg.dim), dtype=dt, device=dev)
         detached = {k: (v.detach() if isinstance(v, torch.Tensor) else v) for k, v in inputs.items()}
@@ -143,7 +143,7 @@ class LinearOperator:
         self._dt = dt
         self._transposed = _transposed
 
-    # ---- interface SciPy
+    # ---- SciPy interface
     @property
     def shape(self):
         s = (self.m * self.do, self.n * self.dv)
@@ -156,7 +156,7 @@ class LinearOperator:
         return np.dtype(self.plan.dtype)
 
     @property
-    def T(self):  # noqa: N802 (nom NumPy / PyKeOps)
+    def T(self):  # noqa: N802 (NumPy / PyKeOps name)
         t = object.__new__(LinearOperator)
         t.__dict__.update(self.__dict__)
         t._transposed = not self._transposed
@@ -182,27 +182,27 @@ class LinearOperator:
 
     def __repr__(self):
         return (f"kernox.LinearOperator({self.var!r}, shape={self.shape}, dtype={self.plan.dtype}"
-                f"{', transposé' if self._transposed else ''})")
+                f"{', transposed' if self._transposed else ''})")
 
-    # ---- produits
+    # ---- products
     def _apply(self, v, adjoint: bool):
-        """``K v`` (``adjoint=False``) ou ``Kᵀ v``, formes acceptées selon la classe."""
+        """``K v`` (``adjoint=False``) or ``Kᵀ v``, accepting the shapes listed in the class docstring."""
         import numpy as np
         import torch
 
-        rows, cols = (self.n, self.dv) if adjoint else (self.m, self.do)  # sortie
+        rows, cols = (self.n, self.dv) if adjoint else (self.m, self.do)  # output
         in_rows, in_cols = (self.m, self.do) if adjoint else (self.n, self.dv)
         as_numpy = isinstance(v, np.ndarray)
         if as_numpy:
             v = torch.from_numpy(np.ascontiguousarray(v)).to(device=self.device, dtype=self._dt)
         elif not isinstance(v, torch.Tensor):
-            raise ValidationError(f"opérateur linéaire : torch.Tensor ou numpy.ndarray attendu, "
-                                  f"reçu {type(v).__name__}")
+            raise ValidationError(f"linear operator: expected a torch.Tensor or numpy.ndarray, "
+                                  f"got {type(v).__name__}")
         if v.dim() >= 2 and tuple(v.shape[-2:]) == (in_rows, in_cols):
             out = self._product(v, adjoint)
         elif self.rank and v.dim() <= 2:
-            raise ValidationError(f"opérateur linéaire batché : forme (*B, {in_rows}, {in_cols}) attendue, "
-                                  f"reçu {tuple(v.shape)} (formes aplaties réservées à l'opérateur sans batch)")
+            raise ValidationError(f"batched linear operator: expected shape (*B, {in_rows}, {in_cols}), "
+                                  f"got {tuple(v.shape)} (flattened shapes are only for the unbatched operator)")
         elif v.dim() == 1 and v.shape[0] == in_rows * in_cols:
             out = self._product(v.reshape(in_rows, in_cols), adjoint).reshape(rows * cols)
         elif v.dim() == 2 and v.shape[0] == in_rows * in_cols:
@@ -210,28 +210,28 @@ class LinearOperator:
                         for c in range(v.shape[1])]
             out = torch.stack(cols_out, dim=1) if cols_out else v.new_zeros(rows * cols, 0)
         else:
-            raise ValidationError(f"opérateur linéaire : forme {tuple(v.shape)} incompatible "
-                                  f"(attendu (*B, {in_rows}, {in_cols}), ({in_rows * in_cols},) "
-                                  f"ou ({in_rows * in_cols}, k))")
+            raise ValidationError(f"linear operator: incompatible shape {tuple(v.shape)} "
+                                  f"(expected (*B, {in_rows}, {in_cols}), ({in_rows * in_cols},) "
+                                  f"or ({in_rows * in_cols}, k))")
         return out.detach().cpu().numpy() if as_numpy else out
 
     def _check_operand(self, v):
         if v.device != self.device:
-            raise ValidationError(f"opérateur linéaire : device {v.device} différent de {self.device}")
+            raise ValidationError(f"linear operator: device {v.device} differs from {self.device}")
         if v.dtype != self._dt:
-            raise ValidationError(f"opérateur linéaire : dtype {v.dtype} différent de {self.plan.dtype}")
+            raise ValidationError(f"linear operator: dtype {v.dtype} differs from {self.plan.dtype}")
 
     def _product(self, v, adjoint: bool):
         self._check_operand(v)
         import torch
 
-        v = v.contiguous()  # colonnes de matmat, tableaux NumPy : l'opérateur rend contigu
+        v = v.contiguous()  # matmat columns, NumPy arrays: the operator makes them contiguous
         r = max(self.rank, v.dim() - 2)
         v = self._lift_one(v, v.dim() - 2, r)
         if not adjoint:
             return self.red(**self._lift(self._raw, r), **{self.var: v})
-        # Kᵀ u = ∂⟨u, K z⟩/∂z, indépendant de z par linéarité : plan de gradient de la
-        # réduction, lui-même différentiable (entrées liées et u) quand Torch le demande.
+        # Kᵀ u = ∂⟨u, K z⟩/∂z, independent of z by linearity: gradient plan of the
+        # reduction, itself differentiable (bound inputs and u) when Torch requires it.
         batch = tuple(torch.broadcast_shapes(self.batch, v.shape[:-2])) if r else ()
         z = self._tensors[self.var].new_zeros(batch + (self.n, self.dv))
         bound = self._lift(self._bound(), r)
@@ -242,7 +242,7 @@ class LinearOperator:
         return t.reshape((1,) * (r - have) + tuple(t.shape)) if r > have else t
 
     def _lift(self, values: dict, r: int) -> dict:
-        """Entrées liées vues au rang de batch ``r`` (dimensions 1 en tête, sans copie)."""
+        """Bound inputs viewed at batch rank ``r`` (leading size-1 dimensions, no copy)."""
         import torch
 
         if r == self.rank:
@@ -260,7 +260,7 @@ class LinearOperator:
         return out
 
     def _bound(self, replace=None):
-        """Entrées validées, les tenseurs fournis par l'appelant gardant leur graphe Torch."""
+        """Validated inputs; tensors provided by the caller keep their Torch graph."""
         import torch
 
         out = dict(self._tensors)
@@ -287,29 +287,29 @@ class LinearOperator:
         import torch
 
         if self._transposed:
-            raise UnsupportedError("solve sur l'opérateur transposé : résoudre sur l'opérateur direct "
-                                   "(symétrique par hypothèse)")
+            raise UnsupportedError("solve on the transposed operator: solve on the direct operator instead "
+                                   "(assumed symmetric)")
         if self.m != self.n or self.do != self.dv:
-            raise ValidationError(f"solve : opérateur carré requis, reçu ({self.m}, {self.do}) <- "
+            raise ValidationError(f"solve: square operator required, got ({self.m}, {self.do}) <- "
                                   f"({self.n}, {self.dv})")
         if not isinstance(b, torch.Tensor):
-            raise ValidationError(f"solve : torch.Tensor ({self.m}, {self.do}) attendu, reçu {type(b).__name__}")
+            raise ValidationError(f"solve: expected a torch.Tensor ({self.m}, {self.do}), got {type(b).__name__}")
         if b.dim() < 2 or tuple(b.shape[-2:]) != (self.m, self.do):
-            raise ValidationError(f"solve : b de forme (*B, {self.m}, {self.do}) attendu, reçu {tuple(b.shape)}")
+            raise ValidationError(f"solve: expected b of shape (*B, {self.m}, {self.do}), got {tuple(b.shape)}")
         self._check_operand(b)
         try:
             out_shape = tuple(torch.broadcast_shapes(self.batch, b.shape[:-2])) + (self.n, self.dv)
         except RuntimeError:
-            raise ValidationError(f"solve : batch de b {tuple(b.shape[:-2])} non diffusable avec {self.batch}") \
+            raise ValidationError(f"solve: batch of b {tuple(b.shape[:-2])} cannot be broadcast with {self.batch}") \
                 from None
         if x0 is not None:
             if not isinstance(x0, torch.Tensor) or tuple(x0.shape) != out_shape:
-                raise ValidationError(f"solve : x0 de forme {out_shape} attendu")
+                raise ValidationError(f"solve: expected x0 of shape {out_shape}")
             self._check_operand(x0)
             x0 = x0.detach()
         alpha = float(alpha)
         if not alpha >= 0.0:
-            raise ValidationError(f"solve : alpha >= 0 attendu, reçu {alpha}")
+            raise ValidationError(f"solve: expected alpha >= 0, got {alpha}")
         names = tuple(k for k, v in self._raw.items() if isinstance(v, torch.Tensor))
         opts = (alpha, float(eps), 10 * self.m if maxiter is None else maxiter, x0, out_shape)
         info = {}
@@ -317,7 +317,7 @@ class LinearOperator:
         return (x, info) if return_info else x
 
     def _linop(self, alpha: float, r: int):
-        """``v ↦ (alpha I + K) v`` sur tenseurs détachés validés, au rang de batch ``r``."""
+        """``v ↦ (alpha I + K) v`` on validated detached tensors, at batch rank ``r``."""
         tensors, var, red = self._lift(self._tensors, r), self.var, self.red
 
         def linop(v):
@@ -337,7 +337,7 @@ def _solve_function():
     import torch
 
     class KpSolve(torch.autograd.Function):
-        """``a = (αI + K)⁻¹ b`` ; arrière : ``ḃ = (αI + K)⁻¹ g``, ``θ̄ = -∂⟨ḃ, K(θ) a⟩/∂θ``."""
+        """``a = (αI + K)⁻¹ b``; backward: ``ḃ = (αI + K)⁻¹ g``, ``θ̄ = -∂⟨ḃ, K(θ) a⟩/∂θ``."""
 
         @staticmethod
         def forward(ctx, op, names, opts, info, b, *tensors):
@@ -362,9 +362,9 @@ def _solve_function():
             grads = [None] * len(tensors)
             want = [names[k] for k, n in enumerate(needs) if n]
             if want:
-                # θ̄ = -∂⟨K⁻¹g, K(θ) a⟩/∂θ : plans de gradient de la réduction en (θ, var = a),
-                # appelés directement (ni autograd.grad, qui retraverserait KpSolve) ;
-                # avec create_graph, ces réductions sont elles-mêmes différentiables.
+                # θ̄ = -∂⟨K⁻¹g, K(θ) a⟩/∂θ: gradient plans of the reduction at (θ, var = a),
+                # called directly (not through autograd.grad, which would traverse KpSolve again);
+                # with create_graph, these reductions are themselves differentiable.
                 bound = op._lift(op._bound(dict(zip(names, tensors))), r)
                 bound[op.var] = x
                 if not create:

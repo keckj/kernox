@@ -1,10 +1,10 @@
-"""MIN_ARGMIN, MAX_ARGMAX, LOGSUMEXPWEIGHT (avenant v0.8) natifs sur le backend hip.
+"""Native MIN_ARGMIN, MAX_ARGMAX, LOGSUMEXPWEIGHT (amendment v0.8) on the hip backend.
 
-Complète ``tests/conformance/test_reductions_v08.py`` : partition de j forcée
-(partiels valeur + indice, tranches entièrement NaN), égalités nombreuses
-(données entières), NaN, N = 0 ; LSEW sous tous les schémas de sommation et
-niveaux d'insertion, lignes spéciales (±1e4, ±inf, NaN), poids positifs,
-négatifs (NaN) et nuls (−inf). Batch et ranges : ``test_batch_ranges.py``.
+Complements ``tests/conformance/test_reductions_v08.py``: forced j partition
+(value + index partials, fully NaN slices), many ties
+(integer data), NaN, N = 0; LSEW under all summation schemes and
+insertion levels, special rows (±1e4, ±inf, NaN), positive,
+negative (NaN) and zero (−inf) weights. Batch and ranges: ``test_batch_ranges.py``.
 """
 
 import math
@@ -48,9 +48,9 @@ def _arg_data(M, N, dtype, seed):
     y = torch.randint(-3, 4, (N, 2), generator=g).to(T)
     if N > 10:
         y[3, 0] = math.nan
-        y[N // 2:N // 2 + 40, 1] = math.nan          # tranches où la colonne 1 est NaN
+        y[N // 2:N // 2 + 40, 1] = math.nan          # slices where column 1 is NaN
     if M > 4:
-        x[2, 0] = math.nan                            # ligne sans candidat : neutre
+        x[2, 0] = math.nan                            # row without candidate: neutral
         x[4, 1] = INF
     return {"x": x.to(DEV), "y": y.to(DEV)}
 
@@ -77,7 +77,7 @@ def test_min_argmin_split_ties_nan(opts, dtype, is_min):
     assert torch.equal(got["index"], gi["index"]) and torch.equal(got["index"], ref["index"])
     assert torch.equal(got["value"].nan_to_num(), gv["value"].nan_to_num())
     assert torch.equal(got["value"].nan_to_num(), ref["value"].nan_to_num())
-    # valeur = f(i, index) ; ligne NaN : neutre (±inf, −1)
+    # value = f(i, index); NaN row: neutral (±inf, −1)
     assert (got["index"][2, 0] == -1) and got["value"][2, 0] == (INF if is_min else -INF)
 
 
@@ -100,8 +100,8 @@ def _lsew_plan(dtype, scheme="direct"):
 def _lsew_inputs(M, N, seed):
     h = _inputs(M, N, seed)
     w = h["w"].abs() + 0.1
-    w[:, 1] = -w[:, 1]          # t < 0 : NaN
-    w[:, 2] = 0.0               # t = 0 : −inf
+    w[:, 1] = -w[:, 1]          # t < 0: NaN
+    w[:, 2] = 0.0               # t = 0: −inf
     h["w"] = w
     return h
 
@@ -145,7 +145,7 @@ def test_lsew_schemes(opts, dtype, scheme):
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_lsew_pos_inf_and_empty(dtype):
-    """f = +inf : +inf si Σ g > 0, NaN si < 0 ou = 0 ; N = 0 : −inf."""
+    """f = +inf: +inf if Σ g > 0, NaN if < 0 or = 0; N = 0: −inf."""
     plan = _lsew_plan(dtype)
     T = getattr(torch, dtype)
     for N in (0, 1, 300):

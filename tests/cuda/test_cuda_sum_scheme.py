@@ -1,8 +1,8 @@
-"""Schémas de sommation direct / block / kahan sur le backend CUDA (contrat v0.7).
+"""direct / block / kahan summation schemes on the CUDA backend (contract v0.7).
 
-Données mal conditionnées (termes ±1e8 qui s'annulent plus de petits termes, FP32,
-référence ``math.fsum``), partition de j forcée, fp_contract on/off ; LOGSUMEXP /
-SUMSOFTMAXWEIGHT sous les trois schémas avec les lignes spéciales de v0.5.
+Ill-conditioned data (cancelling ±1e8 terms plus small terms, FP32,
+``math.fsum`` reference), forced j partition, fp_contract on/off; LOGSUMEXP /
+SUMSOFTMAXWEIGHT under the three schemes with the special rows of v0.5.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 import kernox as kp  # noqa: E402
 from kernox.backends.cuda import CudaBackend  # noqa: E402
@@ -29,8 +29,8 @@ SCHEMES = ["direct", "block", "kahan"]
 
 
 def with_scheme(plan, scheme):
-    """Plan avec ``sum_scheme`` ; sans le champ (anciennes versions), attribut posé
-    sur une copie (le backend le lit par ``getattr``)."""
+    """Plan with ``sum_scheme``; without the field (older versions), the attribute is set
+    on a copy (the backend reads it through ``getattr``)."""
     if any(f.name == "sum_scheme" for f in dataclasses.fields(Plan)):
         return dataclasses.replace(plan, sum_scheme=scheme)
     p = copy.copy(plan)
@@ -39,7 +39,7 @@ def with_scheme(plan, scheme):
 
 
 def _higham(N, seed):
-    """Termes FP32 : paires ±1e8 dispersées (somme nulle) + petits termes dans [0, 1)."""
+    """FP32 terms: scattered ±1e8 pairs (zero sum) + small terms in [0, 1)."""
     g = torch.Generator().manual_seed(seed)
     small = torch.rand(N, generator=g, dtype=torch.float64).float().double()
     t = small.clone()
@@ -87,7 +87,7 @@ def test_kahan_ill_conditioned(N, fc):
                          ids=lambda o: "-".join(f"{k}{v}" for k, v in o.items()))
 def test_sum_split_and_empty_slices(sch, opts):
     t = _higham(20_000, 7)
-    t[:8000] = 0.0  # tranches de tête à somme nulle
+    t[:8000] = 0.0  # leading slices with zero sum
     ref = math.fsum(t.tolist())
     got, cr = _sum_run(_sum_plan(sch), t, **opts)
     if opts["split"] != "off":
@@ -99,7 +99,7 @@ def test_sum_split_and_empty_slices(sch, opts):
 
 @pytest.mark.parametrize("sch", ["kahan"])
 def test_sum_kahan_inf_nan(sch):
-    """Correctif sans effet sur ±inf / NaN : inf reste inf (pas de NaN parasite)."""
+    """The correction has no effect on ±inf / NaN: inf stays inf (no spurious NaN)."""
     for bad, want in ((math.inf, math.inf), (-math.inf, -math.inf), (math.nan, math.nan)):
         t = torch.ones(3000, dtype=torch.float64)
         t[1234] = bad
@@ -131,8 +131,8 @@ def test_soft_schemes_special_rows(sch, opts, dtype, name):
 
 @pytest.mark.parametrize("name", ["lse", "ssmw"])
 def test_soft_kahan_many_terms(name):
-    """Beaucoup de termes de même poids (f ≈ 0) : kahan FP32 proche de la référence
-    FP64 à quelques u près, nettement mieux que direct pour N = 10⁶."""
+    """Many terms of equal weight (f ≈ 0): FP32 kahan within a few u of the FP64
+    reference, clearly better than direct for N = 10⁶."""
     x, y, w = kp.Vi("x", 1), kp.Vj("y", 1), kp.Vj("w", 1)
     f = x - y
     expr = f.logsumexp(over="j") if name == "lse" else f.sumsoftmaxweight(w, over="j")
@@ -154,6 +154,6 @@ def test_soft_kahan_many_terms(name):
 def test_unknown_scheme_refused():
     plan = with_scheme(_exprs()["ssmw"].to_plan("float32"), "pairwise")
     assert not CudaBackend().supports(plan, DEV).ok
-    # sans objet pour les réductions qui n'accumulent pas de flottants : ignoré
+    # not applicable to reductions that do not accumulate floats: ignored
     x, y = kp.Vi("x", 1), kp.Vj("y", 1)
     assert CudaBackend().supports(with_scheme((x - y).min(over="j").to_plan("float32"), "kahan"), DEV).ok

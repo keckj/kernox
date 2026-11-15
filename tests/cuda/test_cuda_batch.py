@@ -1,10 +1,10 @@
-"""Batch natif (avenant v0.6 §1) du backend CUDA.
+"""Native batch (amendment v0.6 §1) of the CUDA backend.
 
-Égalité au bit près avec une boucle d'appels non batchés sur chaque élément
-(même configuration de lancement : partition de j imposée), diffusion à
-strides 0, params batchés, partition de j (partiels (nb, M, S, ·)), top-K par
-thread et coopératif, LSE/SSMW, schémas block/kahan, lancements par paquets de
-la dimension z (GRID_Z_MAX abaissé), nb et N nuls, frontend batché.
+Bitwise equality with a loop of non-batched calls over each element
+(same launch configuration: j partition imposed), broadcasting with
+0 strides, batched params, j partition (partials (nb, M, S, ·)), per-thread
+and cooperative top-K, LSE/SSMW, block/kahan schemes, launches in chunks of
+the z dimension (lowered GRID_Z_MAX), zero nb and N, batched frontend.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 import kernox as kp  # noqa: E402
 from kernox.backends.base import BatchLayout  # noqa: E402
@@ -54,7 +54,7 @@ def _offsets(t, B, tail):
 
 
 def _element(t, B, b, tail):
-    """Élément b (indice aplati) de t diffusé à B, contigu."""
+    """Element b (flattened index) of t broadcast to B, contiguous."""
     idx = []
     for size in reversed(B):
         idx.append(b % size)
@@ -104,12 +104,12 @@ def _batch_inputs(dtype, M=37, N=150, seed=0):
     x = torch.randn(3, 1, M, 3, generator=g).to(T)                     # (B1, 1, M, 3)
     y = torch.randn(1, 4, N, 3, generator=g).to(T)                     # (1, B2, N, 3)
     y[0, 1, 7] = math.nan
-    b = torch.randn(4, N, 2, generator=g).to(T).expand(3, 4, N, 2)     # strides 0 en tête
-    s = torch.tensor([[0.3], [0.7], [1.1]]).to(T).reshape(3, 1, 1)      # param batché (B1, 1, 1)
+    b = torch.randn(4, N, 2, generator=g).to(T).expand(3, 4, N, 2)     # leading 0 strides
+    s = torch.tensor([[0.3], [0.7], [1.1]]).to(T).reshape(3, 1, 1)      # batched param (B1, 1, 1)
     return {k: v.to(DEV) for k, v in dict(x=x, y=y, b=b, s=s).items()}, (3, 4)
 
 
-# (S, jchunk, tuile) imposés aux deux chemins : même partition, comparaison au bit près
+# (S, jchunk, tile) imposed on both paths: same partition, bitwise comparison
 CONFIGS = {"S1": None, "S4": (4, 40, 8), "S10": (10, 16, 16)}
 
 
@@ -164,7 +164,7 @@ def test_batch_coop_k16(monkeypatch, G):
 
 @pytest.mark.parametrize("cfg", ["S1", "S4"])
 def test_batch_grid_z_chunks(monkeypatch, cfg):
-    monkeypatch.setattr(cuda_backend, "GRID_Z_MAX", 5)   # 12 éléments -> paquets de 5, 5, 2
+    monkeypatch.setattr(cuda_backend, "GRID_Z_MAX", 5)   # 12 elements -> chunks of 5, 5, 2
     _force(monkeypatch, CONFIGS[cfg])
     for name in ("kmin_argkmin5", "sum"):
         plan = _exprs()[name].to_plan("float32")
@@ -174,7 +174,7 @@ def test_batch_grid_z_chunks(monkeypatch, cfg):
 
 
 def test_batch_auto_split_close():
-    """Configuration automatique (S selon nb) : proche de la boucle, indices identiques."""
+    """Automatic configuration (S depends on nb): close to the loop, identical indices."""
     plan = _exprs()["sum"].to_plan("float64")
     t, B = _batch_inputs("float64", M=5, N=20000, seed=11)
     be = CudaBackend()
@@ -194,7 +194,7 @@ def test_batch_empty_and_n0():
     plan = _exprs()["sum"].to_plan("float32")
     got, _ = _run_batched(CudaBackend(), plan, t, B)
     assert (got["value"] == 0).all()
-    # nb = 0 : aucun lancement, sorties intactes
+    # nb = 0: no launch, outputs untouched
     t, _ = _batch_inputs("float32")
     t = {k: v[:0] if k != "y" else v for k, v in t.items()}
     got, _ = _run_batched(CudaBackend(), _exprs()["sum"].to_plan("float32"), t, (0, 4))
@@ -214,7 +214,7 @@ def test_batch_rejects_bad_layout():
     with pytest.raises(ValueError):
         cr.launch(t, outs, batch=BatchLayout(B, 12, {k: v.to(DEV) for k, v in bad.items()}, bad))
     t2 = dict(t)
-    t2["x"] = t["x"].transpose(-1, -2).contiguous().transpose(-1, -2)   # lignes non contiguës
+    t2["x"] = t["x"].transpose(-1, -2).contiguous().transpose(-1, -2)   # non-contiguous rows
     lay = BatchLayout(B, 12, {k: v.to(DEV) for k, v in host.items()}, host)
     with pytest.raises(ValueError):
         cr.launch(t2, outs, batch=lay)
@@ -223,7 +223,7 @@ def test_batch_rejects_bad_layout():
 
 
 def test_batch_frontend():
-    """Chemin runtime (Reduction batchée sur le backend cuda) contre la boucle."""
+    """Runtime path (batched Reduction on the cuda backend) against the loop."""
     x, y = kp.Vi("x", 3), kp.Vj("y", 3)
     red = ((x - y) ** 2).sum().kmin_argkmin(3, over="j")
     run = kp.compile(red, dtype="float32", backend="cuda")

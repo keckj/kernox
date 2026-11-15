@@ -1,9 +1,9 @@
-"""Fuzzing de formules contre la référence FP64 (voir ``_fuzz.py``).
+"""Formula fuzzing against the FP64 reference (see ``_fuzz.py``).
 
-Profil rapide : seeds ``0..FUZZ_QUICK-1`` ; profil long (``slow``) :
-``FUZZ_SLOW`` seeds ; ``KP_FUZZ_SEEDS=a:b`` impose l'intervalle. Un échec est
-minimisé (arbre et tailles) puis enregistré dans ``regressions/`` ; les
-régressions enregistrées sont rejouées sur **tous** les backends disponibles.
+Quick profile: seeds ``0..FUZZ_QUICK-1``; long profile (``slow``):
+``FUZZ_SLOW`` seeds; ``KP_FUZZ_SEEDS=a:b`` forces the range. A failure is
+minimized (tree and sizes) then recorded in ``regressions/``; recorded
+regressions are replayed on **all** available backends.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _record(backend, case, exc):
     signature = _signature(exc)
 
     def fails(c):
-        # même classe d'échec seulement (type d'exception et critère violé)
+        # same failure class only (exception type and violated criterion)
         try:
             _run(backend, c)
         except Exception as e:  # noqa: BLE001
@@ -77,8 +77,8 @@ def _fuzz_one(backend, seed):
         _run(backend, case)
     except Exception as exc:  # noqa: BLE001
         path, rec = _record(backend, case, exc)
-        pytest.fail(f"seed {seed} : {type(exc).__name__}: {exc}\n"
-                    f"cas minimal enregistré dans {path} :\n{json.dumps(rec, indent=1, ensure_ascii=False)}")
+        pytest.fail(f"seed {seed}: {type(exc).__name__}: {exc}\n"
+                    f"minimal case recorded in {path}:\n{json.dumps(rec, indent=1, ensure_ascii=False)}")
 
 
 @pytest.mark.parametrize("seed", _seeds(False))
@@ -105,5 +105,5 @@ def test_regression(backend, path):
 def test_generator_is_reproducible():
     a, b = _fuzz.Generator(123).case(), _fuzz.Generator(123).case()
     assert [_fuzz.source(t) for t in a["trees"]] == [_fuzz.source(t) for t in b["trees"]]
-    for seed in range(200):  # toutes les formules générées se construisent
+    for seed in range(200):  # every generated formula builds
         _fuzz.build(_fuzz.Generator(seed).case())

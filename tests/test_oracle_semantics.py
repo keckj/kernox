@@ -1,4 +1,4 @@
-"""Sémantique des réductions : oracle Torch par blocs vs oracle NumPy FP64 indépendant."""
+"""Reduction semantics: block-wise Torch oracle vs independent FP64 NumPy oracle."""
 import math
 
 import numpy as np
@@ -62,7 +62,7 @@ def test_random_matches_numpy(name, dtype, mn):
 
 
 def column_plan(kind, dtype="float64", k=None):
-    """Valeurs v_j exactement contrôlées : f(i, j) = x_i * v_j avec x = 1."""
+    """Exactly controlled values v_j: f(i, j) = x_i * v_j with x = 1."""
     x, v = Vi("x"), Vj("v")
     f = x * v
     r = getattr(f, kind)(k, over="j") if k is not None else getattr(f, kind)(over="j")
@@ -82,7 +82,7 @@ def test_ties_nan_inf(block):
     out = run_oracle(column_plan("min"), inp, block)
     assert out["value"][0, 0] == -INF
     out = run_oracle(column_plan("argmin"), inp, block)
-    assert out["index"][0, 0] == 7  # premier -inf, NaN ignorés
+    assert out["index"][0, 0] == 7  # first -inf, NaNs ignored
     out = run_oracle(column_plan("argmax"), inp, block)
     assert out["index"][0, 0] == 6
     plan = column_plan("kmin_argkmin", k=8)
@@ -109,7 +109,7 @@ def test_all_nan_row():
     assert run_oracle(column_plan("argmin"), inp)["index"][0, 0] == -1
     assert run_oracle(column_plan("argmax"), inp)["index"][0, 0] == -1
     s = run_oracle((Vi("x") * Vj("v")).sum_over("j").to_plan("float64"), inp)["value"]
-    assert np.isnan(s).all()  # SUM propage les NaN
+    assert np.isnan(s).all()  # SUM propagates NaNs
 
 
 def test_count_nan_comparison_false():
@@ -138,12 +138,12 @@ def test_empty_axes_and_k0():
 
 
 def test_deep_shared_formula_with_where_is_not_exponential():
-    """DAG partagé profond avec ``where`` et ``min`` : construction du plan
-    (``realify``, ``fold_constants``), gradient et oracle restent rapides.
+    """Deep shared DAG with ``where`` and ``min``: plan construction
+    (``realify``, ``fold_constants``), gradient and oracle stay fast.
 
-    ``e_{k+1} = exp(min(e_k, y) − e_k) + sin(e_k) + x`` réutilise ``e_k``
-    trois fois : l'arbre déplié a ~3^20 nœuds. Les marches non mémoïsées
-    (et l'oracle sans CSE en présence de ``Piecewise``) ne finissaient pas.
+    ``e_{k+1} = exp(min(e_k, y) − e_k) + sin(e_k) + x`` reuses ``e_k``
+    three times: the unfolded tree has ~3^20 nodes. Non-memoized traversals
+    (and the oracle without CSE in the presence of ``Piecewise``) never finished.
     """
     import time
 

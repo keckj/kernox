@@ -51,13 +51,13 @@ class Ranges:
 
         tr = (self.ranges_j, self.slices_j, self.redranges_i)
         if any(t is None for t in tr) and not all(t is None for t in tr):
-            raise ValidationError("ranges : triplet transposé (ranges_j, slices_j, redranges_i) complet ou absent")
+            raise ValidationError("ranges: the transposed triplet (ranges_j, slices_j, redranges_i) must be complete or absent")
         for name in ("ranges_i", "slices_i", "redranges_j", "ranges_j", "slices_j", "redranges_i"):
             t = getattr(self, name)
             if t is None:
                 continue
             if not isinstance(t, torch.Tensor) or str(t.dtype) not in _INT:
-                raise ValidationError(f"ranges.{name} : tenseur int32 ou int64 attendu")
+                raise ValidationError(f"ranges.{name}: expected an int32 or int64 tensor")
         _check_triplet_shapes("i", self.ranges_i, self.slices_i, self.redranges_j)
         if self.ranges_j is not None:
             _check_triplet_shapes("j", self.ranges_j, self.slices_j, self.redranges_i)
@@ -86,8 +86,8 @@ class Ranges:
             return self.triplet_i(), self.triplet_j()
         if not self.has_transpose:
             raise ValidationError(
-                "ranges avec over='i' : le triplet (ranges_j, slices_j, redranges_i) est requis "
-                "(réduction sur i)")
+                "ranges with over='i': the triplet (ranges_j, slices_j, redranges_i) is required "
+                "(reduction over i)")
         return self.triplet_j(), self.triplet_i()
 
     @classmethod
@@ -104,23 +104,23 @@ class Ranges:
 
 def _check_triplet_shapes(side, rows, slices, red):
     if rows.dim() != 2 or rows.shape[1] != 2:
-        raise ValidationError(f"ranges_{side} : forme (C, 2) attendue, reçu {tuple(rows.shape)}")
+        raise ValidationError(f"ranges_{side}: expected shape (C, 2), got {tuple(rows.shape)}")
     if slices.dim() != 1 or slices.shape[0] != rows.shape[0]:
-        raise ValidationError(f"slices_{side} : forme ({rows.shape[0]},) attendue, reçu {tuple(slices.shape)}")
+        raise ValidationError(f"slices_{side}: expected shape ({rows.shape[0]},), got {tuple(slices.shape)}")
     if red.dim() != 2 or red.shape[1] != 2:
         other = "j" if side == "i" else "i"
-        raise ValidationError(f"redranges_{other} : forme (R, 2) attendue, reçu {tuple(red.shape)}")
+        raise ValidationError(f"redranges_{other}: expected shape (R, 2), got {tuple(red.shape)}")
     if not (rows.device == slices.device == red.device):
-        raise ValidationError(f"ranges ({side}) : tenseurs sur des devices différents")
+        raise ValidationError(f"ranges ({side}): tensors on different devices")
 
 
 def _scan_unsafe(device) -> bool:
-    """torch-xpu 2.15 sur le G31 (Battlemage, pilote 26.05) : ``nonzero``,
-    ``torch.where`` à un argument, ``bincount``, ``searchsorted`` et
-    ``repeat_interleave`` rendent des résultats faux (vérifié
-    avec le runtime SYCL d'origine comme surchargé ; ``cumsum`` et
-    ``scatter_add_`` sont justes). Les petits calculs de structure des ranges
-    se font donc sur l'hôte pour un device XPU, puis sont recopiés."""
+    """torch-xpu 2.15 on the G31 (Battlemage, driver 26.05): ``nonzero``,
+    single-argument ``torch.where``, ``bincount``, ``searchsorted`` and
+    ``repeat_interleave`` return wrong results (checked with both the
+    stock and an overridden SYCL runtime; ``cumsum`` and ``scatter_add_``
+    are correct). The small structural computations on ranges are therefore
+    done on the host for an XPU device, then copied back."""
     import torch
 
     return torch.device(device).type == "xpu"
@@ -143,17 +143,17 @@ def ranges_from_labels(labels_i, labels_j, keep) -> Ranges:
         return Ranges(*(t.to(dev) for t in (r.ranges_i, r.slices_i, r.redranges_j,
                                              r.ranges_j, r.slices_j, r.redranges_i)))
     if keep.dim() != 2 or keep.dtype != torch.bool:
-        raise ValidationError("keep : matrice booléenne (Ci, Cj) attendue")
+        raise ValidationError("keep: expected a boolean (Ci, Cj) matrix")
     ci, cj = keep.shape
 
     def bounds(labels, c, name):
         labels = torch.as_tensor(labels).to(device=keep.device, dtype=torch.int64)
         if labels.dim() != 1:
-            raise ValidationError(f"{name} : vecteur attendu")
+            raise ValidationError(f"{name}: expected a vector")
         counts = torch.zeros(c, dtype=torch.int64, device=keep.device)
         if labels.numel():
-            # Indices hors de [0, c) ramenés dans les bornes pour le comptage ; la
-            # validation ci-dessous les rejette (une seule synchronisation).
+            # Indices outside [0, c) are clamped into range for counting; the
+            # validation below rejects them (a single synchronization).
             counts.index_add_(0, labels.clamp(0, max(c - 1, 0)), torch.ones_like(labels))
         ends = torch.cumsum(counts, 0)
         return labels, torch.stack([ends - counts, ends], dim=1)
@@ -165,12 +165,12 @@ def ranges_from_labels(labels_i, labels_j, keep) -> Ranges:
             return torch.zeros((), dtype=torch.bool, device=keep.device)
         return (labels[1:] < labels[:-1]).any() | (labels.min() < 0) | (labels.max() >= c)
 
-    # Validation des deux étiquetages en un seul transfert hôte (2 booléens).
+    # Validate both labelings in a single host transfer (2 booleans).
     flags = torch.stack([bad(li, ci), bad(lj, cj)]).tolist()
     for flag, name, c in zip(flags, ("labels_i", "labels_j"), (ci, cj)):
         if flag:
-            raise ValidationError(f"{name} : étiquettes croissantes dans [0, {c}) attendues")
-    # Blocs gardés : tout sur le device (le chemin hôte, pour XPU, est plus haut).
+            raise ValidationError(f"{name}: expected non-decreasing labels in [0, {c})")
+    # Kept blocks: everything on the device (the host path, for XPU, is above).
     cols = keep.nonzero()[:, 1]
     rows = keep.t().nonzero()[:, 1]
     return Ranges(
@@ -191,27 +191,27 @@ def validate_triplet(tr: Triplet, m: int, n: int, side: str) -> None:
     if c:
         a, b = rows[:, 0], rows[:, 1]
         if bool(((a < 0) | (b < a) | (b > m)).any()):
-            problems.append(f"bloc de lignes hors de [0, {m}] ou vide à l'envers")
+            problems.append(f"row block outside [0, {m}] or reversed")
         order = torch.argsort(a)
         if c > 1 and bool((a[order][1:] < b[order][:-1]).any()):
-            problems.append("blocs de lignes qui se recouvrent")
+            problems.append("overlapping row blocks")
         if bool((slices[1:] < slices[:-1]).any()) or int(slices[0]) < 0 or int(slices[-1]) != r:
-            problems.append(f"slices non croissantes ou dernière fin différente de {r}")
+            problems.append(f"decreasing slices or last end different from {r}")
     elif r:
-        problems.append("intervalles sans bloc de lignes")
+        problems.append("intervals without any row block")
     if r and not problems:
         cc, d = red[:, 0], red[:, 1]
         if bool(((cc < 0) | (d < cc) | (d > n)).any()):
-            problems.append(f"intervalle réduit hors de [0, {n}]")
+            problems.append(f"reduced interval outside [0, {n}]")
         else:
             block = torch.repeat_interleave(torch.arange(c, device=red.device), torch.diff(slices, prepend=slices.new_zeros(1)))
             key = block * (n + 1) + cc
             order = torch.argsort(key)
             same = block[order][1:] == block[order][:-1]
             if bool((same & (cc[order][1:] < d[order][:-1])).any()):
-                problems.append("intervalles d'un même bloc qui se recouvrent")
+                problems.append("overlapping intervals within a block")
     if problems:
-        raise ValidationError(f"ranges ({side}) invalides : " + " ; ".join(problems))
+        raise ValidationError(f"invalid ranges ({side}): " + "; ".join(problems))
 
 
 def work_list(tr: Triplet, tile_m: int):
@@ -226,7 +226,7 @@ def work_list(tr: Triplet, tile_m: int):
     rows = tr.rows.to(torch.int64)
     slices = tr.slices.to(torch.int64)
     dev = rows.device
-    if _scan_unsafe(dev):  # calcul hôte (repeat_interleave faux sur XPU), copie vers le device
+    if _scan_unsafe(dev):  # host computation (repeat_interleave is wrong on XPU), copied to the device
         return work_list(Triplet(rows.cpu(), slices.cpu(), tr.red.cpu()), tile_m).to(dev)
     c = rows.shape[0]
     if c == 0:

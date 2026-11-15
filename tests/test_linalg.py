@@ -1,5 +1,5 @@
-"""Opérateur linéaire et ``solve`` (parité PyKeOps : ``matvec``, ``rmatvec``, ``T``,
-``LazyTensor.solve`` / ``KernelSolve``), sur l'oracle, contre l'algèbre dense de Torch."""
+"""Linear operator and ``solve`` (PyKeOps parity: ``matvec``, ``rmatvec``, ``T``,
+``LazyTensor.solve`` / ``KernelSolve``), on the oracle, checked against Torch dense linear algebra."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def test_matvec_rmatvec_against_dense():
     torch.testing.assert_close(op.T @ u, k.T @ u)
     torch.testing.assert_close(op.T.rmatvec(v), k @ v)
     torch.testing.assert_close(op.t().T @ v, k @ v)
-    # formes SciPy : vecteur aplati, matrice de colonnes aplaties, NumPy
+    # SciPy shapes: flattened vector, matrix of flattened columns, NumPy
     torch.testing.assert_close(op.matvec(v.reshape(-1)), (k @ v).reshape(-1))
     cols = torch.randn(90, 3, dtype=F64)
     want = torch.stack([(k @ cols[:, c].reshape(45, 2)).reshape(-1) for c in range(3)], 1)
@@ -55,7 +55,7 @@ def test_matvec_rmatvec_against_dense():
 
 
 def test_non_square_matrix_valued_operator():
-    """Sortie Do=3 depuis Dv=2 : J(x, y) non diagonal, Kᵀ par le produit vecteur-jacobien."""
+    """Output Do=3 from Dv=2: non-diagonal J(x, y), Kᵀ through the vector-Jacobian product."""
     x, y, b = kp.Vi("x", 3), kp.Vj("y", 3), kp.Vj("b", 2)
     k = kp.exp(-(x - y).sqnorm2())
     f = kp.cat(k * b[0], (x * y).sum() * b[1] + k * b[0], 2.0 * b[1])
@@ -64,7 +64,7 @@ def test_non_square_matrix_valued_operator():
     op = run.linear_operator("b", x=xt, y=yt)
     kd = torch.exp(-((xt[:, None] - yt[None]) ** 2).sum(-1))
     dot = xt @ yt.T
-    # matrice dense (M·3, N·2), ordre row-major (i, composante)
+    # dense matrix (M·3, N·2), row-major order (i, component)
     a = torch.zeros(20, 3, 25, 2, dtype=F64)
     a[:, 0, :, 0] = kd
     a[:, 1, :, 0] = kd
@@ -75,7 +75,7 @@ def test_non_square_matrix_valued_operator():
     assert op.shape == (60, 50)
     torch.testing.assert_close(op @ v, (a @ v.reshape(-1)).reshape(20, 3))
     torch.testing.assert_close(op.rmatvec(u), (a.T @ u.reshape(-1)).reshape(25, 2))
-    with pytest.raises(ValidationError, match="carré"):
+    with pytest.raises(ValidationError, match="square"):
         op.solve(torch.randn(20, 3, dtype=F64))
 
 
@@ -102,7 +102,7 @@ def test_solve_against_dense(alpha):
     assert info["converged"] and info["niter"] >= 1
     ref = torch.linalg.solve(_dense(x, x, 0.5) + alpha * torch.eye(50, dtype=F64), rhs)
     torch.testing.assert_close(a, ref, rtol=1e-8, atol=1e-8)
-    # même résultat par Reduction.solve et le critère d'arrêt de PyKeOps (eps)
+    # same result through Reduction.solve and the PyKeOps stopping criterion (eps)
     b = run.solve("b", rhs, alpha=alpha, eps=1e-12, x=x, y=x, s=0.5)
     torch.testing.assert_close(b, a, rtol=0, atol=0)
 
@@ -112,11 +112,11 @@ def test_solve_default_tolerance_and_x0():
     rhs = torch.randn(40, 1, dtype=F64, generator=torch.Generator().manual_seed(6))
     op = _gauss(1).linear_operator("b", x=x, y=x, s=0.6)
     a, info = op.solve(rhs, alpha=0.3, return_info=True)
-    # arrêt de PyKeOps : ‖r‖ < max(eps‖b‖, eps), eps = 1e-6
+    # PyKeOps stopping rule: ‖r‖ < max(eps‖b‖, eps), eps = 1e-6
     assert info["atol"] == pytest.approx(max(1e-6, 1e-6 * float(rhs.norm())))
     res = op @ a + 0.3 * a - rhs
     assert float(res.norm()) < info["atol"]
-    # démarrage à la solution : zéro itération
+    # starting at the solution: zero iterations
     _, info0 = op.solve(rhs, alpha=0.3, x0=a, return_info=True)
     assert info0["niter"] <= 1
 
@@ -124,7 +124,7 @@ def test_solve_default_tolerance_and_x0():
 def test_solve_maxiter_warns():
     x, _ = _data(40, 40, seed=7)
     op = _gauss(1).linear_operator("b", x=x, y=x, s=0.6)
-    with pytest.warns(RuntimeWarning, match="sans convergence"):
+    with pytest.warns(RuntimeWarning, match="did not converge"):
         _, info = op.solve(torch.randn(40, 1, dtype=F64), alpha=1e-10, eps=1e-14, maxiter=2, return_info=True)
     assert not info["converged"] and info["niter"] == 2
 
@@ -209,26 +209,26 @@ def test_linearity_is_checked():
         args = {k_: v for k_, v in args.items() if k_ in run.input_names and k_ != var}
         return run.linear_operator(var, **{**args, **kw})
 
-    with pytest.raises(ValidationError, match="non linéaire"):
+    with pytest.raises(ValidationError, match="not linear"):
         op((k * b * b).sum_over("j"))
-    with pytest.raises(ValidationError, match="non linéaire"):
+    with pytest.raises(ValidationError, match="not linear"):
         op((k * kp.sin(b)).sum_over("j"))
-    # zéro non reconnu symboliquement (produit d'exponentielles contre exponentielle
-    # de la somme) : refus prudent, jamais d'hypothèse de linéarité
-    with pytest.raises(ValidationError, match="non démontrée"):
+    # zero not recognized symbolically (product of exponentials vs. exponential of
+    # the sum): cautious refusal, linearity is never assumed
+    with pytest.raises(ValidationError, match="not proven"):
         op((k * kp.exp(b) - k).sum_over("j"))
-    with pytest.raises(ValidationError, match="en b=0"):
+    with pytest.raises(ValidationError, match="at b=0"):
         op((k * b + k).sum_over("j"))
     with pytest.raises(ValidationError, match="SUM"):
         op((k * b).max(over="j"))
-    with pytest.raises(ValidationError, match="variable j"):
+    with pytest.raises(ValidationError, match=r"must be a j \(reduced\) variable"):
         op((k * x[0]).sum_over("j"), var="x", b=bt)
-    with pytest.raises(ValidationError, match="n'est pas une entrée"):
+    with pytest.raises(ValidationError, match="is not an input"):
         op((k * b).sum_over("j"), var="z")
-    with pytest.raises(ValidationError, match="ne pas la fournir"):
+    with pytest.raises(ValidationError, match="do not provide it"):
         kp.compile((k * b).sum_over("j"), dtype="float64", backend="oracle").linear_operator(
             "b", x=xt, y=yt, b=bt)
-    # where linéaire par morceaux : accepté (nul en b = 0, dérivée sans b)
+    # piecewise-linear where: accepted (zero at b = 0, derivative free of b)
     op(kp.where(x[0] < y[0], k * b, -b).sum_over("j"))
 
 
@@ -238,15 +238,15 @@ def test_operand_validation():
     op = run.linear_operator("b", x=x, y=x, s=0.5)
     with pytest.raises(ValidationError, match="dtype"):
         op @ torch.randn(10, 1, dtype=torch.float32)
-    with pytest.raises(ValidationError, match="forme"):
+    with pytest.raises(ValidationError, match="shape"):
         op @ torch.randn(9, 1, dtype=F64)
     with pytest.raises(ValidationError, match="alpha"):
         op.solve(torch.randn(10, 1, dtype=F64), alpha=-1.0)
-    with pytest.raises(ValidationError, match="forme"):
+    with pytest.raises(ValidationError, match="shape"):
         op.solve(torch.randn(10, 2, dtype=F64))
-    with pytest.raises(UnsupportedError, match="transposé"):
+    with pytest.raises(UnsupportedError, match="transposed"):
         op.T.solve(torch.randn(10, 1, dtype=F64))
-    with pytest.raises(ValidationError, match="deux fois"):
+    with pytest.raises(ValidationError, match="given twice"):
         run.solve("b", torch.randn(10, 1, dtype=F64), inputs={"x": x}, x=x, y=x, s=0.5)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -286,15 +286,15 @@ def test_batched_operator_products():
     u = torch.randn(3, 12, 2, dtype=F64, generator=g)
     torch.testing.assert_close(op @ v, k @ v)
     torch.testing.assert_close(op.rmatvec(u), k.transpose(-1, -2) @ u)
-    # v non batché diffusé, v de batch (2, 1) contre entrées (3,) -> (2, 3)
+    # unbatched v broadcast, v with batch (2, 1) against inputs (3,) -> (2, 3)
     torch.testing.assert_close(op @ v[0], k @ v[0])
     v2 = torch.randn(2, 1, 15, 2, dtype=F64, generator=g)
     torch.testing.assert_close(op @ v2, k @ v2)
     torch.testing.assert_close(op.T @ u[:, None].expand(3, 2, 12, 2).transpose(0, 1).contiguous(),
                                k.transpose(-1, -2) @ u[:, None].expand(3, 2, 12, 2).transpose(0, 1))
-    with pytest.raises(ValidationError, match="aplaties"):
+    with pytest.raises(ValidationError, match="flattened"):
         op @ v[0].reshape(-1)
-    # opérateur non batché appliqué à un v batché
+    # unbatched operator applied to a batched v
     op1 = _gauss().linear_operator("b", x=x[0], y=y[0], s=0.8)
     assert op1.batch == ()
     torch.testing.assert_close(op1 @ v, k[0] @ v)
@@ -304,7 +304,7 @@ def test_batched_operator_products():
 def test_batched_solve_and_gradients():
     g = torch.Generator().manual_seed(21)
     x0 = torch.randn(2, 20, 3, dtype=F64, generator=g)
-    rhs0 = torch.randn(20, 1, dtype=F64, generator=g)        # diffusé sur le batch des entrées
+    rhs0 = torch.randn(20, 1, dtype=F64, generator=g)        # broadcast over the input batch
     w = torch.randn(2, 20, 1, dtype=F64, generator=g)
     run = _gauss(1)
     eye = torch.eye(20, dtype=F64)
@@ -323,12 +323,12 @@ def test_batched_solve_and_gradients():
     want = torch.autograd.grad((ar * w).sum(), [xr, rr, sr])
     for gg, r in zip(got, want):
         torch.testing.assert_close(gg, r, rtol=1e-8, atol=1e-9)
-    # entrées non batchées, plusieurs seconds membres (4, M, 1)
+    # unbatched inputs, several right-hand sides (4, M, 1)
     rhs4 = torch.randn(4, 20, 1, dtype=F64, generator=g)
     a4 = run.solve("b", rhs4, alpha=0.3, eps=1e-13, x=x0[0], y=x0[0], s=0.7)
     torch.testing.assert_close(a4, torch.linalg.solve(_dense_b(x0[0], x0[0], 0.7) + 0.3 * eye, rhs4),
                                rtol=1e-9, atol=1e-10)
     with pytest.raises(ValidationError, match="x0"):
         run.solve("b", rhs4, x0=torch.zeros(20, 1, dtype=F64), x=x0[0], y=x0[0], s=0.7)
-    with pytest.raises(ValidationError, match="diffusable"):
+    with pytest.raises(ValidationError, match="cannot be broadcast"):
         run.solve("b", torch.randn(3, 20, 1, dtype=F64), x=x0, y=x0, s=0.7)

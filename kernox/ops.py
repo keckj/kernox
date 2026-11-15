@@ -34,17 +34,17 @@ def _pw(*pairs):
 
 def _int(value, name, *, minimum=None):
     if isinstance(value, bool) or not isinstance(value, numbers.Integral):
-        raise ValidationError(f"{name} : entier attendu, reçu {value!r}")
+        raise ValidationError(f"{name}: expected an integer, got {value!r}")
     value = int(value)
     if minimum is not None and value < minimum:
-        raise ValidationError(f"{name} : entier ≥ {minimum} attendu, reçu {value}")
+        raise ValidationError(f"{name}: expected an integer ≥ {minimum}, got {value}")
     return value
 
 
 def _real(f, what):
     f = Formula._lift(f)
     if f.is_boolean:
-        raise TypeError(f"{what} : opérande booléen ; utiliser where(pred, a, b)")
+        raise TypeError(f"{what}: boolean operand; use where(pred, a, b)")
     return f
 
 
@@ -52,7 +52,7 @@ def _formula(comps, *formulas):
     return Formula(tuple(comps), _merge_vars(*(f._vars for f in formulas)))
 
 
-# ------------------------------------------------------------ scalaires
+# ------------------------------------------------------------ scalars
 def relu(x):
     """``(x < 0) ? 0 : x`` (keopscore ``ReLU``; NaN → NaN)."""
     sx = _sx()
@@ -89,12 +89,12 @@ def inv(x):
 
 
 def _round0(a):
-    """``round(a)`` de C (moitié loin de zéro), exact, signe de zéro compris.
+    """C ``round(a)`` (half away from zero), exact, including the sign of zero.
 
-    ``b = |a|``, ``r = floor(b)``, ``f = b − r`` : exact (Sterbenz pour
-    ``r ≥ 1``, trivial pour ``r = 0``) ; ``q = r + 1`` si ``f ≥ 1/2`` sinon
-    ``r`` ; résultat ``−q`` si ``a < 0`` (donc ``−0`` pour ``a ∈ ]−1/2, 0[``,
-    comme C, et ``±0 → ±0``). ``±inf`` : ``f`` est NaN, ``q = r`` ; NaN se propage.
+    ``b = |a|``, ``r = floor(b)``, ``f = b − r``: exact (Sterbenz for
+    ``r ≥ 1``, trivial for ``r = 0``); ``q = r + 1`` if ``f ≥ 1/2``, otherwise
+    ``r``; result ``−q`` if ``a < 0`` (hence ``−0`` for ``a ∈ ]−1/2, 0[``,
+    like C, and ``±0 → ±0``). ``±inf``: ``f`` is NaN, ``q = r``; NaN propagates.
     """
     sx = _sx()
     b = sx.Abs(a)
@@ -103,13 +103,13 @@ def _round0(a):
     return _pw((-q, sx.StrictLessThan(a, 0)), (a, sx.Eq(a, 0)), (q, True))  # ±0 → ±0
 
 
-def round(x, d=0):  # noqa: A001 - nom PyKeOps
+def round(x, d=0):  # noqa: A001 - PyKeOps name
     """Rounding to ``d`` decimal places (keopscore ``Round``): ``round(x·10^d)/10^d``.
 
     ``d = 0``: C ``round(x)`` (half away from zero). The factor ``10^d``
     is an exact constant; the final division is rounded once.
     """
-    d = _int(d, "round : nombre de décimales")
+    d = _int(d, "round: number of decimals")
     sx = _sx()
     if d == 0:
         return Formula._map(_round0, x, boolean_in=False)
@@ -135,7 +135,7 @@ def clamp(x, lo, hi):
 
 def clampint(x, lo: int, hi: int):
     """``clamp`` with fixed integer bounds (keopscore ``ClampInt``)."""
-    return clamp(x, _int(lo, "clampint : a"), _int(hi, "clampint : b"))
+    return clamp(x, _int(lo, "clampint: a"), _int(hi, "clampint: b"))
 
 
 def ifelse(x, a, b):
@@ -144,9 +144,9 @@ def ifelse(x, a, b):
     return Formula._map(lambda c, u, v: _pw((u, sx.GreaterThan(c, 0)), (v, True)), x, a, b, boolean_in=False)
 
 
-# ------------------------------------------------------------- vecteurs
+# ------------------------------------------------------------- vectors
 def _rsqrt_keops(s):
-    """``(s == 0) ? 0 : 1/sqrt(s)`` (keopscore ``Rsqrt``, ici exact : pas d'``rsqrt`` approché)."""
+    """``(s == 0) ? 0 : 1/sqrt(s)`` (keopscore ``Rsqrt``, exact here: no approximate ``rsqrt``)."""
     sx = _sx()
     return _pw((sx.Integer(0), sx.Eq(s, 0)), (1 / sx.sqrt(s), True))
 
@@ -178,7 +178,7 @@ def weightedsqnorm(x, s):
         return _formula((_sx().Add(*(a * (b * b) for a, b in zip(s._comps, x._comps))),), s, x)
     if s.dim == d * d:
         return (s * tensorprod(x, x)).sum()
-    raise ValidationError(f"weightedsqnorm : poids de dimension 1, {d} ou {d * d} attendus, reçu {s.dim}")
+    raise ValidationError(f"weightedsqnorm: expected weights of dimension 1, {d} or {d * d}, got {s.dim}")
 
 
 def weightedsqdist(x, y, s):
@@ -194,10 +194,10 @@ def one_hot(x, D: int):
     ``−3/2 < x < 1/2`` (exact comparisons, without rounding ``x + 0.5``).
     Outside ``[0, D)`` (undefined behavior in keopscore) and NaN: zero vector.
     """
-    D = _int(D, "one_hot : D", minimum=1)
+    D = _int(D, "one_hot: D", minimum=1)
     x = _real(x, "one_hot")
     if x.dim != 1:
-        raise ValidationError("one_hot : formule scalaire uniquement")
+        raise ValidationError("one_hot: scalar formula only")
     sx = _sx()
     a = x._comps[0]
     half = sx.Rational(1, 2)
@@ -213,17 +213,17 @@ def one_hot(x, D: int):
 
 def elem(x, i: int):
     """Component ``i`` (keopscore ``Elem``), ``0 ≤ i < dim``."""
-    i = _int(i, "elem : indice", minimum=0)
+    i = _int(i, "elem: index", minimum=0)
     if i >= x.dim:
-        raise ValidationError(f"elem : indice {i} hors de [0, {x.dim})")
+        raise ValidationError(f"elem: index {i} out of [0, {x.dim})")
     return x[i]
 
 
 def extract(x, i: int, d: int):
     """Components ``i … i+d−1`` (keopscore ``Extract``)."""
-    i, d = _int(i, "extract : début", minimum=0), _int(d, "extract : dimension", minimum=1)
+    i, d = _int(i, "extract: start", minimum=0), _int(d, "extract: dimension", minimum=1)
     if i + d > x.dim:
-        raise ValidationError(f"extract : [{i}, {i + d}) hors de [0, {x.dim})")
+        raise ValidationError(f"extract: [{i}, {i + d}) out of [0, {x.dim})")
     return x[i:i + d]
 
 
@@ -232,7 +232,7 @@ def matvecmult(A, v):
     A, v = _real(A, "matvecmult"), _real(v, "matvecmult")
     m = v.dim
     if A.dim % m:
-        raise ValidationError(f"matvecmult : dim(A)={A.dim} non multiple de dim(v)={m}")
+        raise ValidationError(f"matvecmult: dim(A)={A.dim} is not a multiple of dim(v)={m}")
     n = A.dim // m
     sx = _sx()
     comps = (sx.Add(*(A._comps[i * m + k] * v._comps[k] for k in range(m))) for i in range(n))
@@ -244,7 +244,7 @@ def vecmatmult(v, A):
     v, A = _real(v, "vecmatmult"), _real(A, "vecmatmult")
     m = v.dim
     if A.dim % m:
-        raise ValidationError(f"vecmatmult : dim(A)={A.dim} non multiple de dim(v)={m}")
+        raise ValidationError(f"vecmatmult: dim(A)={A.dim} is not a multiple of dim(v)={m}")
     n = A.dim // m
     sx = _sx()
     comps = (sx.Add(*(v._comps[k] * A._comps[k * n + i] for k in range(m))) for i in range(n))
@@ -276,14 +276,14 @@ def tensordot(a, b, dimfa, dimfb, contfa, contfb, permute=None):
     import numpy as np
 
     a, b = _real(a, "tensordot"), _real(b, "tensordot")
-    dimfa, dimfb = [_int(d, "tensordot : dimfa", minimum=1) for d in dimfa], [_int(d, "tensordot : dimfb", minimum=1) for d in dimfb]
-    contfa, contfb = [_int(c, "tensordot : contfa", minimum=0) for c in contfa], [_int(c, "tensordot : contfb", minimum=0) for c in contfb]
+    dimfa, dimfb = [_int(d, "tensordot: dimfa", minimum=1) for d in dimfa], [_int(d, "tensordot: dimfb", minimum=1) for d in dimfb]
+    contfa, contfb = [_int(c, "tensordot: contfa", minimum=0) for c in contfa], [_int(c, "tensordot: contfb", minimum=0) for c in contfb]
     if _prod(dimfa) != a.dim or _prod(dimfb) != b.dim:
-        raise ValidationError(f"tensordot : prod(dimfa)={_prod(dimfa)}/dim(a)={a.dim}, prod(dimfb)={_prod(dimfb)}/dim(b)={b.dim}")
+        raise ValidationError(f"tensordot: prod(dimfa)={_prod(dimfa)}/dim(a)={a.dim}, prod(dimfb)={_prod(dimfb)}/dim(b)={b.dim}")
     if len(contfa) != len(contfb) or any(c >= len(dimfa) for c in contfa) or any(c >= len(dimfb) for c in contfb):
-        raise ValidationError("tensordot : axes de contraction invalides")
+        raise ValidationError("tensordot: invalid contraction axes")
     if [dimfa[c] for c in contfa] != [dimfb[c] for c in contfb]:
-        raise ValidationError("tensordot : dimensions contractées différentes")
+        raise ValidationError("tensordot: contracted dimensions differ")
     A = np.empty(len(a._comps), dtype=object)
     A[:] = list(a._comps)
     B = np.empty(len(b._comps), dtype=object)
@@ -292,9 +292,9 @@ def tensordot(a, b, dimfa, dimfb, contfa, contfb, permute=None):
     T = np.asarray(T, dtype=object)
     nk = T.ndim
     if permute is not None:
-        permute = [_int(p, "tensordot : permute", minimum=0) for p in permute]
+        permute = [_int(p, "tensordot: permute", minimum=0) for p in permute]
         if sorted(permute) != list(range(nk)):
-            raise ValidationError(f"tensordot : permute doit être une permutation de range({nk})")
+            raise ValidationError(f"tensordot: permute must be a permutation of range({nk})")
         T = T.transpose(np.argsort(permute))
     comps = [_sx().sympify(c) for c in T.reshape(-1).tolist()]
     return _formula(comps, a, b)
@@ -303,7 +303,7 @@ def tensordot(a, b, dimfa, dimfb, contfa, contfb, permute=None):
 def kron(a, b, dimfa, dimfb):
     """Kronecker product over the inner dimensions (keopscore ``Kron``, ``numpy.kron``)."""
     if len(dimfa) != len(dimfb):
-        raise ValidationError("kron : dimfa et dimfb de même longueur")
+        raise ValidationError("kron: dimfa and dimfb must have the same length")
     n = len(dimfa)
     permute = list(range(0, 2 * n, 2)) + list(range(1, 2 * n, 2))
     return tensordot(a, b, dimfa, dimfb, [], [], permute=permute)
@@ -318,12 +318,12 @@ def bspline(knots, x, k: int = 0):
     if ``t_i < t_{i+k}``, 0 otherwise. Differentiable here with respect to ``x`` and to the
     knots (keopscore is not).
     """
-    k = _int(k, "bspline : ordre", minimum=0)
+    k = _int(k, "bspline: order", minimum=0)
     knots, x = _real(knots, "bspline"), _real(x, "bspline")
     if x.dim != 1:
-        raise ValidationError("bspline : x scalaire attendu")
+        raise ValidationError("bspline: expected a scalar x")
     if knots.dim < k + 2:
-        raise ValidationError(f"bspline d'ordre {k} : au moins {k + 2} nœuds, reçu {knots.dim}")
+        raise ValidationError(f"bspline of order {k}: expected at least {k + 2} knots, got {knots.dim}")
     sx = _sx()
     t, xv = knots._comps, x._comps[0]
     zero, one = sx.Integer(0), sx.Integer(1)
@@ -356,7 +356,7 @@ def softdtw_sqdist(x, y, gamma):
     """
     x, y, gamma = _real(x, "softdtw_sqdist"), _real(y, "softdtw_sqdist"), _real(gamma, "softdtw_sqdist")
     if gamma.dim != 1:
-        raise ValidationError("softdtw_sqdist : gamma scalaire attendu")
+        raise ValidationError("softdtw_sqdist: expected a scalar gamma")
     sx = _sx()
     X, Y, g = x._comps, y._comps, gamma._comps[0]
     n, m = len(X), len(Y)
@@ -365,7 +365,7 @@ def softdtw_sqdist(x, y, gamma):
         t = X[i] - Y[j]
         return t * t
 
-    prev = [None] * n  # colonne j − 1
+    prev = [None] * n  # column j − 1
     acc = None
     for i in range(n):
         acc = d2(i, 0) if i == 0 else d2(i, 0) + acc
@@ -374,16 +374,16 @@ def softdtw_sqdist(x, y, gamma):
         cur = [d2(0, j) + prev[0]]
         for i in range(1, n):
             diag, up, left = prev[i - 1], cur[i - 1], prev[i]
-            mu = sx.Min(diag, left, up)  # MIN3 de keopscore ; Min n-aire : noyau natif
+            mu = sx.Min(diag, left, up)  # keopscore MIN3; n-ary Min: native kernel
             soft = mu - g * sx.log(sx.exp((mu - diag) / g) + sx.exp((mu - up) / g) + sx.exp((mu - left) / g))
             cur.append(d2(i, j) + soft)
         prev = cur
     return _formula((prev[n - 1],), x, y, gamma)
 
 
-# ------------------------------------------------------------ dérivées
+# ---------------------------------------------------------- derivatives
 def _wrt(v, what):
-    """Symboles de composante d'une variable (``Vi``, ``Vj`` ou ``Param``)."""
+    """Component symbols of a variable (``Vi``, ``Vj`` or ``Param``)."""
     from .builder import component_symbol
 
     if isinstance(v, Formula) and len(v._vars) == 1:
@@ -391,7 +391,7 @@ def _wrt(v, what):
         syms = tuple(component_symbol(name, c) for c in range(dim))
         if v._comps == syms:
             return syms
-    raise ValidationError(f"{what} : variable attendue (Vi, Vj ou Param), reçu {v!r}")
+    raise ValidationError(f"{what}: expected a variable (Vi, Vj or Param), got {v!r}")
 
 
 def _d(expr, symbol):
@@ -409,7 +409,7 @@ def grad(f, v, e):
     f, e = _real(f, "grad"), _real(e, "grad")
     syms = _wrt(v, "grad")
     if e.dim != f.dim:
-        raise ValidationError(f"grad : e de dimension {f.dim} attendu (celle de f), reçu {e.dim}")
+        raise ValidationError(f"grad: expected e of dimension {f.dim} (that of f), got {e.dim}")
     sx = _sx()
     comps = [sx.Add(*(ek * _d(fk, s) for fk, ek in zip(f._comps, e._comps))) for s in syms]
     return _formula(comps, f, v, e)
@@ -420,7 +420,7 @@ def diff(f, v, u):
     f, u = _real(f, "diff"), _real(u, "diff")
     syms = _wrt(v, "diff")
     if u.dim != len(syms):
-        raise ValidationError(f"diff : u de dimension {len(syms)} attendu (celle de v), reçu {u.dim}")
+        raise ValidationError(f"diff: expected u of dimension {len(syms)} (that of v), got {u.dim}")
     sx = _sx()
     comps = [sx.Add(*(_d(fk, s) * uc for s, uc in zip(syms, u._comps))) for fk in f._comps]
     return _formula(comps, f, v, u)
@@ -438,7 +438,7 @@ def divergence(f, v):
     f = _real(f, "divergence")
     syms = _wrt(v, "divergence")
     if f.dim != len(syms):
-        raise ValidationError(f"divergence : f de dimension {len(syms)} attendu (celle de v), reçu {f.dim}")
+        raise ValidationError(f"divergence: expected f of dimension {len(syms)} (that of v), got {f.dim}")
     return _formula([_sx().Add(*(_d(fc, s) for fc, s in zip(f._comps, syms)))], f, v)
 
 
@@ -447,7 +447,7 @@ def laplacian(f, v):
     f = _real(f, "laplacian")
     syms = _wrt(v, "laplacian")
     if f.dim != 1:
-        raise ValidationError(f"laplacian : f scalaire attendu, reçu dimension {f.dim}")
+        raise ValidationError(f"laplacian: expected a scalar f, got dimension {f.dim}")
     return _formula([_sx().Add(*(_d(_d(f._comps[0], s), s) for s in syms))], f, v)
 
 
@@ -460,11 +460,11 @@ def trace_operator(f, v):
     f = _real(f, "trace_operator")
     syms = _wrt(v, "trace_operator")
     if f.dim != len(syms):
-        raise ValidationError(f"trace_operator : f de dimension {len(syms)} attendu, reçu {f.dim}")
+        raise ValidationError(f"trace_operator: expected f of dimension {len(syms)}, got {f.dim}")
     return divergence(f, v)
 
 
-# ------------------------------------------------- méthodes de Formula
+# ------------------------------------------------- Formula methods
 def factorize(f, g):
     """``f.factorize(g)`` (keopscore ``Factorize``): evaluation hint, **with no semantic effect**.
 
@@ -474,7 +474,7 @@ def factorize(f, g):
     factors out any repeated subexpression: the formula is returned unchanged.
     """
     if not isinstance(g, Formula) and type(g).__name__ != "ComplexFormula":
-        raise TypeError(f"factorize attend une formule, reçu {type(g).__name__}")
+        raise TypeError(f"factorize expects a formula, got {type(g).__name__}")
     return f
 
 

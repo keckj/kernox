@@ -1,4 +1,4 @@
-"""FP16 (avenant v0.9, parité PyKeOps ``dtype=float16``) : plan, constantes, oracle, gradients."""
+"""FP16 (v0.9 amendment, PyKeOps ``dtype=float16`` parity): plan, constants, oracle, gradients."""
 
 from __future__ import annotations
 
@@ -44,38 +44,38 @@ def test_fp16_plan_and_oracle(name):
     names = run.input_names
     out = run(**{k: v.to(H) for k, v in data.items() if k in names})
     ref = kp.compile(expr, dtype="float64", backend="oracle")(
-        **{k: v.to(H).double() for k, v in data.items() if k in names})  # mêmes entrées arrondies
+        **{k: v.to(H).double() for k, v in data.items() if k in names})  # same rounded inputs
     out, ref = (out[0], ref[0]) if isinstance(out, tuple) else (out, ref)
     assert out.dtype == out_dtype
     if out.is_floating_point():
         torch.testing.assert_close(out.double(), ref, rtol=5e-3, atol=5e-3)
     else:
-        assert (out != ref).float().mean() < 0.05  # indices/compte : quelques ex aequo FP16
+        assert (out != ref).float().mean() < 0.05  # indices/counts: a few FP16 ties
 
 
 def test_formula_is_evaluated_in_fp16():
-    """Le produit 300·300 déborde en FP16 (max 65504) même avec un accumulateur FP32."""
+    """The product 300·300 overflows in FP16 (max 65504) even with an FP32 accumulator."""
     x, y = kp.Vi("x"), kp.Vj("y")
     run = kp.compile((x * y).sum_over("j"), dtype="float16", backend="oracle")
     out = run(x=torch.tensor([[300.0], [2.0]], dtype=H), y=torch.tensor([[300.0], [1.0]], dtype=H))
-    assert out.dtype == H  # avenant v0.9 (b) : sortie FP16
+    assert out.dtype == H  # v0.9 amendment (b): FP16 output
     assert torch.isinf(out[0, 0]) and out[1, 0] == 602.0
-    # accumulateur FP32 : la somme intermédiaire dépasse 65504 sans déborder, la
-    # sortie FP16 est finie si le résultat l'est, ±inf sinon
+    # FP32 accumulator: the intermediate sum exceeds 65504 without overflowing, the
+    # FP16 output is finite if the result is, ±inf otherwise
     xy = kp.compile((x * y).sum_over("j"), dtype="float16", backend="oracle")
     ys = torch.tensor([[60000.0], [60000.0], [-60000.0]], dtype=H)
     assert xy(x=torch.ones(1, 1, dtype=H), y=ys).item() == 60000.0
     assert torch.isinf(xy(x=torch.ones(1, 1, dtype=H), y=ys[:2])).all()
     xy16 = kp.compile((x * y).sum_over("j"), dtype="float16", acc_dtype="float16", sum_scheme="direct",
                       backend="oracle")
-    assert torch.isinf(xy16(x=torch.ones(1, 1, dtype=H), y=ys)).all()  # débordement dans l'accumulateur
+    assert torch.isinf(xy16(x=torch.ones(1, 1, dtype=H), y=ys)).all()  # overflow in the accumulator
 
 
 def test_fp16_accumulator_rounds_each_addition():
     x, y = kp.Vi("x"), kp.Vj("y")
     run = kp.compile((x + y * 0.0).sum_over("j"), dtype="float16", acc_dtype="float16", sum_scheme="direct",
                      backend="oracle")
-    # 2048 + 1 + 1 + ... : en FP16 (11 bits) 2048 + 1 s'arrondit à 2048 (pair)
+    # 2048 + 1 + 1 + ...: in FP16 (11 bits) 2048 + 1 rounds to 2048 (ties to even)
     out = run(x=torch.ones(1, 1, dtype=H), y=torch.zeros(3000, 1, dtype=H))
     assert out.dtype == H and out.item() == 2048.0
     out32 = kp.compile((x + y * 0.0).sum_over("j"), dtype="float16", backend="oracle")(
@@ -86,20 +86,20 @@ def test_fp16_accumulator_rounds_each_addition():
 def test_fp16_acc_dtype_rules():
     x, y = kp.Vi("x"), kp.Vj("y")
     e = (x * y).sum_over("j")
-    # avenant v0.9 (c) : accumulateur FP16 = PyKeOps (half, block_sum par défaut)
+    # v0.9 amendment (c): FP16 accumulator = PyKeOps (half, block_sum by default)
     p16 = kp.compile(e, dtype="float16", acc_dtype="float16", backend="oracle").plan
     assert (p16.acc_dtype, p16.sum_scheme) == ("float16", "block")
     p32 = kp.compile(e, dtype="float16", backend="oracle").plan
     assert (p32.acc_dtype, p32.sum_scheme) == ("float32", "direct")
     assert kp.compile(d2 := (x * y).min(over="j"), dtype="float16", backend="oracle").plan.sum_scheme == "direct"
     del d2
-    with pytest.raises(ValidationError, match="non permis"):
+    with pytest.raises(ValidationError, match="not allowed"):
         kp.compile(e, dtype="float16", acc_dtype="float64", backend="oracle")
-    with pytest.raises(ValidationError, match="inférieur"):
+    with pytest.raises(ValidationError, match="narrower"):
         kp.compile(e, dtype="float32", acc_dtype="float16", backend="oracle")
     with pytest.raises(ValidationError, match="SUM"):
         kp.compile((x * y).min(over="j"), dtype="float16", acc_dtype="float32", backend="oracle")
-    # les schémas de sommation s'appliquent à l'accumulateur
+    # summation schemes apply to the accumulator
     for scheme in ("block", "kahan"):
         r = kp.compile(e, dtype="float16", sum_scheme=scheme, backend="oracle")
         out = r(x=torch.ones(2, 1, dtype=H), y=torch.full((5000, 1), 0.1, dtype=H))
@@ -112,11 +112,11 @@ def test_fp16_constants_and_params():
     x, y, s = kp.Vi("x"), kp.Vj("y"), kp.Param("s")
     ok = kp.compile((x * y * 65504.0).sum_over("j"), dtype="float16", backend="oracle")
     assert ok.plan is not None
-    with pytest.raises(ConstantConversionError, match="dépassement"):
+    with pytest.raises(ConstantConversionError, match="overflow"):
         kp.compile((x * y * 65520.0).sum_over("j"), dtype="float16", backend="oracle")
-    with pytest.raises(ConstantConversionError, match="s'arrondit à 0"):
+    with pytest.raises(ConstantConversionError, match="rounds to 0"):
         kp.compile((x * y * 1e-8).sum_over("j"), dtype="float16", backend="oracle")
-    kp.compile((x * y * 3e-8).sum_over("j"), dtype="float16", backend="oracle")  # sous-normal FP16
+    kp.compile((x * y * 3e-8).sum_over("j"), dtype="float16", backend="oracle")  # FP16 subnormal
     run = kp.compile((x * y * s).sum_over("j"), dtype="float16", backend="oracle")
     xs, ys = torch.ones(1, 1, dtype=H), torch.ones(1, 1, dtype=H)
     assert run(x=xs, y=ys, s=0.1).item() == float(torch.tensor(0.1, dtype=H))

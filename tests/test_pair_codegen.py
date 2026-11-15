@@ -30,12 +30,12 @@ def test_structure(name, dialect, dtype):
     assert ps.out_ctypes == (want,) * plan.out_dim
     for f in ps.out_fields:
         assert f"    {want} {f};" in src
-    # politique numérique : pas de fast-math, pas de rsqrt, pas de pow entier
+    # numerical policy: no fast-math, no rsqrt, no integer pow
     for bad in ("__expf", "__fdividef", "__logf", "rsqrt", "__fsqrt", "M_PI", "M_E"):
         assert bad not in src
     assert not re.search(r"pow[f]?\([^()]*(\([^()]*\))*[^()]*,\s*[234]\)", src)
     if dtype == "float64":
-        assert not re.search(r"\d[fF]\b", src.split("struct kp_out")[1]), "littéral float en FP64"
+        assert not re.search(r"\d[fF]\b", src.split("struct kp_out")[1]), "float literal in FP64 code"
 
 
 def test_layout_names_follow_roles():
@@ -45,7 +45,7 @@ def test_layout_names_follow_roles():
     assert [(l.param, l.arg, l.role, l.dim) for l in ps.arg_layout] == [
         ("xi_0", "x", "i", 2), ("xi_1", "z", "i", 1), ("yj_0", "y", "j", 2),
         ("p_0", "p", "param", 1), ("p_1", "q", "param", 2)]
-    # composante inutilisée non chargée ; pointeur entièrement inutilisé : (void)
+    # unused component not loaded; fully unused pointer: (void)
     assert "xi_0[1]" not in ps.source and "q[0]" not in ps.source and "p_1[0]" not in ps.source
 
 
@@ -64,8 +64,8 @@ def test_cse_without_conditionals():
 
 
 def test_region_cse_with_where():
-    """CSE par régions : d2 (condition) et exp(-d2) (deux branches) sont hissés,
-    la racine propre à la branche active reste dans le ternaire."""
+    """Region-based CSE: d2 (condition) and exp(-d2) (both branches) are hoisted,
+    the square root specific to the active branch stays inside the ternary."""
     x, y = Vi("x", 3), Vj("y", 3)
     d2 = ((x - y) ** 2).sum()
     f = where(d2 > 1.0, 1 / sqrt(d2 - 1.0) + exp(-d2), exp(-d2))

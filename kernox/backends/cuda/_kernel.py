@@ -1,35 +1,34 @@
-"""Génération du kernel CUDA de réduction fusionnée (enveloppe autour de ``kp_pair``).
+"""Generation of the fused-reduction CUDA kernel (wrapper around ``kp_pair``).
 
-Stratégie v0 (inspirée de KeOps ``GpuReduc1D`` @ ef72bc9, MIT ; code réécrit,
-voir ``THIRD_PARTY.md``) :
+v0 strategy (inspired by KeOps ``GpuReduc1D`` @ ef72bc9, MIT; code rewritten,
+see ``THIRD_PARTY.md``):
 
-- un thread par ligne ``i`` ; variables ``i`` et paramètres en registres ;
-- variables ``j`` chargées par tuiles de ``tj`` lignes en mémoire partagée
-  (copie coalescée de la plage contiguë par tout le bloc) ; ``tj`` est
-  indépendant de ``blockDim.x`` pour que les grandes dimensions ne
-  contraignent pas la taille de bloc ;
-- accumulation en registres, aucune matrice M×N ;
-- partition optionnelle de l'axe ``j`` (``gridDim.y = S`` tranches) : chaque
-  tranche écrit un état partiel borné (M × S × état) dans un temporaire Torch,
-  fusionné ensuite dans l'ordre des tranches par ``kp_merge`` (déterministe,
-  préserve le départage des égalités par indice).
+- one thread per row ``i``; ``i`` variables and parameters held in registers;
+- ``j`` variables loaded in tiles of ``tj`` rows into shared memory (coalesced
+  copy of the contiguous range by the whole block); ``tj`` is independent of
+  ``blockDim.x`` so that large dimensions do not constrain the block size;
+- accumulation in registers, no M×N matrix;
+- optional partition of the ``j`` axis (``gridDim.y = S`` slices): each slice
+  writes a bounded partial state (M × S × state) into a Torch temporary, then
+  merged in slice order by ``kp_merge`` (deterministic, preserves tie-breaking
+  by index).
 
-LOGSUMEXP / SUMSOFTMAXWEIGHT (contrat v0.5) : état ``(m, s[, t_e])`` en ``ACC``
-par composante, décalé par le maximum courant, mis à jour terme par terme en une
-seule passe (pas d'état de tuile : un seul jeu de registres, ce qui compte pour
-SSMW à grand E) ; états partiels fusionnés par ``kp_merge``. Un terme ``f = −inf``
-est ignoré (poids nul, ses ``g`` aussi) ; à égalité de maxima le facteur vaut
-exactement 1, d'où ``exp(−inf − (−inf))`` jamais évalué ; ``m`` n'est jamais NaN
-(les NaN vivent dans ``s``/``t``). ``exp``/``log`` exacts (``expf``/``exp``,
-``logf``/``log`` : NVRTC sans ``--use_fast_math``).
+LOGSUMEXP / SUMSOFTMAXWEIGHT (contract v0.5): state ``(m, s[, t_e])`` in ``ACC``
+per component, shifted by the running maximum, updated term by term in a single
+pass (no tile state: a single set of registers, which matters for SSMW with a
+large E); partial states merged by ``kp_merge``. A term ``f = −inf`` is skipped
+(zero weight, its ``g`` too); when the maxima are equal the factor is exactly 1,
+so ``exp(−inf − (−inf))`` is never evaluated; ``m`` is never NaN (NaNs live in
+``s``/``t``). Exact ``exp``/``log`` (``expf``/``exp``, ``logf``/``log``: NVRTC
+without ``--use_fast_math``).
 
-Schémas de sommation (contrat v0.7, ``Plan.sum_scheme``, lu par ``getattr`` en
-attendant le champ) : ``direct`` (SUM : somme par tuile puis total, comme avant ;
-LSE/SSMW : un seul niveau), ``block`` (SUM : identique, T = tuile j du lancement ;
-LSE/SSMW : état de tuile neuf fusionné en fin de tuile), ``kahan`` (Neumaier :
-correctif par somme, redimensionné avec ``s`` pour LSE/SSMW ; fusion TwoSum).
+Summation schemes (contract v0.7, ``Plan.sum_scheme``, read with ``getattr``
+until the field exists): ``direct`` (SUM: per-tile sum then total, as before;
+LSE/SSMW: a single level), ``block`` (SUM: same, T = launch j tile; LSE/SSMW:
+fresh tile state merged at the end of each tile), ``kahan`` (Neumaier: one
+correction term per sum, rescaled along with ``s`` for LSE/SSMW; TwoSum merge).
 
-Sémantique : ``docs/kernel-backend-contract.md``.
+Semantics: ``docs/kernel-backend-contract.md``.
 """
 
 from __future__ import annotations
@@ -42,13 +41,13 @@ GENERATOR_VERSION = "kernox-cuda-reduce-17"
 
 CTYPE = {"float16": "kp_h", "float32": "float", "float64": "double"}
 
-# Avenant v0.9 (FP16) : type kp_h, binary16 en mémoire (2 o), chaque opération évaluée en
-# FP32 puis arrondie au plus proche en FP16 (cvt.rn.f16.f32, PTX disponible dès sm_20) :
-# même sémantique que l'oracle (chaque opération arrondie en FP16) sur toutes les
-# architectures, y compris sm_52 sans arithmétique half native. L'arrondi FP32 puis FP16
-# d'un +, −, ×, / ou sqrt est l'arrondi direct (24 >= 2·11 + 2 bits). Aucune contraction
-# FMA possible entre opérations (conversion explicite). Conversion vers float explicite :
-# les fonctions mathématiques float ne s'appliquent jamais sans arrondi.
+# Amendment v0.9 (FP16): kp_h type, binary16 in memory (2 bytes), each operation evaluated
+# in FP32 then rounded to nearest in FP16 (cvt.rn.f16.f32, PTX available since sm_20):
+# same semantics as the oracle (each operation rounded to FP16) on every architecture,
+# including sm_52 without native half arithmetic. Rounding to FP32 then to FP16 for a
+# +, −, ×, / or sqrt equals direct rounding (24 >= 2·11 + 2 bits). No FMA contraction is
+# possible across operations (explicit conversion). Explicit conversion to float: float
+# math functions are never applied without rounding.
 HALF_TYPE = r"""
 #ifndef KP_HALF_TYPE
 #define KP_HALF_TYPE
@@ -62,7 +61,7 @@ struct kp_h {
   __device__ __forceinline__ explicit operator float() const { float f; asm("cvt.f32.f16 %0, %1;" : "=f"(f) : "h"(b)); return f; }
   __device__ __forceinline__ explicit operator double() const { return (double)(float)*this; }
 };
-static_assert(sizeof(kp_h) == 2, "kp_h : 2 octets");
+static_assert(sizeof(kp_h) == 2, "kp_h: 2 bytes");
 __device__ __forceinline__ float kp_f(const kp_h a) { return (float)a; }
 __device__ __forceinline__ kp_h kp_bits(unsigned short b) { kp_h r; r.b = b; return r; }
 __device__ __forceinline__ kp_h operator-(const kp_h a) { return kp_bits((unsigned short)(a.b ^ 0x8000u)); }
@@ -70,8 +69,8 @@ __device__ __forceinline__ kp_h operator+(const kp_h a) { return a; }
 #define KP_H_BIN(op) \
   __device__ __forceinline__ kp_h operator op(const kp_h a, const kp_h b) { return kp_h(kp_f(a) op kp_f(b)); }
 #if __CUDA_ARCH__ >= 530
-// sm_53+ : +, −, × natifs en FP16, arrondi .rn explicite (aucune contraction FMA) ;
-// résultat identique au passage par FP32 (arrondi correct des deux côtés)
+// sm_53+: native FP16 +, −, ×, explicit .rn rounding (no FMA contraction);
+// same result as going through FP32 (correct rounding on both paths)
 #define KP_H_NAT(op, ins) \
   __device__ __forceinline__ kp_h operator op(const kp_h a, const kp_h b) { \
     kp_h r; asm(ins " %0, %1, %2;" : "=h"(r.b) : "h"(a.b), "h"(b.b)); return r; }
@@ -117,15 +116,15 @@ __device__ __forceinline__ kp_h kp_fabs(kp_h x) { return kp_bits((unsigned short
 
 
 def fast_pair_source(source: str) -> str:
-    """Avenant v0.10 : ``expf``/``logf`` de la paire FP32 → ``kp_fexp``/``kp_flog`` (approchés)."""
+    """Amendment v0.10: ``expf``/``logf`` of the FP32 pair → ``kp_fexp``/``kp_flog`` (approximate)."""
     import re
 
     return re.sub(r"\blogf\(", "kp_flog(", re.sub(r"\bexpf\(", "kp_fexp(", source))
 
 
 def half_pair_source(source: str) -> str:
-    """Source de paire générée en FP32 (plan à dtype float32, constantes déjà arrondies
-    en FP16 par le builder) réécrite en kp_h : chaque mot « float » devient « kp_h »."""
+    """Pair source generated in FP32 (float32 plan, constants already rounded to FP16
+    by the builder) rewritten in kp_h: every word "float" becomes "kp_h"."""
     import re
 
     return HALF_TYPE + re.sub(r"\bfloat\b", "kp_h", source)
@@ -138,15 +137,15 @@ _PRELUDE = r"""
 #define NAN (__int_as_float(0x7fffffff))
 #endif
 typedef long long kp_idx;
-// Avenant v0.10 (fast_math, FP32 seulement) : exp/log approchés comme PyKeOps
-// use_fast_math (ex2.approx/lg2.approx, sans ftz : sous-normaux conservés).
-// exp(x) = 2^(x·log2 e) ; log(x) = lg2(x)·ln 2. ±inf, NaN, 0 : mêmes cas limites qu'IEEE.
+// Amendment v0.10 (fast_math, FP32 only): approximate exp/log as in PyKeOps
+// use_fast_math (ex2.approx/lg2.approx, without ftz: subnormals preserved).
+// exp(x) = 2^(x·log2 e); log(x) = lg2(x)·ln 2. ±inf, NaN, 0: same edge cases as IEEE.
 __device__ __forceinline__ float kp_fexp(float x) {
   float y; asm("ex2.approx.f32 %0, %1;" : "=f"(y) : "f"(x * 1.4426950408889634f)); return y; }
 __device__ __forceinline__ float kp_flog(float x) {
   float y; asm("lg2.approx.f32 %0, %1;" : "=f"(y) : "f"(x)); return y * 0.6931471805599453f; }
-// v non NaN, en arithmétique entière : hors du pipeline FP64 (DSETP), goulot des
-// GeForce en double ; garde de liste vide des ARG*/K* (passage critique en j).
+// v is not NaN, in integer arithmetic: off the FP64 pipeline (DSETP), the bottleneck
+// of GeForce cards in double; empty-list guard of ARG*/K* (critical path in j).
 __device__ __forceinline__ float kp_lowest(float) { return -3.402823466e38f; }
 __device__ __forceinline__ double kp_lowest(double) { return -1.7976931348623157e308; }
 __device__ __forceinline__ bool kp_num(float x) { return (__float_as_uint(x) & 0x7fffffffu) <= 0x7f800000u; }
@@ -157,11 +156,11 @@ __device__ __forceinline__ bool kp_num(double x) {
 
 @dataclass(frozen=True)
 class StateLayout:
-    """État partiel par ligne et par tranche (pour la partition de j)."""
+    """Partial state per row and per slice (for the j partition)."""
 
-    n_val: int        # nombre de valeurs (type ``val_type``)
-    val_type: str     # "T", "ACC" ou "kp_idx"
-    n_idx: int        # nombre d'indices int64
+    n_val: int        # number of values (of type ``val_type``)
+    val_type: str     # "T", "ACC" or "kp_idx"
+    n_idx: int        # number of int64 indices
 
     def bytes(self, dtype_bytes: int, acc_bytes: int) -> int:
         vb = {"T": dtype_bytes, "ACC": acc_bytes, "kp_idx": 8}[self.val_type]
@@ -170,14 +169,14 @@ class StateLayout:
 
 SUM_SCHEMES = ("direct", "block", "kahan")
 SOFT = (R.LOGSUMEXP, R.SUMSOFTMAXWEIGHT, R.LOGSUMEXPWEIGHT)
-# Avenant v0.8 : MIN_ARGMIN / MAX_ARGMAX = état et algorithme d'ARGMIN / ARGMAX (valeur
-# écrite en plus de l'indice) ; LOGSUMEXPWEIGHT = état de SUMSOFTMAXWEIGHT, fin m + log t_e.
+# Amendment v0.8: MIN_ARGMIN / MAX_ARGMAX = state and algorithm of ARGMIN / ARGMAX (value
+# written in addition to the index); LOGSUMEXPWEIGHT = SUMSOFTMAXWEIGHT state, finish m + log t_e.
 BASE_KIND = {R.MIN_ARGMIN: R.ARGMIN, R.MAX_ARGMAX: R.ARGMAX, R.LOGSUMEXPWEIGHT: R.SUMSOFTMAXWEIGHT}
 
 
 def sum_scheme(plan: Plan) -> str:
-    """Schéma de sommation effectif (contrat v0.7) : celui du plan pour SUM, LOGSUMEXP
-    et SUMSOFTMAXWEIGHT, "direct" (sans objet) pour les autres réductions."""
+    """Effective summation scheme (contract v0.7): the plan's one for SUM, LOGSUMEXP
+    and SUMSOFTMAXWEIGHT, "direct" (not applicable) for other reductions."""
     if plan.reduction.kind not in (R.SUM,) + SOFT:
         return "direct"
     return getattr(plan, "sum_scheme", "direct")
@@ -186,7 +185,7 @@ def sum_scheme(plan: Plan) -> str:
 def state_layout(plan: Plan) -> StateLayout:
     k, d = BASE_KIND.get(plan.reduction.kind, plan.reduction.kind), plan.out_dim
     K = plan.reduction.k or 0
-    kah = sum_scheme(plan) == "kahan"   # compensation : un terme correctif par somme
+    kah = sum_scheme(plan) == "kahan"   # compensation: one correction term per sum
     if k is R.SUM:
         return StateLayout(2 * d if kah else d, "ACC", 0)
     if k is R.COUNT:
@@ -198,7 +197,7 @@ def state_layout(plan: Plan) -> StateLayout:
     if k in (R.KMIN, R.ARGKMIN, R.KMIN_ARGKMIN):
         return StateLayout(K, "T", K)
     if k is R.LOGSUMEXP:
-        return StateLayout((3 if kah else 2) * d, "ACC", 0)     # (m_c, s_c[, ks_c]) par composante
+        return StateLayout((3 if kah else 2) * d, "ACC", 0)     # (m_c, s_c[, ks_c]) per component
     if k is R.SUMSOFTMAXWEIGHT:
         return StateLayout(2 * d + 1 if kah else 1 + d, "ACC", 0)   # (m, s, t_1..t_E[, ks, kt_1..kt_E])
     raise ValueError(k)
@@ -213,10 +212,10 @@ __device__ __forceinline__ double kp_fabs(double x) { return fabs(x); }
 __device__ __forceinline__ double kp_log(double x) { return log(x); }
 """
 
-# Kahan–Babuška (Neumaier), contrat v0.7 : additions et soustractions seulement (aucune
-# contraction FMA possible) ; le test de grandeur choisit l'ordre exact du TwoSum rapide.
-# Ajouter un état (s2, c2) : kp_neu(s, c, s2) puis c += c2 (TwoSum(s1, s2) + c1 + c2).
-# Résultat : s + c si s est fini ; sinon s (±inf, NaN : le correctif vaudrait NaN).
+# Kahan-Babuška (Neumaier), contract v0.7: additions and subtractions only (no FMA
+# contraction possible); the magnitude test picks the exact order of the fast TwoSum.
+# Adding a state (s2, c2): kp_neu(s, c, s2) then c += c2 (TwoSum(s1, s2) + c1 + c2).
+# Result: s + c if s is finite; otherwise s (±inf, NaN: the correction would be NaN).
 _KAHAN_HELPERS = r"""
 __device__ __forceinline__ void kp_neu(ACC& s, ACC& c, const ACC x) {
   const ACC t = s + x;
@@ -229,14 +228,14 @@ __device__ __forceinline__ ACC kp_neu_fin(const ACC s, const ACC c) { return (s 
 
 
 def _soft_comps(kind, d):
-    """Composantes d'état : [(m, s, [t...], indice du score, [indices des poids])]."""
+    """State components: [(m, s, [t...], score index, [weight indices])]."""
     if kind is R.LOGSUMEXP:
         return [(f"m{c}", f"s{c}", [], c, []) for c in range(d)]
     return [("m0", "s0", [f"t{e}" for e in range(d - 1)], 0, list(range(1, d)))]
 
 
 def _soft_state_names(comp, kahan):
-    """Ordre des valeurs d'un état partiel : m, s, t..., puis ks, kt... (Kahan)."""
+    """Order of the values of a partial state: m, s, t..., then ks, kt... (Kahan)."""
     m, s, ts = comp[0], comp[1], comp[2]
     return [m, s] + ts + ([f"k{x}" for x in [s] + ts] if kahan else [])
 
@@ -246,22 +245,23 @@ def _add(var, x, kahan):
 
 
 def _soft_insert(m, s, ts, v, gs, kahan=False):
-    """Insertion du terme v (poids g_e) ; v == −inf ignoré (ses g aussi)."""
+    """Insertion of the term v (weights g_e); v == −inf is skipped (its g too)."""
     g = "".join(f" const ACC g{e} = (ACC)({x});" for e, x in enumerate(gs))
-    if kahan:  # redimensionnement de s, t et de leurs correctifs, puis addition compensée
+    if kahan:  # rescale s, t and their corrections, then compensated addition
         up = "".join(f" {x} *= c; k{x} *= c;" for x in [s] + ts) + _add(s, "(ACC)1", True) + "".join(
             _add(t, f"g{e}", True) for e, t in enumerate(ts))
     else:
         up = f" {s} = {s} * c + (ACC)1;" + "".join(f" {t} = {t} * c + g{e};" for e, t in enumerate(ts))
     if not kahan:
-        # Sans branche sur v > m : les deux cas calculent exp(−|v − m|) (négation exacte),
-        # un seul exp par j et des sélections ; mêmes opérations, donc même résultat au bit
-        # près que la forme à branches, sans divergence de warp (les lignes i d'un warp
-        # changent de maximum à des j différents ; mesuré sur LSE D = 2, 2080 Ti).
-        # d = 0 à égalité (évite inf − inf) : exp(−0) = 1 exactement ; v = −inf : état
-        # inchangé (sélection, pas de branche autour de l'exp).
-        # m part du plus petit fini (decl_soft) : v = −inf ⇒ d = −inf, e = 0, s + 0 = s, sans
-        # test. Le test ok ne reste que pour les poids g (0·g serait NaN si g est infini).
+        # No branch on v > m: both cases compute exp(−|v − m|) (exact negation), a single
+        # exp per j plus selects; same operations, hence a bit-identical result to the
+        # branching form, without warp divergence (the i rows of a warp change maximum at
+        # different j; measured on LSE D = 2, 2080 Ti).
+        # d = 0 on ties (avoids inf − inf): exp(−0) = 1 exactly; v = −inf: state
+        # unchanged (select, no branch around the exp).
+        # m starts at the lowest finite value (decl_soft): v = −inf ⇒ d = −inf, e = 0,
+        # s + 0 = s, with no test. The ok test only remains for the weights g (0·g would be
+        # NaN if g is infinite).
         sel = "".join(f" {t} = ok ? (gt ? {t} * e + g{q} : {t} + e * g{q}) : {t};" for q, t in enumerate(ts))
         okd = "const bool ok = v != -(ACC)INFINITY; " if ts else ""
         return (f"{{ const ACC v = (ACC)({v});{g}\n"
@@ -279,8 +279,8 @@ def _soft_insert(m, s, ts, v, gs, kahan=False):
 
 
 def _soft_merge(names, src, kahan=False):
-    """Fusion de l'état ``src`` (expressions, même ordre que ``names``) dans l'état
-    ``names`` ; facteur exactement 1 à égalité des maxima."""
+    """Merge of the state ``src`` (expressions, same order as ``names``) into the state
+    ``names``; factor exactly 1 when the maxima are equal."""
     m = names[0]
     n = (len(names) - 1) // 2 if kahan else len(names) - 1
     sums, ks = names[1:1 + n], names[1 + n:]
@@ -300,10 +300,10 @@ def _soft_merge(names, src, kahan=False):
 
 
 def _soft_finish(kind, m, s, ts, dst, kahan=False, lsew=False):
-    """LSE : ``s`` NaN → NaN ; ``m = +inf`` → +inf ; sinon ``m + log s`` (vide : −inf).
-    SSMW : ``m = +inf`` → NaN ; sinon ``t / s`` (vide : 0/0 = NaN).
-    LSEW (avenant v0.8) : ``m + log t_e`` sans cas particulier (vide : −inf ; m = +inf :
-    +inf si t_e > 0, NaN sinon ; t_e < 0 : NaN)."""
+    """LSE: ``s`` NaN → NaN; ``m = +inf`` → +inf; otherwise ``m + log s`` (empty: −inf).
+    SSMW: ``m = +inf`` → NaN; otherwise ``t / s`` (empty: 0/0 = NaN).
+    LSEW (amendment v0.8): ``m + log t_e`` with no special case (empty: −inf; m = +inf:
+    +inf if t_e > 0, NaN otherwise; t_e < 0: NaN)."""
     if lsew:
         return "{ " + " ".join(
             f"{dst(e)} = {m} + kp_log({f'kp_neu_fin({t}, k{t})' if kahan else t});" for e, t in enumerate(ts)) + " }"
@@ -326,23 +326,23 @@ def output_names(plan: Plan) -> tuple[str, ...]:
 
 
 def ranges_tie_break(kind, coop) -> bool:
-    """Le noyau ranges départage-t-il les égalités par j ? (ARG*/K* hors coopératif)."""
+    """Does the ranges kernel break ties by j? (ARG*/K*, except cooperative)."""
     return not coop and kind in (R.ARGMIN, R.ARGMAX, R.KMIN, R.ARGKMIN, R.KMIN_ARGKMIN)
 
 
 def _ranges_kernel(lines, kind, K, d, coop, tie=True):
-    """Avenant v0.6 §2 : ``kp_reduce_ranges``, dérivé du texte de ``kp_reduce``. Un bloc par
-    tuile de travail ``kp_work[blockIdx.x] = (i0, i1, k0, k1)`` (hauteur <= blockDim.x / G),
-    réduction sur ``∪ kp_red[k0:k1]`` dans l'ordre des intervalles, sans partition de j
-    (gridDim.y = 1 : écriture finale directe). Les intervalles pouvant arriver dans le
-    désordre, ARGMIN/ARGMAX/K* départagent les égalités par j (plus petit j de J(i)) ;
-    le top-K coopératif l'est déjà (ordre (valeur, j) total). Les lignes non couvertes
-    reçoivent le neutre par un lancement de ``kp_reduce`` à N = 0 (backend).
+    """Amendment v0.6 §2: ``kp_reduce_ranges``, derived from the text of ``kp_reduce``. One
+    block per work tile ``kp_work[blockIdx.x] = (i0, i1, k0, k1)`` (height <= blockDim.x / G),
+    reduction over ``∪ kp_red[k0:k1]`` in interval order, without j partition
+    (gridDim.y = 1: direct final write). Since intervals may arrive out of order,
+    ARGMIN/ARGMAX/K* break ties by j (smallest j of J(i)); the cooperative top-K already
+    does (total (value, j) order). Uncovered rows receive the neutral element through a
+    ``kp_reduce`` launch with N = 0 (backend).
 
-    ``tie=False`` : variante ``kp_reduce_ranges_mono`` sans départage, pour les
-    tuiles dont les intervalles sont triés et disjoints (j strictement croissant :
-    la comparaison stricte garde déjà le plus petit j). Le test d'égalité coûte
-    jusqu'à 30 % sur sm_52 (KNN FP32)."""
+    ``tie=False``: ``kp_reduce_ranges_mono`` variant without tie-breaking, for tiles
+    whose intervals are sorted and disjoint (strictly increasing j: the strict
+    comparison already keeps the smallest j). The equality test costs up to 30 % on
+    sm_52 (KNN FP32)."""
     head, body = lines[0], "\n".join(lines[1:])
     assert head.startswith('extern "C" __global__ void kp_reduce(') and head.endswith(") {"), head
     name = "kp_reduce_ranges" if tie else "kp_reduce_ranges_mono"
@@ -386,8 +386,8 @@ def _ranges_kernel(lines, kind, K, d, coop, tie=True):
 
 
 def _better(kind):
-    # Pour ARGMIN/ARGMAX/KMIN : candidat (v, j) meilleur que (lv, lj) ?
-    # lj < 0 : emplacement vide. Égalité de valeur : plus petit indice.
+    # For ARGMIN/ARGMAX/KMIN: is candidate (v, j) better than (lv, lj)?
+    # lj < 0: empty slot. Equal values: smallest index wins.
     cmp = ">" if kind is R.ARGMAX else "<"
     return (
         "__device__ __forceinline__ bool kp_better(T v, kp_lidx j, T lv, kp_lidx lj) {\n"
@@ -395,25 +395,26 @@ def _better(kind):
     )
 
 
-# Top-K coopératif (K > 256 : la liste triée ne tient plus dans les registres d'un
-# thread). G lanes consécutives d'un warp par ligne i ; la lane t détient les rangs
-# [t·LC, (t+1)·LC) de la liste triée des G·LC >= K meilleurs (valeur, j). Chaque
-# lane évalue un j différent ; le lot des G candidats est inséré par mélanges de
-# warp : une insertion décale la liste d'un rang, la lane qui reçoit le candidat
-# l'insère et chaque lane suivante reçoit l'ancien dernier élément de la
-# précédente (__shfl_up_sync). Flot uniforme dans le warp (lignes inactives sans
-# candidat). Ordre lexicographique total (valeur, j) : le résultat ne dépend pas
-# de l'ordre d'insertion, donc identique à la liste par thread. Même principe que
-# la variante ``coop`` des backends sycl et hip et que WarpSelect (FAISS), réécrit.
+# Cooperative top-K (K > 256: the sorted list no longer fits in the registers of one
+# thread). G consecutive lanes of a warp per row i; lane t holds ranks
+# [t·LC, (t+1)·LC) of the sorted list of the G·LC >= K best (value, j). Each lane
+# evaluates a different j; the batch of G candidates is inserted through warp
+# shuffles: an insertion shifts the list by one rank, the lane receiving the
+# candidate inserts it and each following lane receives the former last element of
+# the previous one (__shfl_up_sync). Uniform control flow within the warp (inactive
+# rows have no candidate). Total lexicographic (value, j) order: the result does not
+# depend on insertion order, hence identical to the per-thread list. Same principle
+# as the ``coop`` variant of the sycl and hip backends and as WarpSelect (FAISS),
+# rewritten.
 COOP_GROUPS = (2, 4, 8, 16, 32)
 
 _COOP_HELPER = r"""
 __device__ __forceinline__ bool kp_less(T v, kp_lidx j, T lv, kp_lidx lj) {
   return (lj < 0) || (v < lv) || (v == lv && j < lj);
 }
-// Insère le lot (v, jv) des G lanes de chaque groupe (jv < 0 : pas de candidat).
-// Renvoie false (uniforme dans le warp) si aucun candidat du warp ne bat le seuil
-// de sa ligne : le seuil ne fait que baisser, un candidat refusé le reste.
+// Inserts the batch (v, jv) of the G lanes of each group (jv < 0: no candidate).
+// Returns false (uniform within the warp) if no candidate of the warp beats the
+// threshold of its row: the threshold only decreases, a rejected candidate stays rejected.
 __device__ __forceinline__ bool kp_coop_batch(const int lane, const int gb, const T v, const kp_lidx jv,
                                               T (&kv)[KP_LC], kp_lidx (&ki)[KP_LC]) {
   const unsigned FULL = 0xffffffffu;
@@ -460,27 +461,27 @@ __device__ __forceinline__ bool kp_coop_batch(const int lane, const int gb, cons
 
 def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "int",
              staging: str = "smem", coop: int = 0) -> str:
-    """Source CUDA complète (fonction de paire + kernels ``kp_reduce`` / ``kp_merge``).
+    """Complete CUDA source (pair function + ``kp_reduce`` / ``kp_merge`` kernels).
 
-    ``local_index`` : type des indices j conservés en registres (``int`` si
-    N < 2^31, sinon ``long long``) ; les sorties et partiels restent int64.
+    ``local_index``: type of the j indices kept in registers (``int`` if
+    N < 2^31, otherwise ``long long``); outputs and partials stay int64.
 
-    ``staging`` : ``"smem"`` (tuiles j copiées en mémoire partagée, défaut) ou
-    ``"global"`` (lecture directe des lignes j en mémoire globale, sans copie ni
-    barrière) quand une ligne j est trop large pour la mémoire partagée (grand D).
-    Tous les threads d'un bloc lisent la même ligne j au même moment : diffusion par
-    le cache L1/L2. Même ordre d'évaluation, donc même valeur que ``"smem"``.
+    ``staging``: ``"smem"`` (j tiles copied to shared memory, the default) or
+    ``"global"`` (j rows read directly from global memory, with no copy or barrier)
+    when a j row is too wide for shared memory (large D). All threads of a block
+    read the same j row at the same time: broadcast through the L1/L2 cache. Same
+    evaluation order, hence the same value as ``"smem"``.
 
-    ``coop`` : G > 0, top-K coopératif (KMIN/ARGKMIN/KMIN_ARGKMIN) à G lanes par
-    ligne i (``_COOP_HELPER``) ; un bloc couvre ``blockDim.x / G`` lignes.
+    ``coop``: G > 0, cooperative top-K (KMIN/ARGKMIN/KMIN_ARGKMIN) with G lanes per
+    row i (``_COOP_HELPER``); one block covers ``blockDim.x / G`` rows.
     """
     if staging not in ("smem", "global"):
-        raise ValueError(f"staging inconnu {staging!r}")
+        raise ValueError(f"unknown staging {staging!r}")
     kind0 = plan.reduction.kind
     kind = BASE_KIND.get(kind0, kind0)
     lsew = kind0 is R.LOGSUMEXPWEIGHT
     if coop and (coop not in COOP_GROUPS or kind not in (R.KMIN, R.ARGKMIN, R.KMIN_ARGKMIN)):
-        raise ValueError(f"top-K coopératif : G = {coop} invalide pour {kind}")
+        raise ValueError(f"cooperative top-K: G = {coop} is invalid for {kind}")
     d = plan.out_dim
     K = plan.reduction.k or 0
     T = CTYPE[plan.dtype]
@@ -491,7 +492,7 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
     outs = output_names(plan)
 
     half = plan.dtype == "float16"
-    # OUT : type des sorties accumulées (avenant v0.9 (b) : FP16 pour un plan float16)
+    # OUT: type of the accumulated outputs (amendment v0.9 (b): FP16 for a float16 plan)
     OUT = "kp_h" if half else ACC
     L = ([HALF_TYPE] if half else []) + [f"typedef {T} T;", f"typedef {ACC} ACC;", f"typedef {OUT} OUT;",
                                           _PRELUDE, f"typedef {local_index} kp_lidx;", pair_source, ""]
@@ -503,11 +504,11 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
     soft = kind in SOFT
     scheme = sum_scheme(plan)
     if scheme not in SUM_SCHEMES:
-        raise ValueError(f"sum_scheme inconnu {scheme!r}")
+        raise ValueError(f"unknown sum_scheme {scheme!r}")
     kahan, block = scheme == "kahan", scheme == "block"
     if soft:
         helpers = _SOFT_HELPERS
-        if plan.fast_math and plan.dtype == "float32":  # avenant v0.10 : état max-shift et log final
+        if plan.fast_math and plan.dtype == "float32":  # amendment v0.10: max-shift state and final log
             helpers = (helpers.replace("return expf(x);", "return kp_fexp(x);")
                        .replace("return logf(x);", "return kp_flog(x);"))
         L.append(helpers)
@@ -515,13 +516,14 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
     if kahan:
         L.append(_KAHAN_HELPERS)
 
-    # ---------------------------------------------------------------- état
+    # ---------------------------------------------------------------- state
     def decl_soft(prefix=""):
         out = []
         for comp in comps:
             nm = _soft_state_names(comp, kahan)
-            # m initial : plus petit fini (pas −inf) ; v = −inf donne alors exp(−inf) = 0 sans
-            # test dédié (LOGSUMEXP), et une ligne vide finit en m + log 0 = −inf comme avant.
+            # Initial m: lowest finite value (not −inf); v = −inf then gives exp(−inf) = 0
+            # without a dedicated test (LOGSUMEXP), and an empty row ends at m + log 0 = −inf
+            # as before.
             out.append(f"ACC {prefix}{nm[0]} = kp_lowest((ACC)0);"
                        + "".join(f" ACC {prefix}{x} = (ACC)0;" for x in nm[1:]))
         return "\n".join(out)
@@ -546,12 +548,12 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
                   f"#pragma unroll\nfor (int k = 0; k < {n}; ++k) {{ kv[k] = (T)INFINITY; ki[k] = -1; }}"]
         return "\n".join(s)
 
-    # Insertion triée (K) entièrement déroulée (indices statiques -> registres) :
-    # b[k] = candidat meilleur que l'entrée k (monotone sur une liste triée) ;
-    # décalage sans chaîne de dépendance entre positions.
+    # Fully unrolled sorted insertion (K) (static indices -> registers):
+    # b[k] = candidate better than entry k (monotone on a sorted list);
+    # shift without a dependency chain between positions.
     def insert_k(better):
-        # b[K-1] vrai par construction (test d'entrée) : l'écrire évite que nvcc
-        # recalcule la comparaison flottante (DSETP en double) sur le chemin critique.
+        # b[K-1] is true by construction (entry test): writing it keeps nvcc from
+        # recomputing the floating-point comparison (DSETP in double) on the critical path.
         return ("{ bool b[%d];\n  #pragma unroll\n  for (int k = 0; k < %d; ++k) b[k] = %s;\n"
                 "  b[%d] = true;\n"
                 "  #pragma unroll\n  for (int k = %d; k > 0; --k) if (b[k]) "
@@ -559,11 +561,11 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
                 "  if (b[0]) { kv[0] = v; ki[0] = jj; } }") % (K, K, better, K - 1, K - 1)
 
     def accumulate(src_val, src_idx, c, merge=False):
-        """Mise à jour de l'état avec la valeur ``src_val`` d'indice ``src_idx``.
+        """Update of the state with the value ``src_val`` at index ``src_idx``.
 
-        Boucle principale : les j arrivent croissants, donc une égalité de valeur
-        garde l'entrée existante (plus petit j) et un seul test flottant suffit
-        dans le cas courant ; la fusion des partiels utilise l'ordre (valeur, j).
+        Main loop: j arrive in increasing order, so equal values keep the existing
+        entry (smallest j) and a single floating-point test suffices in the common
+        case; merging the partials uses the (value, j) order.
         """
         if kind is R.SUM:
             if kahan:
@@ -579,7 +581,7 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
         if kind in (R.ARGMIN, R.ARGMAX):
             if merge:
                 test = f"jj >= 0 && kp_better(v, jj, acc{c}, arg{c})"
-            else:  # NaN : v < acc et kp_num(v) faux ; +-inf valide accepté si vide
+            else:  # NaN: v < acc and kp_num(v) are false; a valid +-inf is accepted if empty
                 test = f"(v {cmp} acc{c}) || (arg{c} < 0 && kp_num(v))"
             return (f"{{ const T v = {src_val}; const kp_lidx jj = (kp_lidx)({src_idx}); "
                     f"if ({test}) {{ acc{c} = v; arg{c} = jj; }} }}")
@@ -608,9 +610,9 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
             w += [f"out_value[{row} * {d} + {c}] = acc{c};" for c in range(d)]
         elif kind in (R.ARGMIN, R.ARGMAX):
             w += [f"out_index[{row} * {d} + {c}] = (kp_idx)arg{c};" for c in range(d)]
-            if "value" in outs:  # MIN_ARGMIN / MAX_ARGMAX : valeur du même passage
+            if "value" in outs:  # MIN_ARGMIN / MAX_ARGMAX: value from the same pass
                 w += [f"out_value[{row} * {d} + {c}] = acc{c};" for c in range(d)]
-        elif coop:  # lane t : rangs [t·LC, (t+1)·LC) ∩ [0, K)
+        elif coop:  # lane t: ranks [t·LC, (t+1)·LC) ∩ [0, K)
             loop = f"#pragma unroll\nfor (int k = 0; k < {LC}; ++k) {{ const int r = lane * {LC} + k; if (r < {K}) {{ "
             if "value" in outs:
                 loop += f"out_value[{row} * {K} + r] = kv[k]; "
@@ -662,9 +664,9 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
 
     in_params = [f"const T* __restrict__ in{n}" for n in range(len(args))]
 
-    # Batch natif (avenant v0.6 §1) : pointeurs de base suffixés « _ », indice de lot
-    # bz = b0 + blockIdx.z ; entrées décalées par la table boff (nargs, nbt) en éléments,
-    # sorties (nb, M, ·) et partiels (nb, M, S, ·) contigus.
+    # Native batch (amendment v0.6 §1): base pointers suffixed with "_", batch index
+    # bz = b0 + blockIdx.z; inputs offset by the boff table (nargs, nbt) in elements,
+    # contiguous outputs (nb, M, ·) and partials (nb, M, S, ·).
     batched = bool(getattr(plan, "batch_rank", 0))
     out_w = {}
     if batched:
@@ -680,8 +682,8 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
     tail = ["const kp_idx* __restrict__ boff", "const kp_idx nbt", "const kp_idx b0"] if batched else []
 
     def batch_prologue(rows):
-        """Décalages du lot ``bz`` ; ``rows`` : tranches de partiels par ligne (expression C),
-        None pour kp_merge (S)."""
+        """Offsets of batch ``bz``; ``rows``: partial slices per row (C expression),
+        None for kp_merge (S)."""
         if not batched:
             return []
         b = ["  const kp_idx bz = b0 + (kp_idx)blockIdx.z;"]
@@ -708,27 +710,26 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
     L += batch_prologue("gridDim.y")
     if coop:
         L.append(f"  const int lane = (int)(threadIdx.x % {coop});")
-        L.append(f"  const int gb = (int)(threadIdx.x & 31u) - (int)(threadIdx.x & 31u) % {coop};  // 1re lane du groupe")
+        L.append(f"  const int gb = (int)(threadIdx.x & 31u) - (int)(threadIdx.x & 31u) % {coop};  // first lane of the group")
         L.append(f"  const kp_idx i = ((kp_idx)blockIdx.x * blockDim.x + threadIdx.x) / {coop};")
     else:
         L.append("  const kp_idx i = (kp_idx)blockIdx.x * blockDim.x + threadIdx.x;")
     L.append("  const kp_idx jb = (kp_idx)blockIdx.y * jchunk;")
     L.append("  const kp_idx je = (jb + jchunk < N) ? (jb + jchunk) : N;")
     L.append("  extern __shared__ __align__(16) unsigned char kp_smem[];")
-    # Disposition des tuiles j : d'abord les tuiles dont la ligne n'est pas un multiple
-    # de 16 o (la plus large en tête, à l'origine de kp_smem), puis les autres dans
-    # l'ordre des arguments. ptxas ne vectorise les lectures partagées (LDS.128) d'une
-    # telle tuile déroulée que si son adresse dérive de kp_smem sans décalage
-    # d'exécution ; __builtin_assume_aligned sur la base décalée n'y suffit pas
-    # (SASS vérifié sm_52/75/120 : gauss D = 3 FP32, 23 -> 13 LDS pour 7 couples).
-    # Les lignes multiples de 16 o sont déjà vectorisées (assume_aligned ci-dessous) :
-    # leur ordre est conservé (gauss D = 16 : source inchangée). Sans effet sur la
-    # valeur : seules les adresses changent.
+    # Layout of the j tiles: first the tiles whose row is not a multiple of 16 bytes
+    # (the widest first, at the origin of kp_smem), then the others in argument order.
+    # ptxas only vectorizes the shared loads (LDS.128) of such an unrolled tile if its
+    # address derives from kp_smem without a runtime offset; __builtin_assume_aligned
+    # on the offset base is not enough (SASS checked on sm_52/75/120: gauss D = 3 FP32,
+    # 23 -> 13 LDS for 7 pairs). Rows that are multiples of 16 bytes are already
+    # vectorized (assume_aligned below): their order is kept (gauss D = 16: source
+    # unchanged). No effect on the value: only the addresses change.
     tb = {"float64": 8, "float32": 4, "float16": 2}[plan.dtype]
 
-    # FP32 seulement : en FP64 (gauss D = 3), le réordonnancement fait passer le kernel
-    # de 39 à 46 registres sur sm_52 et coûte x1,065 sur le 980 Ti (10^4) pour un gain
-    # de x0,96-0,98 sur le 5090 ; l'ordre des arguments est conservé en FP64.
+    # FP32 only: in FP64 (gauss D = 3), the reordering takes the kernel from 39 to 46
+    # registers on sm_52 and costs x1.065 on the 980 Ti (10^4) for a gain of
+    # x0.96-0.98 on the 5090; argument order is kept in FP64.
     def _layout_key(t):
         aligned = plan.dtype == "float64" or (t[1].dim * tb) % 16 == 0
         return (aligned, 0 if aligned else -t[1].dim)
@@ -756,7 +757,7 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
     else:
         for n, a in jargs:
             L.append(f"    const T* sh{n} = in{n} + js * {a.dim};")
-    if coop:  # flot uniforme dans le warp : pas de garde i < M autour des mélanges
+    if coop:  # uniform control flow within the warp: no i < M guard around the shuffles
         L.append(f"    for (int jr = 0; jr < nt; jr += {coop}) {{")
         L.append("      const int jl = jr + lane;")
         L.append("      T v = (T)0; kp_lidx jv = -1;")
@@ -764,12 +765,12 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
     L.append("    if (i < M) {" if not coop else "")
     if kind is R.SUM and not kahan:
         L += [f"      ACC tmp{c} = (ACC)0;" for c in range(d)]
-    if soft and block:  # schéma « block » : état de tuile neuf, fusionné en fin de tuile
+    if soft and block:  # "block" scheme: fresh tile state, merged at the end of the tile
         L.append(decl_soft("l"))
-    # Tuiles j : la région de l'argument n commence à off_n * tj éléments, tj multiple
-    # de 4 (garanti par le backend) : base alignée sur 16 o. On le dit au compilateur
-    # quand la ligne a une taille multiple de 16 (resp. 8) o, pour des chargements
-    # vectoriels (ld.shared.v4/v2) quel que soit l'ordre des arguments (tb défini plus haut).
+    # j tiles: the region of argument n starts at off_n * tj elements, tj a multiple
+    # of 4 (guaranteed by the backend): base aligned on 16 bytes. We tell the compiler
+    # when the row size is a multiple of 16 (resp. 8) bytes, for vector loads
+    # (ld.shared.v4/v2) regardless of argument order (tb defined above).
     call_args = []
     for n, a in enumerate(args):
         if a.role != "j":
@@ -777,15 +778,15 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
             continue
         row = a.dim * tb
         al = 16 if row % 16 == 0 else (8 if row % 8 == 0 else 0)
-        if half:  # régions de tuile alignées sur 8 o seulement (tj multiple de 4, 2 o par élément)
+        if half:  # tile regions aligned on 8 bytes only (tj a multiple of 4, 2 bytes per element)
             al = 0
         ptr = f"sh{n} + {'jl' if coop else 'jr'} * {a.dim}"
-        if staging == "global":  # alignement des lignes en mémoire globale non garanti
+        if staging == "global":  # row alignment in global memory is not guaranteed
             al = 0
         call_args.append(f"(const T*)__builtin_assume_aligned({ptr}, {al})" if al else ptr)
     if coop:
         L.append(f"        const auto o = {pair_name}({', '.join(call_args)});")
-        L.append("        v = o.o0; if (v == v) jv = (kp_lidx)(js + jl);  // NaN ignoré")
+        L.append("        v = o.o0; if (v == v) jv = (kp_lidx)(js + jl);  // NaN skipped")
         L.append("      }")
         L.append("      kp_coop_batch(lane, gb, v, jv, kv, ki);")
         L.append("    }")
@@ -804,7 +805,7 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
             L.append("        " + accumulate(f"o.o{c}", "js + jr", c))
     if not coop:
         L.append("      }")
-    if kind is R.SUM and not kahan:  # somme partielle par tuile (schémas direct et block)
+    if kind is R.SUM and not kahan:  # per-tile partial sum (direct and block schemes)
         L += [f"      acc{c} += tmp{c};" for c in range(d)]
     if soft and block:
         for comp in comps:
@@ -839,12 +840,12 @@ def generate(plan: Plan, pair_source: str, pair_name: str, local_index: str = "i
     L += batch_prologue(None)
     if coop:
         L.append(f"  const int lane = (int)(threadIdx.x % {coop});")
-        L.append(f"  const int gb = (int)(threadIdx.x & 31u) - (int)(threadIdx.x & 31u) % {coop};  // 1re lane du groupe")
+        L.append(f"  const int gb = (int)(threadIdx.x & 31u) - (int)(threadIdx.x & 31u) % {coop};  // first lane of the group")
         L.append(f"  const kp_idx i = ((kp_idx)blockIdx.x * blockDim.x + threadIdx.x) / {coop};")
         L.append(decl_state())
         L.append("  for (int s = 0; s < S; ++s) {")
         L.append("    const kp_idx base = i * S + s;")
-        L.append(f"    for (int q0 = 0; q0 < {K}; q0 += {coop}) {{  // liste triée : arrêt au premier lot refusé")
+        L.append(f"    for (int q0 = 0; q0 < {K}; q0 += {coop}) {{  // sorted list: stop at the first rejected batch")
         L.append("      const int r = q0 + lane;")
         L.append("      T v = (T)0; kp_lidx jv = -1;")
         L.append(f"      if (i < M && r < {K}) {{ v = part_val[base * {K} + r]; jv = (kp_lidx)part_idx[base * {K} + r]; }}")

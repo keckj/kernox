@@ -1,4 +1,4 @@
-"""Formules complexes (réelles entrelacées) sur chaque backend, contre l'oracle."""
+"""Complex formulas (stored as interleaved reals) on each backend, against the oracle."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def test_complex_matches_oracle(backend, name, dtype):
         try:
             out = run(**{k: v.to(device) for k, v in data.items() if k in run.input_names})
         except UnsupportedError as e:
-            pytest.skip(f"{target} : {e}")
+            pytest.skip(f"{target}: {e}")
         synchronize(device)
         results.append(out.cpu())
     tol = 2e-5 if dtype == "float32" else 1e-12

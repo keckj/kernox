@@ -1,13 +1,13 @@
-"""Générateur de formules aléatoires reproductible par seed, et minimisation.
+"""Random formula generator, reproducible by seed, and minimization.
 
-Une formule est un arbre de tuples ``(op, *enfants)`` ; ``source(tree)`` en
-donne le texte Python du frontend (``kp.*``), qui sert aussi d'enregistrement
-de régression : il est réévalué dans un espace de noms restreint.
-Couverture : + − × /, moins unaire, fonctions usuelles, puissances entières et
-rationnelles, ``where`` imbriqués (domaines gardés compris), constantes
-Python, comparaisons et opérateurs logiques. Les fonctions à domaine restreint
-reçoivent un argument rendu valide (``abs(e) + 0.5``) ou sont gardées par
-``where`` ; ``exp`` reçoit un argument borné.
+A formula is a tree of tuples ``(op, *children)``; ``source(tree)`` gives its
+Python frontend text (``kp.*``), which also serves as the regression record:
+it is re-evaluated in a restricted namespace.
+Coverage: + - × /, unary minus, common functions, integer and rational
+powers, nested ``where`` (guarded domains included), Python constants,
+comparisons and logical operators. Functions with a restricted domain get an
+argument made valid (``abs(e) + 0.5``) or are guarded by ``where``; ``exp``
+gets a bounded argument.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class Generator:
             return (r.choice(BINARY), self.real(depth - 1), self.real(depth - 1))
         if u < 0.9:
             return ("where", self.cond(depth - 1), self.real(depth - 1), self.real(depth - 1))
-        # domaine invalide exclu par where (branche inactive non évaluée)
+        # invalid domain excluded by where (inactive branch not evaluated)
         g = r.choice(("g_log", "g_sqrt", "g_div"))
         return (g, self.real(depth - 1), self.real(depth - 1))
 
@@ -70,16 +70,16 @@ class Generator:
         return ("not", self.cond(depth - 1))
 
     def case(self):
-        """``dict`` décrivant un cas : arbre(s), réduction, dtype, tailles, données.
+        """``dict`` describing a case: tree(s), reduction, dtype, sizes, data.
 
-        Le contrat v0 exige une dépendance en i et en j : un tirage dont la formule
-        (après simplification symox) n'en dépend pas est refait, de façon déterministe.
+        The v0 contract requires a dependency on both i and j: a draw whose formula
+        (after symox simplification) does not depend on both is redrawn, deterministically.
         """
         for _ in range(100):
             case = self._draw()
             if depends_on_both(case):
                 return case
-        raise RuntimeError(f"seed {self.seed} : aucune formule dépendant de x et y")
+        raise RuntimeError(f"seed {self.seed}: no formula depending on both x and y")
 
     def _draw(self):
         r = self.rng
@@ -87,7 +87,7 @@ class Generator:
         depth = r.choice((2, 3, 4))
         trees = [self.real(depth)]
         if kind in (R.SUM, R.MIN, R.MAX, R.ARGMIN, R.ARGMAX) and r.random() < 0.3:
-            trees.append(self.real(depth))  # sortie vectorielle
+            trees.append(self.real(depth))  # vector output
         if kind is R.COUNT:
             trees = [(r.choice(COMPARE[:4]), self.real(depth), ("const", r.choice(CONSTS)))]
         return {
@@ -100,7 +100,7 @@ class Generator:
         }
 
 
-# ------------------------------------------------------------------ texte
+# ------------------------------------------------------------------- text
 _UN = {
     "neg": "(-{0})", "abs": "kp.abs({0})", "sin": "kp.sin({0})", "cos": "kp.cos({0})",
     "tanh": "kp.tanh({0})", "atan": "kp.atan({0})", "exp_b": "kp.exp(kp.sin({0}) * 3)",
@@ -141,7 +141,7 @@ def _formula(case):
     dims = case["dims"]
     ns = {"kp": kp, "x": kp.Vi("x", dims["x"]), "y": kp.Vj("y", dims["y"]), "p": kp.Param("p", dims["p"])}
     texts = case.get("sources") or [source(t) for t in case["trees"]]
-    parts = [eval(s, {"__builtins__": {}}, ns) for s in texts]  # noqa: S307 - textes générés ici
+    parts = [eval(s, {"__builtins__": {}}, ns) for s in texts]  # noqa: S307 - texts generated here
     f = parts[0] if len(parts) == 1 else kp.cat(*parts)
     return f, texts
 
@@ -149,14 +149,14 @@ def _formula(case):
 def depends_on_both(case) -> bool:
     try:
         f, _ = _formula(case)
-    except Exception:  # noqa: BLE001 - tirage invalide : refait
+    except Exception:  # noqa: BLE001 - invalid draw: redrawn
         return False
     names = set(getattr(f, "_vars", {}))
     return {"x", "y"} <= names
 
 
 def build(case: dict):
-    """Expression de réduction du frontend décrite par ``case`` (textes ou arbres)."""
+    """Frontend reduction expression described by ``case`` (texts or trees)."""
     f, texts = _formula(case)
     kind, over, k = R(case["kind"]), case["over"], case["k"]
     return {
@@ -179,9 +179,9 @@ def arrays(case: dict):
     return {"x": gen((rows_x, dims["x"])), "y": gen((rows_y, dims["y"])), "p": np.abs(gen(dims["p"])) + 0.5}
 
 
-# ---------------------------------------------------------------- minimisation
+# ---------------------------------------------------------------- minimization
 def _subtrees(t):
-    """Remplacements candidats d'un nœud, du plus simple au plus complexe."""
+    """Candidate replacements of a node, from simplest to most complex."""
     out = []
     if t[0] not in ("var", "const"):
         out += [c for c in t[1:] if isinstance(c, tuple) and c[0] not in COMPARE + ("and", "or", "xor", "not")]
@@ -212,7 +212,7 @@ def _get(t, path):
 
 
 def minimize(case: dict, fails, budget: int = 80) -> dict:
-    """Réduit l'arbre et les tailles tant que ``fails(case)`` reste vrai."""
+    """Shrinks the tree and the sizes as long as ``fails(case)`` stays true."""
     best = dict(case)
     tries = 0
     changed = True

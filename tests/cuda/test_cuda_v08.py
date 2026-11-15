@@ -1,10 +1,10 @@
-"""MIN_ARGMIN, MAX_ARGMAX et LOGSUMEXPWEIGHT (avenant v0.8) sur le backend CUDA.
+"""MIN_ARGMIN, MAX_ARGMAX and LOGSUMEXPWEIGHT (amendment v0.8) on the CUDA backend.
 
-MIN_ARGMIN / MAX_ARGMAX : bit à bit contre MIN et ARGMIN (resp. MAX, ARGMAX) du
-même backend et contre l'oracle (égalités, NaN, N = 0), partition de j forcée,
-ranges dans le désordre, batch. LOGSUMEXPWEIGHT : valeurs spéciales du contrat
-(vide, +inf, poids négatifs, NaN), partition forcée, schémas block/kahan,
-acc_dtype FP64 ; référence : oracle Torch FP64 sur les entrées arrondies.
+MIN_ARGMIN / MAX_ARGMAX: bitwise against MIN and ARGMIN (resp. MAX, ARGMAX) of
+the same backend and against the oracle (ties, NaN, N = 0), forced j partition,
+unordered ranges, batch. LOGSUMEXPWEIGHT: special values of the contract
+(empty, +inf, negative weights, NaN), forced partition, block/kahan schemes,
+acc_dtype FP64; reference: FP64 Torch oracle on the rounded inputs.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 import kernox as kp  # noqa: E402
 from kernox.backends.base import BatchLayout, RangesLayout, Variant  # noqa: E402
@@ -70,13 +70,13 @@ def _arg_inputs(dtype, M=53, N=700, seed=0):
     Y = torch.randint(-3, 4, (N, 2), generator=g).to(T)
     if N > 7:
         Y[7, 0] = NAN
-    Y[N // 2:N // 2 + 3, 1] = INF                 # ±inf valides (signe selon x)
+    Y[N // 2:N // 2 + 3, 1] = INF                 # valid ±inf (sign depends on x)
     return {"x": X.to(DEV), "y": Y.to(DEV)}
 
 
 def _arg_exprs():
     x, y = kp.Vi("x", 2), kp.Vj("y", 2)
-    f = x * y                                     # deux composantes : D = 2
+    f = x * y                                     # two components: D = 2
     return f
 
 
@@ -161,11 +161,11 @@ def _lsew_inputs(M, N, seed=0, E=3, negative=True):
     x = torch.randn(M, 1, generator=g, dtype=torch.float64)
     x[1], x[2], x[3], x[4], x[5] = 1e4, -1e4, INF, -INF, NAN
     y = 3 * torch.randn(N, 1, generator=g, dtype=torch.float64)
-    y[: N // 2] = INF                         # moitié des j : f = −inf (tranches vides)
+    y[: N // 2] = INF                         # half of the j: f = −inf (empty slices)
     w = torch.rand(N, E, generator=g, dtype=torch.float64) + 0.1
     if negative:
-        w[:, 1] -= 0.8                        # composante 1 : poids de signes mêlés (t < 0 possible)
-    w[: N // 2, 2] = NAN                      # NaN sur des termes de poids nul : ignorés
+        w[:, 1] -= 0.8                        # component 1: weights of mixed signs (t < 0 possible)
+    w[: N // 2, 2] = NAN                      # NaN on zero-weight terms: ignored
     return {"x": x, "y": y, "w": w}
 
 
@@ -196,7 +196,7 @@ def test_lsew_special(opts, scheme, dtype):
     got, _, _ = _launch(plan, inp, **opts)
     ref = _lsew_ref(plan, host)
     _close(got["value"], ref, dtype, N)
-    # couverture du contrat : x = −inf (vide : −inf), x = +inf (inf − inf : NaN), NaN, poids < 0
+    # contract coverage: x = −inf (empty: −inf), x = +inf (inf − inf: NaN), NaN, weight < 0
     assert (ref[4] == -INF).all() and torch.isnan(ref[5]).all()
     assert torch.isnan(ref[:, 1]).any() and torch.isfinite(ref[:, 0]).any()
 
@@ -206,7 +206,7 @@ def test_lsew_pos_inf_and_empty():
         host = _lsew_inputs(9, max(N, 1), seed=N, negative=False)
         host["y"] = torch.linspace(-2, 2, N, dtype=torch.float64).reshape(N, 1)
         host["w"] = host["w"][:N].nan_to_num(0.5)
-        host["w"][:, 1] = 0.0                  # t = 0 : log 0 = −inf ; avec f = +inf : NaN
+        host["w"][:, 1] = 0.0                  # t = 0: log 0 = −inf; with f = +inf: NaN
         for opts in (dict(split="off"), dict(split="x8", tile=8)):
             for dtype in DTYPES:
                 plan = _lsew_plan(dtype)
@@ -215,7 +215,7 @@ def test_lsew_pos_inf_and_empty():
                 _close(got["value"], _lsew_ref(plan, host), dtype, max(N, 1))
                 if N == 0:
                     assert (got["value"][~inp["x"].cpu().isnan().reshape(-1)] == -INF).all()
-                elif N == 300:   # x = +inf : f = +inf partout -> +inf (t > 0), NaN (t = 0)
+                elif N == 300:   # x = +inf: f = +inf everywhere -> +inf (t > 0), NaN (t = 0)
                     assert got["value"][3, 0] == INF and torch.isnan(got["value"][3, 1])
 
 
@@ -226,11 +226,11 @@ def test_lsew_acc64():
     got, _, _ = _launch(plan, inp, split="x4", tile=16)
     assert got["value"].dtype == torch.float64
     ref = _lsew_ref(plan, host)
-    _close(got["value"], ref, "float64", 2000 * 2 ** 29)   # termes arrondis en FP32 : borne FP32 sur f
+    _close(got["value"], ref, "float64", 2000 * 2 ** 29)   # terms rounded to FP32: FP32 bound on f
 
 
 def test_lsew_frontend_matches_logsumexp():
-    """weight = 1 : LOGSUMEXPWEIGHT = LOGSUMEXP (même état)."""
+    """weight = 1: LOGSUMEXPWEIGHT = LOGSUMEXP (same state)."""
     x, y = kp.Vi("x", 3), kp.Vj("y", 3)
     f = -((x - y) ** 2).sum()
     g = torch.Generator().manual_seed(1)

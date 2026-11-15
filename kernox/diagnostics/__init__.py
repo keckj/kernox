@@ -27,9 +27,9 @@ import platform
 import sys
 from pathlib import Path
 
-# Empreintes (sha256 RECORD de symox/_core.abi3.so) des wheels de référence
-# construits par le projet ; les builds ne sont pas reproductibles
-# d'une machine à l'autre : un autre build est « révision non identifiée ».
+# Fingerprints (RECORD sha256 of symox/_core.abi3.so) of the reference wheels
+# built by the project; builds are not reproducible from one machine to
+# another, so any other build is reported as "unidentified revision".
 _SYMOX_CORE_FINGERPRINTS = {
     "3LfAlFu09abIJM7NAM6Gvlf9Wc-j4FiuVDsNbHPEs3A": "53d9576e9f39db16e9ca8b3483d754385ebaf986",
     "i1Jmdslg76QrkR3k1NH9ZVCbIWCqLtKMRAWBQv4F2kM": "b8d7adda11b40e027ac6880f5f82bdc39f6a1082",
@@ -48,7 +48,7 @@ def _symox_info() -> dict:
         import symox
     except ImportError as exc:
         out.update(available=False, error=str(exc))
-        out["warnings"].append("symox absent : voir l'installation de symox dans le README")
+        out["warnings"].append("symox not found: see the symox installation section of the README")
         return out
     out.update(available=True, version=getattr(symox, "__version__", "?"), path=os.path.dirname(symox.__file__))
     fingerprint, source = None, None
@@ -66,20 +66,20 @@ def _symox_info() -> dict:
     out.update(core_fingerprint=fingerprint, installed_from=source, revision=revision)
     if revision is None:
         out["warnings"].append(
-            f"révision symox non identifiée (empreinte {fingerprint}) : Kernox est épinglé sur "
-            f"{compat.PINNED_SYMOX[:8]} (installation : voir le README)")
+            f"unidentified symox revision (fingerprint {fingerprint}): Kernox is pinned to "
+            f"{compat.PINNED_SYMOX[:8]} (installation: see the README)")
     elif revision != compat.PINNED_SYMOX:
         out["warnings"].append(
-            f"symox {revision[:8]} n'est pas la révision épinglée {compat.PINNED_SYMOX[:8]} "
-            "(réinstaller symox au commit épinglé : voir le README)")
+            f"symox {revision[:8]} is not the pinned revision {compat.PINNED_SYMOX[:8]} "
+            "(reinstall symox at the pinned commit: see the README)")
     caps = {}
     for name in ("cuda_logic", "cudacode_function", "lambdify_broadcasts"):
         fn = getattr(compat, name, None)
         if callable(fn):
             try:
                 caps[name] = bool(fn())
-            except Exception as exc:  # noqa: BLE001 - sonde
-                caps[name] = f"erreur : {type(exc).__name__}: {exc}"
+            except Exception as exc:  # noqa: BLE001 - probe
+                caps[name] = f"error: {type(exc).__name__}: {exc}"
     out["capabilities"] = caps
     return out
 
@@ -102,15 +102,15 @@ def _device_for(name: str):
 
     if name in ("cuda", "hip"):
         if not torch.cuda.is_available():
-            return None, "aucun device Torch CUDA/ROCm visible"
+            return None, "no Torch CUDA/ROCm device visible"
         is_hip = getattr(torch.version, "hip", None) is not None
         if (name == "hip") != is_hip:
-            return None, f"Torch construit pour {'ROCm' if is_hip else 'CUDA'}, pas pour {name}"
+            return None, f"Torch built for {'ROCm' if is_hip else 'CUDA'}, not for {name}"
         return torch.device("cuda:0"), ""
     if name == "sycl":
         xpu = getattr(torch, "xpu", None)
         if xpu is None or not xpu.is_available():
-            return None, "aucun device Torch XPU visible"
+            return None, "no Torch XPU device visible"
         return torch.device("xpu:0"), ""
     raise ValueError(name)
 
@@ -164,7 +164,7 @@ def _backend_info(name: str, check: bool) -> dict:
 
 
 def _check_backend(name, device, dtypes) -> dict:
-    """Petites réductions comparées à la référence FP64 de l'oracle."""
+    """Small reductions compared against the FP64 oracle reference."""
     import torch
 
     from .. import compile as kp_compile
@@ -260,13 +260,13 @@ def diagnostics(*, check: bool = False, backends=None) -> dict:
         "symox": _symox_info(),
     }
     report["backends"] = {n: _backend_info(n, check) if report["torch"]["available"]
-                          else {"name": n, "available": False, "reason": "Torch absent"} for n in names}
+                          else {"name": n, "available": False, "reason": "Torch not found"} for n in names}
     report["cache"] = _cache_info()
     warnings = list(report["symox"].get("warnings", []))
     for n, b in report["backends"].items():
         for k, r in (b.get("check") or {}).items():
             if not r["ok"]:
-                warnings.append(f"vérification {n} {k} en échec : {r['error']}")
+                warnings.append(f"check {n} {k} failed: {r['error']}")
     report["warnings"] = warnings
     return report
 
@@ -275,7 +275,7 @@ def _version():
     try:
         return md.version("kernox")
     except md.PackageNotFoundError:
-        return "non installé (arbre source)"
+        return "not installed (source tree)"
 
 
 def _dist_version(name):
@@ -288,48 +288,48 @@ def _dist_version(name):
 def format_report(r: dict) -> str:
     lines = ["Kernox diagnostic", ""]
     lines.append(f"Python {r['python']} ({r['platform']})")
-    lines.append(f"kernox {r['kernox']['version']} : {r['kernox']['path']}")
+    lines.append(f"kernox {r['kernox']['version']}: {r['kernox']['path']}")
     t = r["torch"]
     if t["available"]:
-        lines.append(f"Torch {t['version']} (CUDA {t['cuda_runtime']}, ROCm {t['hip_runtime']}) ; "
+        lines.append(f"Torch {t['version']} (CUDA {t['cuda_runtime']}, ROCm {t['hip_runtime']}); "
                      f"devices cuda/rocm {t['cuda_devices']}, xpu {t['xpu_devices']}")
     else:
-        lines.append(f"Torch absent : {t['error']}")
+        lines.append(f"Torch not found: {t['error']}")
     s = r["symox"]
     if s["available"]:
-        rev = s["revision"][:8] if s["revision"] else "non identifiée"
-        lines.append(f"symox {s['version']} révision {rev} (épinglée {s['pinned'][:8]}) : {s['path']}")
-        lines.append("  capacités : " + ", ".join(f"{k}={v}" for k, v in s.get("capabilities", {}).items()))
+        rev = s["revision"][:8] if s["revision"] else "unidentified"
+        lines.append(f"symox {s['version']} revision {rev} (pinned {s['pinned'][:8]}): {s['path']}")
+        lines.append("  capabilities: " + ", ".join(f"{k}={v}" for k, v in s.get("capabilities", {}).items()))
     lines.append("")
     for name, b in r["backends"].items():
         if not b["available"]:
-            lines.append(f"[{name}] indisponible : {b['reason']}")
+            lines.append(f"[{name}] unavailable: {b['reason']}")
             continue
         p = b["properties"]
-        lines.append(f"[{name}] {b['device']} : {p.get('name')} {p.get('arch', '')} ; "
-                     f"FP64 {'accepté' if b['fp64'] else 'refusé (' + b['dtypes']['float64']['reason'] + ')'} ; "
-                     f"fp_contract=False {'pris en charge' if b['fp_contract_off'] else 'refusé'}")
+        lines.append(f"[{name}] {b['device']}: {p.get('name')} {p.get('arch', '')}; "
+                     f"FP64 {'supported' if b['fp64'] else 'rejected (' + b['dtypes']['float64']['reason'] + ')'}; "
+                     f"fp_contract=False {'supported' if b['fp_contract_off'] else 'rejected'}")
         for k, c in (b.get("check") or {}).items():
-            extra = f" ; {c['compiler']} {c['arch']}" if "compiler" in c else ""
-            lines.append(f"    {'OK ' if c['ok'] else 'ÉCHEC'} {k} (écart {c['error']}){extra}")
+            extra = f"; {c['compiler']} {c['arch']}" if "compiler" in c else ""
+            lines.append(f"    {'OK  ' if c['ok'] else 'FAIL'} {k} (error {c['error']}){extra}")
     c = r["cache"]
     lines.append("")
-    lines.append(f"wisdom : {c['wisdom_dir']} ({c.get('wisdom_entries', '?')} entrées, "
+    lines.append(f"wisdom: {c['wisdom_dir']} ({c.get('wisdom_entries', '?')} entries, "
                  f"{c.get('wisdom_devices', '?')} devices)")
     for name, d in c["compile_caches"].items():
         if "path" in d:
-            lines.append(f"cache {name} : {d['path']} ({d['files']} fichiers, {d['bytes']} octets)")
+            lines.append(f"cache {name}: {d['path']} ({d['files']} files, {d['bytes']} bytes)")
     if r["warnings"]:
         lines.append("")
-        lines += [f"AVERTISSEMENT : {w}" for w in r["warnings"]]
+        lines += [f"WARNING: {w}" for w in r["warnings"]]
     return "\n".join(lines)
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m kernox.diagnostics", description=__doc__.split("\n")[0])
-    ap.add_argument("--check", action="store_true", help="compile et vérifie de petites réductions par backend")
-    ap.add_argument("--backend", action="append", choices=("cuda", "hip", "sycl"), help="restreindre (répétable)")
-    ap.add_argument("--json", action="store_true", help="sortie JSON")
+    ap.add_argument("--check", action="store_true", help="compile and check small reductions on each backend")
+    ap.add_argument("--backend", action="append", choices=("cuda", "hip", "sycl"), help="restrict to this backend (repeatable)")
+    ap.add_argument("--json", action="store_true", help="JSON output")
     a = ap.parse_args(argv)
     r = diagnostics(check=a.check, backends=a.backend)
     print(json.dumps(r, indent=2, default=str) if a.json else format_report(r))

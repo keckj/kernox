@@ -1,4 +1,4 @@
-"""Avenant v0.10 côté CUDA : source générée (sans GPU) et refus FP16."""
+"""Amendment v0.10 on the CUDA side: generated source (no GPU) and FP16 refusal."""
 
 import dataclasses
 
@@ -22,7 +22,7 @@ def _src(plan):
 
 def test_fast_source_uses_approx_everywhere():
     s = _src(_lse(True))
-    body = s.split("kp_flog(float x)")[1]  # après les définitions du prélude
+    body = s.split("kp_flog(float x)")[1]  # after the prelude definitions
     assert "kp_fexp(" in body and "kp_flog(" in body
     assert "expf(" not in body.replace("kp_fexp(", "") and "logf(" not in body.replace("kp_flog(", "")
 
@@ -36,4 +36,4 @@ def test_ieee_source_untouched():
 
 def test_fp64_fast_is_ieee():
     a, b = _src(_lse(True, "float64")), _src(_lse(False, "float64"))
-    assert a == b  # pas d'instruction approchée en FP64 : source IEEE identique
+    assert a == b  # no approximate instruction in FP64: identical IEEE source

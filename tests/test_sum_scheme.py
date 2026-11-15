@@ -1,4 +1,4 @@
-"""Schémas de sommation (avenant v0.7) : plan, clé, compile, oracle, gradients (CPU)."""
+"""Summation schemes (v0.7 amendment): plan, key, compile, oracle, gradients (CPU)."""
 
 from __future__ import annotations
 
@@ -31,23 +31,23 @@ def test_plan_field_key_and_validation():
     assert base.sum_scheme == "direct"
     keys = {s: _red().to_plan("float32", sum_scheme=s).key() for s in ("direct", "block", "kahan")}
     assert keys["direct"] == base.key() and len(set(keys.values())) == 3
-    with pytest.raises(ValidationError, match="sum_scheme invalide"):
+    with pytest.raises(ValidationError, match="invalid sum_scheme"):
         kp.compile(_red(), dtype="float32", backend="oracle", sum_scheme="pairwise")
     plan = _red().to_plan("float32", sum_scheme="kahan")
     assert kp.compile(plan, dtype="float32", backend="oracle").plan.sum_scheme == "kahan"
-    with pytest.raises(ValidationError, match="sum_scheme incohérent"):
+    with pytest.raises(ValidationError, match="sum_scheme inconsistent"):
         kp.compile(plan, dtype="float32", backend="oracle", sum_scheme="direct")
 
 
 def test_oracle_simulates_each_scheme():
-    # 1e8 + 1 + 1 + 1 + 1 − 1e8 en FP32 : direct séquentiel perd les 1, kahan les garde
+    # 1e8 + 1 + 1 + 1 + 1 − 1e8 in FP32: sequential direct loses the 1s, kahan keeps them
     vals = [1e8, 1.0, 1.0, 1.0, 1.0, -1e8]
     got = {s: _call(kp.compile(_red(), dtype="float32", backend="oracle", sum_scheme=s), vals)
            for s in ("direct", "block", "kahan")}
     assert got == {"direct": 0.0, "block": 0.0, "kahan": 4.0}
-    # block : tuile neuve tous les SUM_BLOCK termes. 1e8 seul dans la première
-    # tuile, puis SUM_BLOCK uns : direct les perd un à un (ulp(1e8) = 8), block
-    # somme la tuile exactement (256) avant de l'ajouter au total.
+    # block: a fresh tile every SUM_BLOCK terms. 1e8 alone in the first tile,
+    # then SUM_BLOCK ones: direct loses them one by one (ulp(1e8) = 8), block
+    # sums the tile exactly (256) before adding it to the total.
     vals = [1e8] + [0.0] * (SUM_BLOCK - 1) + [1.0] * SUM_BLOCK
     got = {s: _call(kp.compile(_red(), dtype="float32", backend="oracle", sum_scheme=s), vals)
            for s in ("direct", "block", "kahan")}
@@ -69,11 +69,11 @@ def test_acc_float64_and_float64_plans():
 
 def test_kahan_special_values():
     k = kp.compile(_red(), dtype="float32", backend="oracle", sum_scheme="kahan")
-    assert _call(k, [float("inf"), 1.0, 2.0]) == float("inf")      # pas de inf − inf
+    assert _call(k, [float("inf"), 1.0, 2.0]) == float("inf")      # no inf − inf
     assert _call(k, [-float("inf"), 1.0]) == -float("inf")
     assert np.isnan(_call(k, [float("inf"), -float("inf")]))
     assert np.isnan(_call(k, [1.0, float("nan"), 2.0]))
-    for s_ in ("direct", "block", "kahan"):  # N = 0 : neutre 0
+    for s_ in ("direct", "block", "kahan"):  # N = 0: neutral 0
         r = kp.compile(_red(), dtype="float32", backend="oracle", sum_scheme=s_)
         assert r(one=torch.ones(2, 1), w=torch.ones(0, 1)).tolist() == [[0.0], [0.0]]
 
@@ -134,11 +134,11 @@ class _DirectOnly:
 
     def supports(self, plan, device):
         if self.honest and plan.sum_scheme != "direct":
-            return Support(False, f"sum_scheme={plan.sum_scheme!r} non implémenté")
+            return Support(False, f"sum_scheme={plan.sum_scheme!r} not implemented")
         return Support(True)
 
-    def compile(self, plan, device):  # pragma: no cover - jamais atteint
-        raise AssertionError("ne doit pas compiler")
+    def compile(self, plan, device):  # pragma: no cover - never reached
+        raise AssertionError("must not compile")
 
 
 @pytest.mark.parametrize("honest", [True, False])

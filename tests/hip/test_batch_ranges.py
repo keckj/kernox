@@ -1,12 +1,12 @@
-"""Batch (avenant v0.6 §1) et ranges block-sparse (§2) natifs du backend hip.
+"""Native batch (amendment v0.6 §1) and block-sparse ranges (§2) of the hip backend.
 
-Batch : égalité au bit près avec une boucle d'appels non batchés sur chaque
-élément (mêmes variantes), diffusion à strides 0, params batchés, partition de
-j forcée (partiels (nb, S, M, W)), coop top-K, LSE/SSMW, lancements par paquets
-de la dimension z (GRID_Z_MAX abaissé). Ranges : un bloc par tuile de travail ;
-intervalles dans le désordre et égalités au plus petit j de J(i), lignes non
-couvertes au neutre, blocs plus hauts que ``ranges_tile_m``, coop top-K,
-K > |J(i)| ; référence : oracle masqué (plan ranges) sur l'hôte.
+Batch: bitwise equality with a loop of non-batched calls over each
+element (same variants), broadcasting with 0 strides, batched params, forced
+j partition (partials (nb, S, M, W)), coop top-K, LSE/SSMW, launches in chunks
+of the z dimension (lowered GRID_Z_MAX). Ranges: one block per work tile;
+unordered intervals and ties broken by the smallest j of J(i), uncovered rows
+at the neutral value, blocks taller than ``ranges_tile_m``, coop top-K,
+K > |J(i)|; reference: masked oracle (ranges plan) on the host.
 """
 
 import dataclasses
@@ -37,7 +37,7 @@ def _exprs():
         "kmin_argkmin40": d2.kmin_argkmin(40, over="j"),     # coop
         "lse": (-d2 * s).logsumexp(over="j"),
         "ssmw": (-d2 * s).sumsoftmaxweight(b, over="j"),
-        "min_argmin": d2.min_argmin(over="j"),             # avenant v0.8
+        "min_argmin": d2.min_argmin(over="j"),             # amendment v0.8
         "max_argmax": (-d2).max_argmax(over="j"),
         "lsew": (-d2 * s).logsumexp(over="j", weight=kp.abs(b) + 0.5),
     }
@@ -56,7 +56,7 @@ def _offsets(t, B, tail):
 
 
 def _element(t, B, b, tail):
-    """Élément b (indice aplati) de t diffusé à B, contigu."""
+    """Element b (flattened index) of t broadcast to B, contiguous."""
     idx = []
     for size in reversed(B):
         idx.append(b % size)
@@ -102,8 +102,8 @@ def _batch_inputs(dtype, M=37, N=150, seed=0):
     x = torch.randint(-3, 4, (3, 1, M, 3), generator=g).to(T)          # (B1, 1, M, 3)
     y = torch.randint(-3, 4, (1, 4, N, 3), generator=g).to(T)          # (1, B2, N, 3)
     y[0, 1, 7] = math.nan
-    b = torch.randn(4, N, 2, generator=g).to(T).expand(3, 4, N, 2)     # strides 0 en tête
-    s = torch.tensor([[0.3], [0.7], [1.1]]).to(T).reshape(3, 1, 1)      # param batché (B1, 1, 1)
+    b = torch.randn(4, N, 2, generator=g).to(T).expand(3, 4, N, 2)     # leading 0 strides
+    s = torch.tensor([[0.3], [0.7], [1.1]]).to(T).reshape(3, 1, 1)      # batched param (B1, 1, 1)
     return {k: v.to(DEV) for k, v in dict(x=x, y=y, b=b, s=s).items()}, (3, 4)
 
 
@@ -127,7 +127,7 @@ def test_batch_bitwise_vs_loop(opts, dtype, name):
 
 
 def test_batch_grid_z_chunks(monkeypatch):
-    monkeypatch.setattr(hip_backend, "GRID_Z_MAX", 5)   # 12 éléments → paquets de 5, 5, 2
+    monkeypatch.setattr(hip_backend, "GRID_Z_MAX", 5)   # 12 elements → chunks of 5, 5, 2
     for opts in (dict(split="off"), dict(split="force", tile_j=16)):
         plan = _exprs()["kmin_argkmin5"].to_plan("float32")
         t, B = _batch_inputs("float32", seed=3)
@@ -153,10 +153,10 @@ def _ranges_setup(dtype, m=300, n=700, density=0.5, seed=0, shuffle=False):
     li = torch.sort(torch.randint(0, 4, (m,), generator=g)).values
     lj = torch.sort(torch.randint(0, 9, (n,), generator=g)).values
     keep = torch.rand(4, 9, generator=g) < density
-    keep[3] = False                         # bloc i sans intervalle (lignes au neutre)
+    keep[3] = False                         # i block without intervals (rows at the neutral value)
     r = kp.ranges_from_labels(li.to(DEV), lj.to(DEV), keep.to(DEV))
     tr = Triplet(r.ranges_i, r.slices_i, r.redranges_j)
-    if shuffle:  # intervalles de chaque bloc dans l'ordre inverse
+    if shuffle:  # intervals of each block in reverse order
         red = r.redranges_j.clone()
         sl = r.slices_i.tolist()
         lo = 0
@@ -164,9 +164,9 @@ def _ranges_setup(dtype, m=300, n=700, density=0.5, seed=0, shuffle=False):
             red[lo:hi] = red[lo:hi].flip(0)
             lo = hi
         tr = Triplet(r.ranges_i, r.slices_i, red)
-    # rows non couvertes : bloc 3 retiré des ranges i ? ranges_from_labels le garde avec 0 intervalle
+    # uncovered rows: block 3 removed from the i ranges? ranges_from_labels keeps it with 0 intervals
     X = torch.randint(-2, 3, (m, 3), generator=g).double()
-    Y = torch.randint(-2, 3, (n, 3), generator=g).double()          # nombreuses égalités de d²
+    Y = torch.randint(-2, 3, (n, 3), generator=g).double()          # many d² ties
     Y[11, 0] = math.nan
     Bv = torch.randn(n, 2, generator=g, dtype=torch.float64)
     T = getattr(torch, dtype)
@@ -192,7 +192,7 @@ def _oracle_ranged(plan, t, tr, tile_m):
 def test_ranges_vs_oracle(name, dtype, shuffle):
     plan = _exprs()[name].to_plan(dtype)
     tr, t = _ranges_setup(dtype, shuffle=shuffle, seed=hash(name) % 100)
-    be = HipBackend(HipOptions(block=64))     # tuiles de 64 lignes (blocs i plus hauts)
+    be = HipBackend(HipOptions(block=64))     # 64-row tiles (taller i blocks)
     cr = be.compile(dataclasses.replace(plan, ranges=True), DEV)
     tile_m = cr.ranges_tile_m
     work = work_list(tr, tile_m)

@@ -1,7 +1,7 @@
-"""Plans construits à la main + fonctions de paire C++ écrites à la main.
+"""Hand-built plans + hand-written C++ pair functions.
 
-Indépendant du frontend et de la fonction de paire du noyau (pas encore livrés) :
-chaque formule de test a une source ``kp_pair`` et une référence Torch.
+Independent of the frontend and of the core pair function (not yet delivered):
+each test formula has a ``kp_pair`` source and a Torch reference.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from kernox.plan import Arg, Plan, Reduction, ReductionKind as R
 
 
 def make_plan(args, out_dim, kind, dtype="float64", k=None, acc_dtype=None, tag=""):
-    # ``outputs`` : marqueurs opaques (la fonction de paire est fournie à la main)
+    # ``outputs``: opaque markers (the pair function is supplied by hand)
     return Plan(
         args=tuple(Arg(n, role, dim, ()) for n, role, dim in args),
         outputs=tuple(f"{tag}{c}" for c in range(out_dim)),
@@ -26,7 +26,7 @@ def make_plan(args, out_dim, kind, dtype="float64", k=None, acc_dtype=None, tag=
 
 
 def pair_from(body_by_plan):
-    """Fabrique une ``pair_function`` à partir d'une fonction plan -> corps C++."""
+    """Build a ``pair_function`` from a plan -> C++ body function."""
 
     def pair_function(plan, dialect="cuda"):
         T = "double" if plan.dtype == "float64" else "float"
@@ -41,7 +41,7 @@ def pair_from(body_by_plan):
     return pair_function
 
 
-# ------------------------------------------------------------------ formules
+# ------------------------------------------------------------------ formulas
 
 
 def sqdist_body(plan, T):
@@ -55,7 +55,7 @@ def sqdist_ref(x, y):
 
 
 def gauss_body(plan, T):
-    # args : x(i,D), y(j,D), b(j,E), s(param,1) ; o_e = exp(-d2 / (2 s^2)) * b_e
+    # args: x(i,D), y(j,D), b(j,E), s(param,1); o_e = exp(-d2 / (2 s^2)) * b_e
     D, E = plan.args[0].dim, plan.args[2].dim
     lit = "2.0" if T == "double" else "2.0f"
     lines = [f" {T} d2 = ({T})0;",
@@ -77,7 +77,7 @@ def count_body(plan, T):
 
 
 def two_comp_body(plan, T):
-    # o0 = a0[0] - a1[0] ; o1 = a0[1] * a1[1]  (D = 2)
+    # o0 = a0[0] - a1[0]; o1 = a0[1] * a1[1]  (D = 2)
     return " r.o0 = a0[0] - a1[0];\n r.o1 = a0[1] * a1[1];"
 
 
@@ -86,15 +86,15 @@ def two_comp_ref(x, y):
 
 
 def ident_body(plan, T):
-    # o0 = y_j : permet d'injecter NaN/inf/égalités exactement
+    # o0 = y_j: lets us inject NaN/inf/exact ties
     return " r.o0 = a1[0] + ((" + T + ")0) * a0[0];"
 
 
-# ------------------------------------------------------------------ références
+# ------------------------------------------------------------------ references
 
 
 def ref_minmax(vals, kind):
-    """vals (M, N, D) float64 CPU -> sorties selon contrat (NaN ignorés)."""
+    """vals (M, N, D) float64 CPU -> outputs per the contract (NaN ignored)."""
     M, N, D = vals.shape
     is_min = kind in ("min", "argmin")
     out_v = torch.full((M, D), math.inf if is_min else -math.inf, dtype=torch.float64)
@@ -114,7 +114,7 @@ def ref_minmax(vals, kind):
 
 
 def ref_kmin(vals, K):
-    """vals (M, N) -> (values, indices) (M, K) : ordre (valeur, j), NaN ignorés."""
+    """vals (M, N) -> (values, indices) (M, K): (value, j) order, NaN ignored."""
     M, N = vals.shape
     ov = torch.full((M, K), math.inf, dtype=torch.float64)
     oi = torch.full((M, K), -1, dtype=torch.int64)

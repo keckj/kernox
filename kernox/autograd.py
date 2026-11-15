@@ -1,47 +1,49 @@
-"""Gradients des réductions (intégration ``torch.autograd``, contrat v0.4 proposé).
+"""Gradients of reductions (``torch.autograd`` integration, proposed contract v0.4).
 
-SUM (ci-dessous) : réductions de gradient fusionnées, toutes ordres. Les autres
-réductions flottantes se ramènent à ce mécanisme ou au terme retenu (ordre 1) :
+SUM (below): fused gradient reductions, at any order. The other floating-point
+reductions reduce to this mechanism or to the selected term (first order):
 
-- LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT : plan SUM substitut, sorties
-  avant tenues fixes (:func:`surrogate`) ;
-- MIN, MAX, KMIN et valeurs de MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN : dérivée au
-  couple retenu, évaluée sur O(M·K) couples (:class:`SelectGradient`).
+- LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT: surrogate SUM plan, with the
+  forward outputs held fixed (:func:`surrogate`);
+- MIN, MAX, KMIN and the values of MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN:
+  derivative at the selected pair, evaluated on O(M·K) pairs
+  (:class:`SelectGradient`).
 
-Pour un plan SUM normalisé (réduction sur j) ::
+For a normalized SUM plan (reduction over j)::
 
-    out[i, e] = Σ_j F_e(x_i, y_j, p)          (x : args « i », y : args « j », p : params)
+    out[i, e] = Σ_j F_e(x_i, y_j, p)          (x: "i" args, y: "j" args, p: params)
 
-et un gradient amont ``G[i, e]``, les gradients sont eux-mêmes des réductions
-SUM fusionnées, dérivées **symboliquement** (``symox.diff``) et exécutées par
-le même pipeline Plan → backend, sans matrice M×N :
+and an upstream gradient ``G[i, e]``, the gradients are themselves fused SUM
+reductions, differentiated **symbolically** (``symox.diff``) and executed by
+the same Plan → backend pipeline, with no M×N matrix:
 
-- côté i (un plan, réduction sur j) : pour chaque composante ``c`` d'un arg i
-  ``∂L/∂x_i[c] = Σ_j Σ_e G[i,e] ∂F_e/∂x[c]`` ; pour un paramètre, la
-  contribution par ligne ``Σ_j Σ_e G[i,e] ∂F_e/∂p[c]`` est une sortie de plus du
-  même plan, sommée ensuite sur i par Torch (vecteur M × P) ;
-- côté j (un plan, rôles i/j échangés, donc réduction sur i) :
+- i side (one plan, reduction over j): for each component ``c`` of an i arg,
+  ``∂L/∂x_i[c] = Σ_j Σ_e G[i,e] ∂F_e/∂x[c]``; for a parameter, the per-row
+  contribution ``Σ_j Σ_e G[i,e] ∂F_e/∂p[c]`` is one more output of the same
+  plan, then summed over i by Torch (M × P vector);
+- j side (one plan, i/j roles swapped, hence a reduction over i):
   ``∂L/∂y_j[c] = Σ_i Σ_e G[i,e] ∂F_e/∂y[c]``.
 
-``G`` entre comme une variable i supplémentaire de dimension E. Toutes les
-dérivées d'un côté sont des sorties d'un **même** plan : la CSE du générateur
-(y compris par régions avec ``where``) partage les sous-expressions communes
-(``exp(-d²)``, ``d²``, différences ``x - y``...).
+``G`` enters as an extra i variable of dimension E. All the derivatives of a
+side are outputs of the **same** plan: the generator's CSE (including the
+region-based one with ``where``) shares the common subexpressions
+(``exp(-d²)``, ``d²``, differences ``x - y``...).
 
-Règles de dérivation (après ``symox.diff``) :
+Differentiation rules (after ``symox.diff``):
 
-- ``where(c, a, b)`` : gradient de la branche active (``Piecewise`` dérivé
-  branche par branche, conditions inchangées) ; la condition n'est pas dérivée ;
-- ``Heaviside(z)`` (dérivée de ``max``/``min``/``clamp``) devient 1 si z > 0,
-  0 si z < 0 et ``1/2`` en z = 0 (convention de symox/SymPy) : à égalité,
-  ``max(x, y)`` répartit le gradient moitié-moitié ;
-- ``abs`` : ``sign(x)`` (0 en 0) ; ``floor``, ``ceiling``, ``sign`` : 0 ;
-- ``DiracDelta`` (parties distributionnelles, p. ex. dérivée seconde de
-  ``abs``) : 0 ;
-- une dérivée que symox laisse non évaluée (``Derivative``) : ``UnsupportedError``.
+- ``where(c, a, b)``: gradient of the active branch (``Piecewise``
+  differentiated branch by branch, conditions unchanged); the condition is not
+  differentiated;
+- ``Heaviside(z)`` (derivative of ``max``/``min``/``clamp``) becomes 1 if z > 0,
+  0 if z < 0 and ``1/2`` at z = 0 (symox/SymPy convention): on ties,
+  ``max(x, y)`` splits the gradient half and half;
+- ``abs``: ``sign(x)`` (0 at 0); ``floor``, ``ceiling``, ``sign``: 0;
+- ``DiracDelta`` (distributional parts, e.g. the second derivative of
+  ``abs``): 0;
+- a derivative that symox leaves unevaluated (``Derivative``): ``UnsupportedError``.
 
-Hors des points non lisses, le gradient est exact au sens de la formule
-(y compris ``sqrt`` en 0 : ``inf``, comme Torch).
+Away from non-smooth points, the gradient is exact with respect to the formula
+(including ``sqrt`` at 0: ``inf``, as in Torch).
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ _ROLE_ORDER = {"i": 0, "j": 1, "param": 2}
 
 
 def _smooth(expr):
-    """Remplace les distributions et fonctions de saut issues de ``diff``."""
+    """Replaces the distributions and step functions produced by ``diff``."""
     import symox
 
     def heaviside(*args):
@@ -70,20 +72,19 @@ def _smooth(expr):
     out = out.replace(lambda e: isinstance(e, symox.Heaviside), lambda e: heaviside(*e.args))
     if out.has(symox.Derivative):
         bad = sorted({str(d) for d in out.atoms(symox.Derivative)})
-        raise UnsupportedError(f"dérivée non évaluable symboliquement : {', '.join(bad)}")
+        raise UnsupportedError(f"derivative cannot be evaluated symbolically: {', '.join(bad)}")
     return out
 
 
 def _factor_pow2(expr):
-    """Remet en facteur un coefficient commun 2^k (k ≥ 1) des termes d'une somme.
+    """Factors a common 2^k coefficient (k ≥ 1) back out of the terms of a sum.
 
-    symox distribue les nombres sur les sommes : ``∂(a − b)²/∂a`` devient
-    ``2a − 2b``. La différence ``a − b`` n'est alors plus partagée avec la forme
-    avant, ce qui coûte deux opérations par composante et par paire dans le
-    gradient. Remettre ``2(a − b)`` en facteur est exact (multiplier par 2^k
-    commute avec l'arrondi), hors dépassement de capacité ou résultats
-    sous-normaux. Les autres coefficients ne sont pas touchés : leur mise en
-    facteur changerait l'arrondi.
+    symox distributes numbers over sums: ``∂(a − b)²/∂a`` becomes
+    ``2a − 2b``. The difference ``a − b`` is then no longer shared with the
+    forward formula, which costs two operations per component and per pair in
+    the gradient. Factoring ``2(a − b)`` back is exact (multiplying by 2^k
+    commutes with rounding), barring overflow or subnormal results. Other
+    coefficients are left alone: factoring them out would change the rounding.
     """
     import symox
 
@@ -103,7 +104,7 @@ def _factor_pow2(expr):
 
 
 def derivative(expr, symbol):
-    """``∂expr/∂symbol`` selon les règles du module."""
+    """``∂expr/∂symbol`` following the rules of this module."""
     import symox
 
     return _factor_pow2(_smooth(symox.diff(expr, symbol)))
@@ -120,13 +121,13 @@ def _fresh_name(plan: Plan, base: str) -> str:
 
 @dataclass(frozen=True)
 class GradientPlans:
-    """Plans de gradient d'un plan SUM.
+    """Gradient plans of a SUM plan.
 
-    ``grad_name`` : nom de l'entrée ``G`` (M, E). ``i_plan`` (ou None) : sorties
-    ``i_layout`` = ((nom d'arg, rôle, dim), ...) dans l'ordre des colonnes ;
-    les args de rôle ``param`` donnent des contributions par ligne i à sommer.
-    ``j_plan`` (ou None) : réduction sur i (rôles échangés), sorties
-    ``j_layout`` pour les args j.
+    ``grad_name``: name of the ``G`` input (M, E). ``i_plan`` (or None): outputs
+    ``i_layout`` = ((arg name, role, dim), ...) in column order; args with role
+    ``param`` yield per-row (i) contributions that must be summed.
+    ``j_plan`` (or None): reduction over i (roles swapped), outputs
+    ``j_layout`` for the j args.
     """
 
     grad_name: str
@@ -137,18 +138,18 @@ class GradientPlans:
 
 
 def gradient_plans(plan: Plan, wrt) -> GradientPlans:
-    """Construit les plans de gradient de ``plan`` (SUM) par rapport aux args ``wrt``."""
+    """Builds the gradient plans of ``plan`` (SUM) with respect to the args ``wrt``."""
     import symox
 
     if plan.reduction.kind is not ReductionKind.SUM:
-        raise UnsupportedError(f"{plan.reduction.kind.value} n'est pas différentiable (seule SUM l'est)")
+        raise UnsupportedError(f"{plan.reduction.kind.value} is not differentiable (only SUM is)")
     wrt = set(wrt)
     gname = _fresh_name(plan, "kp_grad")
     E = len(plan.outputs)
     gsyms = tuple(component_symbol(gname, e) for e in range(E))
 
     def side(roles, targets):
-        """Plan d'une passe : ``roles`` donne le nouveau rôle de chaque rôle d'origine."""
+        """Plan of one pass: ``roles`` maps each original role to its new role."""
         if not targets:
             return None, ()
         outputs, layout = [], []
@@ -172,16 +173,16 @@ def gradient_plans(plan: Plan, wrt) -> GradientPlans:
 
 
 # --------------------------------------------------------------------------
-# LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT : plan SUM substitut
+# LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT: surrogate SUM plan
 # --------------------------------------------------------------------------
 SURROGATE_KINDS = (ReductionKind.LOGSUMEXP, ReductionKind.LOGSUMEXPWEIGHT, ReductionKind.SUMSOFTMAXWEIGHT)
 
 
 @dataclass
 class Surrogate:
-    """Plan SUM dont le gradient, sorties de la passe avant tenues fixes, est
-    celui de ``plan`` ; ``fixed`` : ((nom, dim, source), ...), source ``"out"``
-    (sortie avant) ou ``"lse"`` (log Σ_j exp f, réduction LOGSUMEXP ``lse_plan``)."""
+    """SUM plan whose gradient, with the forward outputs held fixed, is that of
+    ``plan``; ``fixed``: ((name, dim, source), ...), source ``"out"`` (forward
+    output) or ``"lse"`` (log Σ_j exp f, LOGSUMEXP reduction ``lse_plan``)."""
 
     plan: Plan
     fixed: tuple
@@ -189,16 +190,16 @@ class Surrogate:
 
 
 def surrogate(plan: Plan) -> Surrogate:
-    """Gradients des réductions de type softmax (sortie avant ``L``, ``O`` fixe) :
+    """Gradients of softmax-type reductions (forward output ``L``, ``O`` held fixed):
 
-    - LOGSUMEXP ``L_e = log Σ_j exp f_e`` : ``∂L_e = Σ_j exp(f_e − L_e) ∂f_e``,
-      gradient de ``Σ_j exp(f_e − L_e)`` à ``L`` fixé ;
-    - LOGSUMEXPWEIGHT ``L_e = log Σ_j exp(f) g_e`` : gradient de
-      ``Σ_j exp(f − L_e) g_e`` ;
-    - SUMSOFTMAXWEIGHT ``O_e = Σ_j w_j g_e``, ``w = exp(f − S)``, ``S = log Σ exp f`` :
-      ``∂O_e = Σ_j w (∂g_e + (g_e − O_e) ∂f)``, gradient de ``Σ_j exp(f − S)(g_e − O_e)``.
+    - LOGSUMEXP ``L_e = log Σ_j exp f_e``: ``∂L_e = Σ_j exp(f_e − L_e) ∂f_e``,
+      the gradient of ``Σ_j exp(f_e − L_e)`` with ``L`` fixed;
+    - LOGSUMEXPWEIGHT ``L_e = log Σ_j exp(f) g_e``: the gradient of
+      ``Σ_j exp(f − L_e) g_e``;
+    - SUMSOFTMAXWEIGHT ``O_e = Σ_j w_j g_e``, ``w = exp(f − S)``, ``S = log Σ exp f``:
+      ``∂O_e = Σ_j w (∂g_e + (g_e − O_e) ∂f)``, the gradient of ``Σ_j exp(f − S)(g_e − O_e)``.
 
-    Une ligne sans contribution (``L = −∞``) a un gradient nul (et non NaN).
+    A row with no contribution (``L = −∞``) has a zero gradient (not NaN).
     """
     import symox
 
@@ -229,7 +230,7 @@ def surrogate(plan: Plan) -> Surrogate:
         extra = [(sname, S, "lse"), (oname, O, "out")]
         lse_plan = dataclasses.replace(plan, outputs=(f,), reduction=PlanReduction(ReductionKind.LOGSUMEXP))
     else:
-        raise UnsupportedError(f"{kind.value} : pas de plan substitut")
+        raise UnsupportedError(f"{kind.value}: no surrogate plan")
     args = list(plan.args) + [Arg(name, "i", len(syms), syms) for name, syms, _ in extra]
     args.sort(key=lambda a: (_ROLE_ORDER[a.role], a.name))
     p = make_plan(new, ReductionKind.SUM, plan.dtype, args=args, acc_dtype=plan.acc_dtype,
@@ -240,7 +241,7 @@ def surrogate(plan: Plan) -> Surrogate:
 
 
 # --------------------------------------------------------------------------
-# MIN, MAX, KMIN (et valeurs de MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN) : indice retenu
+# MIN, MAX, KMIN (and values of MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN): selected index
 # --------------------------------------------------------------------------
 SELECT_KINDS = {
     ReductionKind.MIN: ReductionKind.ARGMIN, ReductionKind.MAX: ReductionKind.ARGMAX,
@@ -250,20 +251,20 @@ SELECT_KINDS = {
 
 
 def index_plan(plan: Plan) -> Plan:
-    """Plan des indices retenus par une réduction MIN/MAX/KMIN (passe avant du gradient)."""
+    """Plan of the indices selected by a MIN/MAX/KMIN reduction (forward pass of the gradient)."""
     kind = SELECT_KINDS[plan.reduction.kind]
     return dataclasses.replace(plan, reduction=PlanReduction(kind, plan.reduction.k))
 
 
 class SelectGradient:
-    """Gradient d'une réduction par sélection : seul le terme retenu dépend des entrées.
+    """Gradient of a selection reduction: only the selected term depends on the inputs.
 
-    ``v[i, c] = F_e(x_i, y_{j*(i, c)}, p)`` (``e = c`` pour MIN/MAX, ``e = 0``
-    et ``c = k`` pour KMIN) : ``∂L/∂x_i = Σ_c G[i, c] ∂F_e/∂x`` au couple
-    retenu, ``∂L/∂y_j = Σ_{(i, c) : j*(i, c) = j} G[i, c] ∂F_e/∂y``. Les dérivées
-    symboliques sont évaluées par Torch **sur les seuls couples retenus**
-    (O(M·C), jamais M×N) ; un indice −1 (aucun candidat) ne contribue pas.
-    À égalité, le gradient va à l'indice retenu (le plus petit j), comme PyKeOps.
+    ``v[i, c] = F_e(x_i, y_{j*(i, c)}, p)`` (``e = c`` for MIN/MAX, ``e = 0``
+    and ``c = k`` for KMIN): ``∂L/∂x_i = Σ_c G[i, c] ∂F_e/∂x`` at the selected
+    pair, ``∂L/∂y_j = Σ_{(i, c): j*(i, c) = j} G[i, c] ∂F_e/∂y``. The symbolic
+    derivatives are evaluated by Torch **on the selected pairs only**
+    (O(M·C), never M×N); an index of −1 (no candidate) does not contribute.
+    On ties, the gradient goes to the selected index (the smallest j), as in PyKeOps.
     """
 
     def __init__(self, plan: Plan, wrt):
@@ -341,11 +342,11 @@ def _make_function():
     import torch
 
     class KpSum(torch.autograd.Function):
-        """Passe avant : réduction SUM ; passe arrière : réductions de gradient fusionnées.
+        """Forward pass: SUM reduction; backward pass: fused gradient reductions.
 
-        La passe arrière appelle des :class:`~kernox.runtime.Reduction`, elles-mêmes
-        différentiables : avec ``create_graph=True``, les dérivées d'ordre 2
-        passent par le même mécanisme.
+        The backward pass calls :class:`~kernox.runtime.Reduction` objects, which
+        are differentiable themselves: with ``create_graph=True``, second-order
+        derivatives go through the same mechanism.
         """
 
         @staticmethod
@@ -365,7 +366,7 @@ def _make_function():
             return (None, None, *(grads.get(n) for n in names))
 
     class KpNonDifferentiable(torch.autograd.Function):
-        """Réductions sans gradient défini (sorties entières : COUNT, ARG*) : refus explicite."""
+        """Reductions with no defined gradient (integer outputs: COUNT, ARG*): explicit refusal."""
 
         @staticmethod
         def forward(ctx, red, names, *tensors):
@@ -378,12 +379,12 @@ def _make_function():
         @staticmethod
         def backward(ctx, *grads):
             raise UnsupportedError(
-                f"{ctx.kind} n'est pas différentiable dans Kernox : "
-                "détacher les entrées ou reformuler la perte")
+                f"{ctx.kind} is not differentiable in Kernox: "
+                "detach the inputs or reformulate the loss")
 
     class KpSurrogate(torch.autograd.Function):
-        """LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT : gradient par le plan SUM
-        substitut (:func:`surrogate`), réductions fusionnées. Ordre 1 seulement."""
+        """LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT: gradient through the surrogate
+        SUM plan (:func:`surrogate`), fused reductions. First order only."""
 
         @staticmethod
         def forward(ctx, red, names, *tensors):
@@ -402,9 +403,9 @@ def _make_function():
             return (None, None, *(grads.get(n) for n in names))
 
     class KpSelect(torch.autograd.Function):
-        """MIN, MAX, KMIN (et valeurs de MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN) :
-        gradient au terme retenu (:class:`SelectGradient`). Ordre 1 seulement ;
-        les indices ne sont pas différentiables."""
+        """MIN, MAX, KMIN (and values of MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN):
+        gradient at the selected term (:class:`SelectGradient`). First order only;
+        the indices are not differentiable."""
 
         @staticmethod
         def forward(ctx, red, names, *tensors):
@@ -436,7 +437,7 @@ _FUNCTIONS = None
 
 
 def functions():
-    """``(KpSum, KpNonDifferentiable)`` (compatibilité)."""
+    """``(KpSum, KpNonDifferentiable)`` (compatibility)."""
     return _all()[:2]
 
 
@@ -448,7 +449,7 @@ def _all():
 
 
 def function_for(kind: ReductionKind):
-    """Fonction ``torch.autograd`` de la réduction ``kind``."""
+    """``torch.autograd`` function of the reduction ``kind``."""
     kp_sum, kp_nondiff, kp_surrogate, kp_select = _all()
     if kind is ReductionKind.SUM:
         return kp_sum

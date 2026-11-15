@@ -1,11 +1,11 @@
-"""Constructeur de :class:`kernox.plan.Plan` (noyau, utilisable sans frontend).
+"""Builder for :class:`kernox.plan.Plan` (core, usable without a frontend).
 
-Ce module est la seule voie recommandée pour fabriquer un ``Plan`` : il valide
-le plan (noms, rôles, symboles liés, types booléens, K, dtypes) et applique les
-règles de conversion des constantes vers ``dtype`` (cf. ``docs/numerics.md``,
-section « Constants »).
+This module is the only recommended way to build a ``Plan``: it validates the
+plan (names, roles, bound symbols, boolean types, K, dtypes) and applies the
+rules for converting constants to ``dtype`` (see ``docs/numerics.md``,
+section "Constants").
 
-Exemple minimal (backends, tests) ::
+Minimal example (backends, tests)::
 
     from kernox.builder import make_arg, make_plan
     from kernox.plan import ReductionKind
@@ -27,18 +27,18 @@ from .plan import SUM_SCHEMES, Arg, DType, Plan, Reduction, ReductionKind
 
 _DTYPES = ("float16", "float32", "float64")
 _RANK = {"float16": 0, "float32": 1, "float64": 2}
-#: accumulateurs permis par dtype (comme PyKeOps : FP16 -> FP16 ou FP32, FP32 -> FP32 ou FP64)
+#: accumulators allowed per dtype (as in PyKeOps: FP16 -> FP16 or FP32, FP32 -> FP32 or FP64)
 _ACC_ALLOWED = {"float16": ("float16", "float32"), "float32": ("float32", "float64"), "float64": ("float64",)}
 _ROLES = ("i", "j", "param")
 _K_KINDS = (ReductionKind.KMIN, ReductionKind.ARGKMIN, ReductionKind.KMIN_ARGKMIN)
 _ACC_KINDS = (ReductionKind.SUM, ReductionKind.LOGSUMEXP, ReductionKind.SUMSOFTMAXWEIGHT,
               ReductionKind.LOGSUMEXPWEIGHT)
-# Plus grande valeur finie et plus petit sous-normal positif par dtype.
+# Largest finite value and smallest positive subnormal per dtype.
 _FMAX = {"float16": 65504.0, "float32": float.fromhex("0x1.fffffep+127"), "float64": float.fromhex("0x1.fffffffffffffp+1023")}
 
 
 def component_symbol(name: str, index: int):
-    """Symbole symox scalaire réel de la composante ``index`` de l'argument ``name``."""
+    """Real scalar symox symbol for component ``index`` of argument ``name``."""
     import symox
 
     return symox.Symbol(f"{name}[{index}]", real=True)
@@ -46,24 +46,24 @@ def component_symbol(name: str, index: int):
 
 def check_name(name) -> str:
     if not isinstance(name, str) or not name.isidentifier() or not name.isascii():
-        raise ValidationError(f"nom d'argument invalide {name!r} : identifiant ASCII requis")
+        raise ValidationError(f"invalid argument name {name!r}: an ASCII identifier is required")
     if keyword.iskeyword(name) or name.startswith(("_kp", "_sx")):
-        raise ValidationError(f"nom d'argument réservé : {name!r}")
+        raise ValidationError(f"reserved argument name: {name!r}")
     return name
 
 
 def make_arg(name: str, role: str, dim: int = 1) -> Arg:
-    """Fabrique un :class:`Arg` et ses symboles de composantes."""
+    """Builds an :class:`Arg` and its component symbols."""
     check_name(name)
     if role not in _ROLES:
-        raise ValidationError(f"rôle invalide {role!r} (attendu : {_ROLES})")
+        raise ValidationError(f"invalid role {role!r} (expected one of {_ROLES})")
     if isinstance(dim, bool) or not isinstance(dim, int) or dim < 1:
-        raise ValidationError(f"dimension invalide {dim!r} pour {name!r} : entier >= 1 requis")
+        raise ValidationError(f"invalid dimension {dim!r} for {name!r}: an integer >= 1 is required")
     return Arg(name, role, dim, tuple(component_symbol(name, c) for c in range(dim)))
 
 
 def is_boolean(expr) -> bool:
-    """Vrai si l'expression symox est booléenne (même règle que les printers symox)."""
+    """True if the symox expression is boolean (same rule as the symox printers)."""
     from symox import _core
 
     return _core._sycl_type(expr) == "bool"
@@ -71,14 +71,14 @@ def is_boolean(expr) -> bool:
 
 def check_k(k) -> int:
     if isinstance(k, bool) or not isinstance(k, int):
-        raise ValidationError(f"K doit être un entier Python, reçu {k!r}")
+        raise ValidationError(f"K must be a Python int, got {k!r}")
     if k < 0:
-        raise ValidationError(f"K doit être >= 0, reçu {k}")
+        raise ValidationError(f"K must be >= 0, got {k}")
     return k
 
 
 # --------------------------------------------------------------------------
-# Constantes
+# Constants
 # --------------------------------------------------------------------------
 
 
@@ -91,64 +91,65 @@ def _round_to(value: float, dtype: DType) -> float:
         return float(np.float16(value) if dtype == "float16" else np.float32(value))
 
 
-def convert_float(value: float, dtype: DType, what: str = "constante") -> float:
-    """Arrondi au plus proche (pair) d'un ``float`` Python vers ``dtype``.
+def convert_float(value: float, dtype: DType, what: str = "constant") -> float:
+    """Rounds a Python ``float`` to ``dtype`` (round to nearest, ties to even).
 
-    Erreur si le résultat déborde (|x| fini > max du dtype) ou si une valeur
-    non nulle s'arrondit à zéro. ``inf``/``nan`` explicites sont conservés.
+    Raises if the result overflows (finite |x| > dtype max) or if a nonzero
+    value rounds to zero. Explicit ``inf``/``nan`` are kept.
     """
     if math.isnan(value) or math.isinf(value):
         return value
     rounded = _round_to(value, dtype)
     if math.isinf(rounded):
-        raise ConstantConversionError(f"{what} {value!r} non représentable en {dtype} (dépassement)")
+        raise ConstantConversionError(f"{what} {value!r} not representable in {dtype} (overflow)")
     if rounded == 0.0 and value != 0.0:
-        raise ConstantConversionError(f"{what} {value!r} non représentable en {dtype} (s'arrondit à 0)")
+        raise ConstantConversionError(f"{what} {value!r} not representable in {dtype} (rounds to 0)")
     return rounded
 
 
 def _exact_to_float(fr: Fraction, what) -> float:
     try:
-        return float(fr)  # arrondi correct en binary64
+        return float(fr)  # correctly rounded to binary64
     except OverflowError:
-        raise ConstantConversionError(f"{what} non représentable en float64 (dépassement)") from None
+        raise ConstantConversionError(f"{what} not representable in float64 (overflow)") from None
 
 
 def convert_constants(expr, dtype: DType):
-    """Applique la politique des constantes du plan à une expression symox.
+    """Applies the plan's constant policy to a symox expression.
 
-    - ``Float`` : arrondi une fois vers ``dtype`` (au plus proche, pair), le
-      ``Float`` résultant (précision 53 bits) porte exactement la valeur du
-      dtype ; le printer l'émet avec assez de chiffres pour l'identifier.
-      Un ``Float`` de précision > 53 bits est d'abord arrondi en binary64.
-    - ``Rational``/``Integer`` exacts : conservés exacts (les printers émettent
-      ``p/q`` dans le dtype, ce qui donne l'arrondi correct de p/q quand p et q
-      sont représentables) ; seule leur représentabilité est vérifiée.
-    - Dépassement ou underflow d'une valeur non nulle vers 0 :
+    - ``Float``: rounded once to ``dtype`` (to nearest, ties to even); the
+      resulting ``Float`` (53-bit precision) holds exactly the dtype value;
+      the printer emits it with enough digits to identify it.
+      A ``Float`` with more than 53 bits of precision is first rounded to
+      binary64.
+    - Exact ``Rational``/``Integer``: kept exact (the printers emit ``p/q``
+      in the dtype, which yields the correctly rounded p/q when p and q are
+      representable); only their representability is checked.
+    - Overflow, or underflow of a nonzero value to 0:
       :class:`ConstantConversionError`.
     """
     import symox
 
     if dtype not in _DTYPES:
-        raise ValidationError(f"dtype invalide {dtype!r}")
+        raise ValidationError(f"invalid dtype {dtype!r}")
     replacements = {}
     for atom in expr.atoms(symox.Number):
         if atom.is_Float:
             value = float(atom)
-            what = f"constante {atom}"
+            what = f"constant {atom}"
             new = convert_float(value, dtype, what)
             if new != value or getattr(atom, "_prec", 53) != 53:
                 replacements[atom] = symox.Float(new)
         elif atom.is_Rational:
             p, q = int(atom.p), int(atom.q)
-            what = f"constante {atom}"
+            what = f"constant {atom}"
             for part in {p, q} - {0, 1, -1}:
                 convert_float(_exact_to_float(Fraction(part), what), dtype, what)
             convert_float(_exact_to_float(Fraction(p, q), what), dtype, what)
         elif atom.is_finite is False or atom is symox.nan:
             continue
-        else:  # nombres non réels (I...) ou inconnus
-            raise UnsupportedError(f"constante non réelle ou non prise en charge : {atom}")
+        else:  # non-real (I...) or unknown numbers
+            raise UnsupportedError(f"non-real or unsupported constant: {atom}")
     return expr.xreplace(replacements) if replacements else expr
 
 
@@ -158,26 +159,26 @@ def convert_constants(expr, dtype: DType):
 
 
 def realify(expr):
-    """Ramène à l'arithmétique réelle IEEE les artefacts complexes du moteur.
+    """Maps the engine's complex artifacts back to real IEEE arithmetic.
 
-    Toutes les variables Kernox sont réelles, mais le moteur symbolique (comme
-    SymPy) distribue les fonctions sur les branches d'un ``Piecewise`` et ne
-    sait pas toujours prouver qu'une branche gardée est réelle :
+    All Kernox variables are real, but the symbolic engine (like SymPy)
+    distributes functions over the branches of a ``Piecewise`` and cannot
+    always prove that a guarded branch is real:
 
-    - ``sqrt(where(c, a, -1.5))`` devient ``Piecewise((sqrt(a), c), (1.22*I, True))``
-      et ``1/where(c, x, 0)`` fait apparaître ``zoo`` ; dans les valeurs de
-      branche, ``I`` et ``zoo`` sont remplacés par ``nan``, qui est le résultat
-      réel IEEE (``sqrt(-1.5)``, ``0/0``) ; une branche ainsi atteinte est hors
-      domaine et c'est le ``where`` englobant qui l'écarte ;
-    - ``abs(exp(z))`` devient ``exp(re(z))`` : ``re(a)`` vaut ``a`` et ``im(a)``
-      vaut 0 pour une expression réelle (sans ``I``).
+    - ``sqrt(where(c, a, -1.5))`` becomes ``Piecewise((sqrt(a), c), (1.22*I, True))``
+      and ``1/where(c, x, 0)`` introduces ``zoo``; in branch values, ``I`` and
+      ``zoo`` are replaced with ``nan``, which is the real IEEE result
+      (``sqrt(-1.5)``, ``0/0``); a branch reached this way is out of domain
+      and the enclosing ``where`` discards it;
+    - ``abs(exp(z))`` becomes ``exp(re(z))``: ``re(a)`` is ``a`` and ``im(a)``
+      is 0 for a real expression (without ``I``).
 
-    Un ``I`` ou ``zoo`` hors de toute branche reste refusé par :func:`make_plan`.
+    An ``I`` or ``zoo`` outside any branch is still rejected by :func:`make_plan`.
     """
     import symox
 
     bad = {symox.I: symox.nan, symox.zoo: symox.nan}
-    memo = {}  # DAG partagé : chaque sous-expression une seule fois (sinon exponentiel)
+    memo = {}  # shared DAG: each subexpression only once (exponential otherwise)
 
     def walk(e):
         if not e.args:
@@ -209,17 +210,17 @@ def realify(expr):
 
 
 def fold_constants(expr):
-    """Évalue numériquement les sous-expressions constantes non atomiques.
+    """Numerically evaluates non-atomic constant subexpressions.
 
-    ``cos(1)``, ``sqrt(2)``, ``log(3)`` restent symboliques dans le moteur et
-    seraient imprimés tels quels ; ``cos(1)`` en double est ambigu pour NVRTC
-    (surcharges ``cos(float)``/``cos(double)`` pour un argument entier). La
-    valeur est calculée en précision étendue puis arrondie au dtype par
+    ``cos(1)``, ``sqrt(2)``, ``log(3)`` stay symbolic in the engine and would
+    be printed as is; ``cos(1)`` in double is ambiguous for NVRTC
+    (``cos(float)``/``cos(double)`` overloads for an integer argument). The
+    value is computed in extended precision, then rounded to the dtype by
     :func:`convert_constants`.
     """
     import symox
 
-    memo = {}  # DAG partagé : chaque sous-expression une seule fois (sinon exponentiel)
+    memo = {}  # shared DAG: each subexpression only once (exponential otherwise)
 
     def walk(e):
         if not e.args:
@@ -255,106 +256,106 @@ def make_plan(
     meta: dict | None = None,
     fast_math: bool = False,
 ) -> Plan:
-    """Construit et valide un :class:`Plan`.
+    """Builds and validates a :class:`Plan`.
 
-    ``outputs`` : séquence d'expressions symox scalaires (ou Python/booléens).
-    ``reduction`` : :class:`ReductionKind`, sa valeur (``"sum"``...) ou
-    :class:`Reduction`. ``args`` : séquence d':class:`Arg`, conservée dans
-    l'ordre donné (le frontend fournit l'ordre canonique i, j, param puis nom).
-    ``fp_contract`` : contraction FMA intra-expression permise (contrat v0.3).
-    ``fast_math`` (avenant v0.10) : exp/log approchés permis (opt-in, défaut IEEE).
-    ``sum_scheme`` : ``"direct"``, ``"block"`` ou ``"kahan"`` (avenant v0.7) ; ``None`` :
-    défaut, ``"block"`` pour FP16 accumulé en FP16 (comme PyKeOps), ``"direct"`` sinon.
+    ``outputs``: sequence of scalar symox expressions (or Python values/booleans).
+    ``reduction``: :class:`ReductionKind`, its value (``"sum"``...) or a
+    :class:`Reduction`. ``args``: sequence of :class:`Arg`, kept in the given
+    order (the frontend provides the canonical order i, j, param, then name).
+    ``fp_contract``: intra-expression FMA contraction allowed (contract v0.3).
+    ``fast_math`` (amendment v0.10): approximate exp/log allowed (opt-in, IEEE by default).
+    ``sum_scheme``: ``"direct"``, ``"block"`` or ``"kahan"`` (amendment v0.7); ``None``:
+    default, ``"block"`` for FP16 accumulated in FP16 (as in PyKeOps), ``"direct"`` otherwise.
     """
     import symox
 
     if not isinstance(fast_math, bool):
-        raise ValidationError(f"fast_math doit être un booléen, reçu {fast_math!r}")
+        raise ValidationError(f"fast_math must be a bool, got {fast_math!r}")
     if not isinstance(fp_contract, bool):
-        raise ValidationError(f"fp_contract doit être un booléen, reçu {fp_contract!r}")
+        raise ValidationError(f"fp_contract must be a bool, got {fp_contract!r}")
     if sum_scheme is not None and sum_scheme not in SUM_SCHEMES:
-        raise ValidationError(f"sum_scheme invalide {sum_scheme!r} (attendu : {SUM_SCHEMES})")
+        raise ValidationError(f"invalid sum_scheme {sum_scheme!r} (expected one of {SUM_SCHEMES})")
     if dtype not in _DTYPES:
-        raise ValidationError(f"dtype invalide {dtype!r} (attendu : {_DTYPES})")
+        raise ValidationError(f"invalid dtype {dtype!r} (expected one of {_DTYPES})")
 
     if isinstance(reduction, Reduction):
         if k is not None and k != reduction.k:
-            raise ValidationError("K donné deux fois avec des valeurs différentes")
+            raise ValidationError("K given twice with different values")
         kind, k = reduction.kind, reduction.k
     else:
         try:
             kind = ReductionKind(reduction)
         except ValueError:
-            raise ValidationError(f"réduction inconnue {reduction!r}") from None
+            raise ValidationError(f"unknown reduction {reduction!r}") from None
     if kind in _K_KINDS:
         if k is None:
-            raise ValidationError(f"K requis pour {kind.value}")
+            raise ValidationError(f"K is required for {kind.value}")
         k = check_k(k)
     elif k is not None:
-        raise ValidationError(f"K n'a pas de sens pour {kind.value}")
+        raise ValidationError(f"K is meaningless for {kind.value}")
     if acc_dtype is None:
-        # avenant v0.9 : FP16 accumule en FP32 par défaut (SUM et familles LOGSUMEXP)
+        # amendment v0.9: FP16 accumulates in FP32 by default (SUM and LOGSUMEXP families)
         acc_dtype = "float32" if dtype == "float16" and kind in _ACC_KINDS else dtype
     if acc_dtype not in _DTYPES:
-        raise ValidationError(f"acc_dtype invalide {acc_dtype!r}")
+        raise ValidationError(f"invalid acc_dtype {acc_dtype!r}")
     if _RANK[acc_dtype] < _RANK[dtype]:
-        raise ValidationError(f"acc_dtype {acc_dtype} inférieur à dtype {dtype}")
+        raise ValidationError(f"acc_dtype {acc_dtype} is narrower than dtype {dtype}")
     if acc_dtype not in _ACC_ALLOWED[dtype]:
-        raise ValidationError(f"acc_dtype {acc_dtype} non permis pour dtype {dtype} "
-                              f"(attendu : {_ACC_ALLOWED[dtype]}, comme PyKeOps)")
+        raise ValidationError(f"acc_dtype {acc_dtype} not allowed for dtype {dtype} "
+                              f"(expected one of {_ACC_ALLOWED[dtype]}, as in PyKeOps)")
     if sum_scheme is None:
-        # avenant v0.9 (c) : acc_dtype="float16" reproduit PyKeOps (half, block_sum)
+        # amendment v0.9 (c): acc_dtype="float16" reproduces PyKeOps (half, block_sum)
         sum_scheme = "block" if acc_dtype == "float16" and kind in _ACC_KINDS else "direct"
     if acc_dtype != dtype and kind not in _ACC_KINDS:
-        raise ValidationError("acc_dtype distinct de dtype n'est défini que pour SUM, LOGSUMEXP, "
-                              "SUMSOFTMAXWEIGHT et LOGSUMEXPWEIGHT")
+        raise ValidationError("acc_dtype different from dtype is only defined for SUM, LOGSUMEXP, "
+                              "SUMSOFTMAXWEIGHT and LOGSUMEXPWEIGHT")
 
     args = tuple(args)
     seen_names, seen_symbols = set(), set()
     for a in args:
         if not isinstance(a, Arg):
-            raise ValidationError(f"argument {a!r} n'est pas un kernox.plan.Arg")
+            raise ValidationError(f"argument {a!r} is not a kernox.plan.Arg")
         check_name(a.name)
         if a.role not in _ROLES:
-            raise ValidationError(f"rôle invalide {a.role!r} pour {a.name!r}")
+            raise ValidationError(f"invalid role {a.role!r} for {a.name!r}")
         if isinstance(a.dim, bool) or not isinstance(a.dim, int) or a.dim < 1 or len(a.symbols) != a.dim:
-            raise ValidationError(f"dimension/symboles incohérents pour {a.name!r}")
+            raise ValidationError(f"inconsistent dimension/symbols for {a.name!r}")
         if a.name in seen_names:
-            raise ValidationError(f"nom d'argument dupliqué : {a.name!r}")
+            raise ValidationError(f"duplicate argument name: {a.name!r}")
         seen_names.add(a.name)
         for s in a.symbols:
             if not isinstance(s, symox.Symbol) or s in seen_symbols:
-                raise ValidationError(f"symbole invalide ou dupliqué {s!r} dans {a.name!r}")
+                raise ValidationError(f"invalid or duplicate symbol {s!r} in {a.name!r}")
             seen_symbols.add(s)
     if not any(a.role == "i" for a in args) or not any(a.role == "j" for a in args):
         raise UnsupportedError(
-            "v0 : la formule doit dépendre d'au moins une variable i et une variable j "
-            "(sinon M ou N ne peut être déduit des entrées)"
+            "v0: the formula must depend on at least one i variable and one j variable "
+            "(otherwise M or N cannot be inferred from the inputs)"
         )
 
     exprs = tuple(symox.sympify(e) for e in outputs)
     if not exprs:
-        raise ValidationError("au moins une sortie est requise")
+        raise ValidationError("at least one output is required")
     exprs = tuple(realify(e) for e in exprs)
     for e in exprs:
         unbound = e.free_symbols - seen_symbols
         if unbound:
-            raise ValidationError("symboles non déclarés : " + ", ".join(sorted(map(str, unbound))))
+            raise ValidationError("undeclared symbols: " + ", ".join(sorted(map(str, unbound))))
         if e.has(symox.I) or e.has(symox.zoo):
-            raise UnsupportedError(f"expression non réelle : {e}")
+            raise UnsupportedError(f"non-real expression: {e}")
     booleans = [is_boolean(e) for e in exprs]
     if kind is ReductionKind.COUNT:
         if not all(booleans):
-            raise ValidationError("COUNT exige des sorties booléennes")
+            raise ValidationError("COUNT requires boolean outputs")
     elif any(booleans):
         raise ValidationError(
-            f"{kind.value} exige des sorties réelles ; utiliser where(...) ou sum_over sur un "
-            "prédicat (COUNT)"
+            f"{kind.value} requires real outputs; use where(...) or sum_over on a "
+            "predicate (COUNT)"
         )
     if kind in (ReductionKind.SUMSOFTMAXWEIGHT, ReductionKind.LOGSUMEXPWEIGHT) and len(exprs) < 2:
-        raise ValidationError(f"{kind.name} : sorties (f, g_1, ..., g_E) avec E >= 1")
+        raise ValidationError(f"{kind.name}: outputs (f, g_1, ..., g_E) with E >= 1")
     if kind in _K_KINDS and len(exprs) != 1:
-        raise UnsupportedError(f"{kind.value} : formule scalaire uniquement en v0 (out_dim={len(exprs)})")
+        raise UnsupportedError(f"{kind.value}: scalar formula only in v0 (out_dim={len(exprs)})")
 
     exprs = tuple(convert_constants(fold_constants(e), dtype) for e in exprs)
     return Plan(

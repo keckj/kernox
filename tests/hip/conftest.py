@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 torch = pytest.importorskip("torch")
 
 if torch.version.hip is None or not torch.cuda.is_available():
-    pytest.skip("Torch ROCm + GPU AMD requis pour tests/hip", allow_module_level=True)
+    pytest.skip("Torch ROCm + AMD GPU required for tests/hip", allow_module_level=True)
 
 
 @pytest.fixture(scope="session", autouse=True)

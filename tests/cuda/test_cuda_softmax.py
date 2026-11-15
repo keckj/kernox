@@ -1,9 +1,9 @@
-"""LOGSUMEXP / SUMSOFTMAXWEIGHT sur le backend CUDA (contrat v0.5).
+"""LOGSUMEXP / SUMSOFTMAXWEIGHT on the CUDA backend (contract v0.5).
 
-Partition de j forcée (première moitié de j à f = −inf : tranches entièrement
-vides, états partiels neutres), tuiles minuscules, valeurs 1e4 / −1e4 / ±inf /
-NaN par ligne, acc_dtype FP64, fp_contract on/off, SSMW à grand E en FP64.
-Référence : oracle Torch FP64 du noyau sur les entrées arrondies au dtype.
+Forced j partition (first half of j at f = −inf: fully empty slices,
+neutral partial states), tiny tiles, values 1e4 / −1e4 / ±inf /
+NaN per row, acc_dtype FP64, fp_contract on/off, large-E SSMW in FP64.
+Reference: the core FP64 Torch oracle on inputs rounded to the dtype.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 import kernox as kp  # noqa: E402
 from kernox.backends.base import Variant  # noqa: E402
@@ -40,7 +40,7 @@ def _inputs(M, N, seed=0, E=3):
     x = torch.randn(M, 1, generator=g, dtype=torch.float64)
     x[1], x[2], x[3], x[4], x[5] = 1e4, -1e4, INF, -INF, NAN
     y = 3 * torch.randn(N, 1, generator=g, dtype=torch.float64)
-    y[: N // 2] = INF                     # première moitié de j : f = −inf (tranches vides)
+    y[: N // 2] = INF                     # first half of j: f = −inf (empty slices)
     w = torch.randn(N, E, generator=g, dtype=torch.float64)
     return {"x": x, "y": y, "w": w}
 
@@ -77,7 +77,7 @@ def _close(got, ref, dtype, N):
     assert torch.equal(torch.isnan(got), torch.isnan(ref)), (got, ref)
     assert torch.equal(got[~fin & ~torch.isnan(ref)], ref[~fin & ~torch.isnan(ref)])
     u = 2.0 ** -24 if dtype == "float32" else 2.0 ** -53
-    # |f| <= 1e4 + 10 : erreur des termes u·|f| (arrondi de f dans le dtype) + sommation
+    # |f| <= 1e4 + 10: term error u·|f| (rounding of f to the dtype) + summation
     tol = 4 * u * (2e4 + 20) + 8 * N * u * (1 + ref[fin].abs())
     assert torch.all((got[fin].double() - ref[fin]).abs() <= tol), (got[fin] - ref[fin]).abs().max()
 
@@ -98,7 +98,7 @@ def test_split_special_rows(opts, dtype, name):
         assert cr.launch_config(37, N)[0] > 1
     ref = _ref(plan, host)
     _close(got, ref, dtype, N)
-    # couverture : x = ±1e4 finis (décalage), x = +inf (inf − inf : NaN), x = −inf (tous −inf), NaN
+    # coverage: finite x = ±1e4 (shift), x = +inf (inf − inf: NaN), x = −inf (all −inf), NaN
     assert torch.isfinite(ref[1]).all() and torch.isfinite(ref[2]).all() and torch.isnan(ref[3]).all()
     assert torch.isnan(ref[5]).all()
     assert (ref[4] == -INF).all() if name != "ssmw" else torch.isnan(ref[4]).all()
@@ -107,7 +107,7 @@ def test_split_special_rows(opts, dtype, name):
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("name", list(_exprs()))
 def test_pos_inf_and_empty_rows(dtype, name):
-    """y sans +inf : x = +inf donne f = +inf partout (LSE +inf, SSMW NaN) ; N = 0 et 1."""
+    """y without +inf: x = +inf gives f = +inf everywhere (LSE +inf, SSMW NaN); N = 0 and 1."""
     plan = _exprs()[name].to_plan(dtype)
     for N in (0, 1, 300):
         host = _inputs(9, max(N, 1), seed=N)
@@ -124,7 +124,7 @@ def test_pos_inf_and_empty_rows(dtype, name):
 
 
 def test_nan_weight_on_dead_term_ignored():
-    """g NaN sur un terme de poids nul (f = −inf) : ignoré ; sur un terme vivant : NaN."""
+    """NaN g on a zero-weight term (f = −inf): ignored; on a live term: NaN."""
     plan = _exprs()["ssmw"].to_plan("float64")
     host = {"x": torch.zeros(2, 1, dtype=torch.float64),
             "y": torch.tensor([[INF], [0.0], [1.0]], dtype=torch.float64),
@@ -149,8 +149,8 @@ def test_large_mn_split_auto(dtype, name):
 
 @pytest.mark.parametrize("name", ["lse", "ssmw"])
 def test_fp32_acc_fp64(name):
-    # Termes f = x − y : une seule soustraction FP32, arrondie à l'identique sur GPU et par
-    # Torch CPU ; seule l'erreur d'accumulation FP64 subsiste.
+    # Terms f = x − y: a single FP32 subtraction, rounded identically on the GPU and by
+    # Torch CPU; only the FP64 accumulation error remains.
     x, y, w = kp.Vi("x", 1), kp.Vj("y", 1), kp.Vj("w", 3)
     expr = (x - y).logsumexp(over="j") if name == "lse" else (x - y).sumsoftmaxweight(w, over="j")
     plan = expr.to_plan("float32", acc_dtype="float64")
@@ -187,8 +187,8 @@ def test_fp_contract_modes(dtype):
 
 @pytest.mark.parametrize("E", [16, 64])
 def test_ssmw_fp64_large_e(E):
-    """SSMW FP64 à grand E : état (2 + E) doubles par thread ; le kernel doit rester
-    résident (pas d'échec de lancement) et exact, avec ou sans partition."""
+    """FP64 SSMW with large E: (2 + E) doubles of state per thread; the kernel must stay
+    resident (no launch failure) and exact, with or without partition."""
     plan = _exprs(E)["ssmw"].to_plan("float64")
     N = 3000
     host = _inputs(50, N, seed=E, E=E)

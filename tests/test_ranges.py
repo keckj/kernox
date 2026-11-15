@@ -1,4 +1,4 @@
-"""Ranges block-sparse (avenant v0.6 §2) : Ranges, validation, runtime, oracle, autograd (CPU)."""
+"""Block-sparse ranges (v0.6 amendment §2): Ranges, validation, runtime, oracle, autograd (CPU)."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _formulas():
 
 
 def _dense_reference(kind, X, Y, Bw, mask):
-    """Référence dense masquée (FP64), sémantique du contrat (neutres, plus petit j)."""
+    """Masked dense reference (FP64), contract semantics (neutral elements, smallest j)."""
     D = ((X[:, None, :] - Y[None, :, :]) ** 2).sum(-1)
     inf = math.inf
     if kind == "sum":
@@ -56,7 +56,7 @@ def _dense_reference(kind, X, Y, Bw, mask):
         return torch.where(mask, D, torch.full_like(D, inf)).amin(1, keepdim=True)
     if kind == "argmax":
         Dm = torch.where(mask, D, torch.full_like(D, -inf))
-        idx = Dm.argmax(1)  # premier maximum
+        idx = Dm.argmax(1)  # first maximum
         return torch.where(mask.any(1), idx, torch.full_like(idx, -1))[:, None]
     if kind == "kmin_argkmin":
         Dm = torch.where(mask, D, torch.full_like(D, inf))
@@ -79,16 +79,16 @@ def _inputs(m, n, integer, seed=1):
     return X, Y, torch.randn(n, 2, dtype=F64, generator=g)
 
 
-# ------------------------------------------------------------------ objets
+# ------------------------------------------------------------------ objects
 def test_plan_key_and_ranges_object():
     plan = _formulas()["sum"].to_plan("float32")
     assert plan.ranges is False
     assert dataclasses.replace(plan, ranges=True).key() != plan.key()
     r = Ranges.dense(3, 4)
     assert r.has_transpose and r.slices_i.tolist() == [1]
-    with pytest.raises(ValidationError, match="complet ou absent"):
+    with pytest.raises(ValidationError, match="complete or absent"):
         Ranges(r.ranges_i, r.slices_i, r.redranges_j, ranges_j=r.ranges_j)
-    with pytest.raises(ValidationError, match="int32 ou int64"):
+    with pytest.raises(ValidationError, match="int32 or int64"):
         Ranges(r.ranges_i.float(), r.slices_i, r.redranges_j)
     with pytest.raises(ValidationError, match=r"\(C, 2\)"):
         Ranges(r.ranges_i.reshape(-1), r.slices_i, r.redranges_j)
@@ -118,7 +118,7 @@ def test_ranges_from_labels_matches_mask():
         for cc, d in r.redranges_i[k0:int(r.slices_j[c])].tolist():
             gotT[a:b, cc:d] = True
     assert torch.equal(gotT, mask.T)
-    with pytest.raises(ValidationError, match="croissantes"):
+    with pytest.raises(ValidationError, match="non-decreasing"):
         ranges_from_labels(torch.tensor([1, 0]), lj, keep)
 
 
@@ -137,7 +137,7 @@ def test_dense_ranges_equal_plain_call(kind):
 @pytest.mark.parametrize("density", [1.0, 0.5, 0.05, 0.0])
 @pytest.mark.parametrize("kind", list(_formulas()))
 def test_label_masks_match_dense_reference(kind, density):
-    m, n = 300, 2600  # blocs plus hauts que la tuile ; intervalles plus longs que 1024
+    m, n = 300, 2600  # blocks taller than the tile; intervals longer than 1024
     li, lj, keep, mask = _clusters(m, n, 3, 4, density, seed=3)
     X, Y, Bw = _inputs(m, n, integer=kind not in ("sum", "logsumexp"))
     run = kp.compile(_formulas()[kind], dtype="float64", backend="oracle")
@@ -153,11 +153,11 @@ def test_label_masks_match_dense_reference(kind, density):
 
 
 def test_uncovered_rows_empty_blocks_and_unordered_intervals():
-    # lignes 0-3 non couvertes ; bloc vide [4, 4) ; intervalles dans le désordre
+    # rows 0-3 not covered; empty block [4, 4); intervals out of order
     r = Ranges(torch.tensor([[4, 4], [4, 9]]), torch.tensor([0, 2]), torch.tensor([[6, 10], [0, 3]]))
     run = kp.compile(_formulas()["argmax"], dtype="float64", backend="oracle")
     X = torch.zeros(9, 2, dtype=F64)
-    Y = torch.ones(10, 2, dtype=F64)  # toutes les distances égales : plus petit j de J = 0
+    Y = torch.ones(10, 2, dtype=F64)  # all distances equal: smallest j of J = 0
     out = run.with_ranges(r, validate=True)(x=X, y=Y)
     assert out[:, 0].tolist() == [-1] * 4 + [0] * 5
     s = kp.compile(_formulas()["sum"], dtype="float64", backend="oracle").with_ranges(r)
@@ -182,10 +182,10 @@ def test_sizes_zero():
 
 
 @pytest.mark.parametrize("bad,msg", [
-    (Ranges(torch.tensor([[0, 5], [3, 8]]), torch.tensor([1, 2]), torch.tensor([[0, 2], [0, 2]])), "recouvrent"),
-    (Ranges(torch.tensor([[0, 5]]), torch.tensor([2]), torch.tensor([[0, 4], [3, 6]])), "même bloc"),
-    (Ranges(torch.tensor([[0, 11]]), torch.tensor([1]), torch.tensor([[0, 2]])), "hors de"),
-    (Ranges(torch.tensor([[0, 5]]), torch.tensor([1]), torch.tensor([[0, 30]])), "hors de"),
+    (Ranges(torch.tensor([[0, 5], [3, 8]]), torch.tensor([1, 2]), torch.tensor([[0, 2], [0, 2]])), "overlapping row blocks"),
+    (Ranges(torch.tensor([[0, 5]]), torch.tensor([2]), torch.tensor([[0, 4], [3, 6]])), "within a block"),
+    (Ranges(torch.tensor([[0, 11]]), torch.tensor([1]), torch.tensor([[0, 2]])), "outside"),
+    (Ranges(torch.tensor([[0, 5]]), torch.tensor([1]), torch.tensor([[0, 30]])), "outside"),
     (Ranges(torch.tensor([[0, 5]]), torch.tensor([3]), torch.tensor([[0, 2]])), "slices"),
 ])
 def test_validate_rejects_bad_ranges(bad, msg):
@@ -196,23 +196,23 @@ def test_validate_rejects_bad_ranges(bad, msg):
 
 
 @pytest.mark.parametrize("bad", [
-    Ranges(torch.tensor([[0, 11]]), torch.tensor([1]), torch.tensor([[0, 2]])),        # lignes > M
-    Ranges(torch.tensor([[-1, 5]]), torch.tensor([1]), torch.tensor([[0, 2]])),        # lignes < 0
+    Ranges(torch.tensor([[0, 11]]), torch.tensor([1]), torch.tensor([[0, 2]])),        # rows > M
+    Ranges(torch.tensor([[-1, 5]]), torch.tensor([1]), torch.tensor([[0, 2]])),        # rows < 0
     Ranges(torch.tensor([[0, 5]]), torch.tensor([1]), torch.tensor([[0, 30]])),        # j > N
     Ranges(torch.tensor([[0, 5]]), torch.tensor([1]), torch.tensor([[-4, 2]])),        # j < 0
     Ranges(torch.tensor([[0, 5]]), torch.tensor([3]), torch.tensor([[0, 2]])),         # slices > R
-    Ranges(torch.tensor([[0, 5]]), torch.tensor([1]), torch.tensor([[0, 2**62]])),     # boucle sans fin
+    Ranges(torch.tensor([[0, 5]]), torch.tensor([1]), torch.tensor([[0, 2**62]])),     # endless loop
 ])
 def test_bounds_checked_without_validate(bad):
-    """Contrôle des bornes toujours actif (un noyau ne doit jamais lire hors des tenseurs)."""
+    """Bounds checking is always on (a kernel must never read outside the tensors)."""
     run = kp.compile(_formulas()["sum"], dtype="float64", backend="oracle")
     X, Y, Bw = _inputs(10, 20, integer=False)
-    with pytest.raises(ValidationError, match="hors bornes"):
+    with pytest.raises(ValidationError, match="out of bounds"):
         run.with_ranges(bad)(x=X, y=Y, b=Bw)
 
 
 def test_bounds_ignore_empty_tiles_and_intervals():
-    """Intervalle vide (d ≤ c) et bloc vide : jamais parcourus, donc acceptés."""
+    """Empty interval (d ≤ c) and empty block: never traversed, hence accepted."""
     run = kp.compile(_formulas()["sum"], dtype="float64", backend="oracle")
     X, Y, Bw = _inputs(10, 20, integer=False)
     r = Ranges(torch.tensor([[0, 5], [7, 7]]), torch.tensor([2, 2]), torch.tensor([[0, 3], [99, 99]]))
@@ -270,14 +270,14 @@ def test_j_gradient_requires_transposed_triplet():
     X = torch.randn(6, 2, dtype=F64, requires_grad=True)
     Y = torch.randn(7, 2, dtype=F64, requires_grad=True)
     Bw = torch.randn(7, 2, dtype=F64)
-    with pytest.raises(UnsupportedError, match="triplet transposé"):
+    with pytest.raises(UnsupportedError, match="transposed triplet"):
         run(x=X, y=Y, b=Bw).sum().backward()
     X.grad = None
-    run(x=X, y=Y.detach(), b=Bw).sum().backward()  # côté i seulement : accepté
+    run(x=X, y=Y.detach(), b=Bw).sum().backward()  # i side only: accepted
     assert X.grad.shape == (6, 2)
 
 
-# ------------------------------------------- backends sans ranges : refus
+# --------------------------------- backends without ranges: refusal
 class _NoRanges:
     name = "noranges"
 
@@ -286,11 +286,11 @@ class _NoRanges:
 
     def supports(self, plan, device):
         if self.honest and plan.ranges:
-            return Support(False, "ranges (avenant v0.6) non implémentés")
+            return Support(False, "ranges (v0.6 amendment) not implemented")
         return Support(True)
 
-    def compile(self, plan, device):  # pragma: no cover - jamais atteint
-        raise AssertionError("ne doit pas compiler")
+    def compile(self, plan, device):  # pragma: no cover - never reached
+        raise AssertionError("must not compile")
 
 
 @pytest.mark.parametrize("honest", [True, False])

@@ -1,4 +1,4 @@
-"""Autotuning (contrat v0.2) avec un faux backend à variantes, sur CPU."""
+"""Autotuning (v0.2 contract) with a fake multi-variant backend, on CPU."""
 import json
 import logging
 import threading
@@ -23,9 +23,9 @@ def cache(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def simulated_timer(monkeypatch):
-    """Durées simulées par le faux backend : tests déterministes même sur machine chargée.
+    """Durations simulated by the fake backend: deterministic tests even on a loaded machine.
 
-    Le vrai minuteur (événements GPU) est couvert par ``test_gpu_event_timer_on_current_stream``.
+    The real timer (GPU events) is covered by ``test_gpu_event_timer_on_current_stream``.
     """
     def run(self, fn):
         fn()
@@ -49,13 +49,13 @@ class FakeCompiled:
         self.backend.launches.append(self.variant.name)
         FakeCompiled.last_ms = 1e3 * self.backend.delay(index)
         self.ref.launch(inputs, outputs, batch=batch, ranges=ranges)
-        # étiquette la variante dans le résultat (faux backend : sémantique non pertinente)
+        # tags the variant in the result (fake backend: semantics are irrelevant)
         outputs["value"] += 1000 * index
 
 
 class FakeVariantBackend:
     name = "fakev"
-    batch = True    # avenant v0.6 : délégués à l'oracle
+    batch = True    # v0.6 amendment: delegated to the oracle
     ranges = True
 
     def __init__(self, delays=(0.012, 0.003, 0.006), n_variants=None, jitter=False):
@@ -122,7 +122,7 @@ def test_estimate_never_measures_nor_reads_wisdom():
     out = reduction("estimate")(**d)
     assert fake.launches == ["v0"]
     torch.testing.assert_close(out, exact(d))
-    reduction("measure")(**d)  # wisdom réelle : v1
+    reduction("measure")(**d)  # actual wisdom: v1
     assert tuning.export_wisdom()["devices"]
     run = reduction("estimate")
     n = len(fake.launches)
@@ -138,18 +138,18 @@ def test_measure_picks_fastest_persists_and_returns_its_result():
     dec = run.last_decision
     assert dec.source == "measured" and dec.variant["name"] == "v1" and dec.stable and dec.persisted
     assert dec.candidates == 3 and len(dec.measurements) == 3
-    assert fake.launches[-1] == "v1"  # dernier lancement : variante retenue, sorties réelles
-    torch.testing.assert_close(out, exact(d) + 1000)  # résultat issu de v1
-    # même classe de taille : ni nouvelle mesure ni recompilation
+    assert fake.launches[-1] == "v1"  # last launch: selected variant, real outputs
+    torch.testing.assert_close(out, exact(d) + 1000)  # result produced by v1
+    # same size class: no new measurement, no recompilation
     n_launch, n_compile = len(fake.launches), len(fake.compiles)
     run(**data(m=7, n=15))
     assert len(fake.launches) == n_launch + 1 and len(fake.compiles) == n_compile
-    # nouvel objet : wisdom relue, aucune mesure
+    # new object: wisdom read back, no measurement
     run2 = reduction("measure")
     run2(**d)
     assert run2.last_decision.source == "wisdom" and fake.launches[-1] == "v1"
     assert len(fake.launches) == n_launch + 2
-    # wisdom_only lit la même entrée ; autre classe de taille sans wisdom -> estimate
+    # wisdom_only reads the same entry; another size class without wisdom -> estimate
     w = reduction("wisdom_only")
     w(**d)
     assert w.last_decision.source == "wisdom"
@@ -173,11 +173,11 @@ def test_half_octave_classes():
 
     assert size_class(1000, 1000) == size_class(1024, 1000) != size_class(1100, 1000)
     assert size_class(0, 1) == (0, 0, 0, 0)
-    # wisdom v3 : nb et densité des ranges en demi-octaves
+    # wisdom v3: nb and ranges density in half-octaves
     assert size_class(8, 16, 1, 1.0) == (6, 8, 0, 0)
     assert size_class(8, 16, 4, 0.25) == (6, 8, 4, 4)
     assert size_class(8, 16, 3, 0.3) == (6, 8, 4, 4) != size_class(8, 16, 3, 0.05)
-    assert size_class(8, 16, 1, 0.0) == size_class(8, 16, 1, 1 / 128)  # ρ = 0 : une paire
+    assert size_class(8, 16, 1, 0.0) == size_class(8, 16, 1, 1 / 128)  # ρ = 0: one pair
 
 
 def test_patient_does_not_reuse_measure_wisdom():
@@ -192,7 +192,7 @@ def test_patient_does_not_reuse_measure_wisdom():
     assert p.last_decision.source == "measured" and len(fake.launches) > before + 1
     m = reduction("measure")
     m(**data())
-    assert m.last_decision.source == "wisdom"  # entrée patient réutilisable par measure
+    assert m.last_decision.source == "wisdom"  # patient entry reusable by measure
 
 
 def test_version_change_invalidates_wisdom():
@@ -214,7 +214,7 @@ def test_unstable_measurement_is_not_persisted(caplog):
         out = run(**data())
     dec = run.last_decision
     assert dec.source == "measured" and not dec.stable and not dec.persisted
-    assert "instable" in caplog.text
+    assert "unstable" in caplog.text
     torch.testing.assert_close(out, exact(data()) + 1000 * int(dec.variant["name"][1:]))
     assert tuning.export_wisdom()["devices"] == {}
     w = reduction("wisdom_only")
@@ -231,7 +231,7 @@ def test_candidate_bound_truncates_and_logs(level, limit, caplog):
     dec = run.last_decision
     assert dec.candidates == limit and dec.truncated_from == 40
     assert len(dec.measurements) <= limit
-    assert "tronqués" in caplog.text
+    assert "truncated" in caplog.text
     assert len(set(fake.compiles)) <= limit
 
 
@@ -240,7 +240,7 @@ def test_budget_bounds_measurement(monkeypatch):
     monkeypatch.setitem(tuning.BUDGET_SECONDS, "measure", 0.0)
     run = reduction("measure")
     run(**data())
-    assert len(run.last_decision.measurements) == 1  # au moins la variante par défaut
+    assert len(run.last_decision.measurements) == 1  # at least the default variant
 
 
 def test_backend_without_variants_falls_back_explicitly(caplog):
@@ -262,19 +262,19 @@ def test_export_import_forget_and_invalid_entries(cache):
     run = reduction("wisdom_only")
     run(**data())
     assert run.last_decision.source == "wisdom"
-    # entrée altérée (clé incohérente) ou fichier corrompu : ignorés
+    # tampered entry (inconsistent key) or corrupted file: ignored
     (dev,) = exported["devices"].values()
     key = next(iter(dev["entries"]))
     dev["entries"][key]["size_class"] = [9, 9]
     tuning.forget_wisdom()
     assert tuning.import_wisdom(exported) == 0
     for f in (cache / "wisdom").glob("wisdom-*.json"):
-        f.write_text("{corrompu")
+        f.write_text("{corrupted")
     run = reduction("wisdom_only")
     run(**data())
     assert run.last_decision.source == "estimate"
     with pytest.raises(ValueError):
-        tuning.import_wisdom({"format": "autre"})
+        tuning.import_wisdom({"format": "other"})
 
 
 def test_concurrent_stores_are_atomic():
@@ -295,7 +295,7 @@ def test_concurrent_stores_are_atomic():
 
 
 @pytest.mark.gpu
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="Torch CUDA/ROCm absent")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="Torch CUDA/ROCm not available")
 def test_gpu_event_timer_on_current_stream():
     dev = torch.device("cuda", torch.cuda.current_device())
     timer = tuning._Timer(dev)
@@ -306,7 +306,7 @@ def test_gpu_event_timer_on_current_stream():
 
 
 def test_batched_plans_are_measured_per_batch_class():
-    """Wisdom v3 : plus de repli ``fallback`` pour les plans batchés ; ``nb`` dans la classe."""
+    """Wisdom v3: no more ``fallback`` for batched plans; ``nb`` is part of the class."""
     fake = install()
     run = reduction("measure")
     g = torch.Generator().manual_seed(1)
@@ -317,7 +317,7 @@ def test_batched_plans_are_measured_per_batch_class():
     assert dec.size_class == (6, 8, 4, 0)
     want = torch.stack([exact(dict(x=x[b], y=y[b])) for b in range(4)])
     torch.testing.assert_close(out, want + 1000)
-    # autre nb (classe différente) : nouvelle mesure ; même nb : wisdom relue par un nouvel objet
+    # other nb (different class): new measurement; same nb: wisdom read back by a new object
     run(x=x[:1], y=y[:1])
     assert {d.size_class for d in run._batched[1].tuning_decisions} == {(6, 8, 4, 0), (6, 8, 0, 0)}
     run2 = reduction("wisdom_only")
@@ -342,7 +342,7 @@ def test_ranged_plans_are_measured_per_density_class():
     dense = run.with_ranges(kp.Ranges.dense(16, 16, "cpu"))
     dense(**d)
     assert run._ranged.last_decision.size_class == (8, 8, 0, 0)
-    # estimate : la densité n'est jamais calculée (pas de synchronisation)
+    # estimate: the density is never computed (no synchronization)
     est = reduction("estimate").with_ranges(kp.ranges_from_labels(labels, labels, torch.eye(4, dtype=torch.bool)))
     est(**d)
     assert est.red._ranged.last_decision.size_class == (8, 8, 0, 0)

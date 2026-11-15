@@ -1,1 +1,1 @@
-"""Génération de code du noyau (fonction de paire par dialecte)."""
+"""Kernel code generation (pair function per dialect)."""

@@ -61,15 +61,15 @@ def test_errors_before_launch():
     x, y, w, sigma, d2, g = gaussian()
     run = kp.compile((g * w).sum_over("j"), dtype="float64", backend="oracle")
     d = data()
-    with pytest.raises(ValidationError, match="manquants"):
+    with pytest.raises(ValidationError, match="missing arguments"):
         run(x=d["x"], y=d["y"], sigma=1.0)
-    with pytest.raises(ValidationError, match="inattendus"):
+    with pytest.raises(ValidationError, match="unexpected"):
         run(**d, sigma=1.0, z=1)
     with pytest.raises(ValidationError, match="dtype"):
         run(**{**d, "x": d["x"].float()}, sigma=1.0)
-    with pytest.raises(ValidationError, match="contigu"):
+    with pytest.raises(ValidationError, match="contiguous"):
         run(**{**d, "x": torch.randn(3, 6, dtype=torch.float64).t()}, sigma=1.0)
-    with pytest.raises(ValidationError, match="forme"):
+    with pytest.raises(ValidationError, match="shape"):
         run(**{**d, "x": torch.randn(6, 2, dtype=torch.float64)}, sigma=1.0)
     with pytest.raises(ValidationError, match="N="):
         run(**{**d, "w": torch.randn(4, 1, dtype=torch.float64)}, sigma=1.0)
@@ -81,7 +81,7 @@ def test_errors_before_launch():
         run(**d, sigma=True)
     with pytest.raises(ValidationError):
         run(**d, sigma=[1.0, 2.0])
-    # SUM différentiable depuis la v0.4 (tests/test_autograd.py)
+    # SUM is differentiable since v0.4 (tests/test_autograd.py)
     assert run(**{**d, "x": d["x"].clone().requires_grad_()}, sigma=1.0).requires_grad
     with torch.no_grad():
         run(**{**d, "x": d["x"].clone().requires_grad_()}, sigma=1.0)
@@ -102,7 +102,7 @@ def test_backend_selection_is_explicit():
     with pytest.raises(TypeError):
         kp.compile(x * y, dtype="float32")
     with pytest.raises(TypeError):
-        kp.compile(r)  # dtype obligatoire
+        kp.compile(r)  # dtype is required
 
 
 def test_native_backend_missing_is_explicit():
@@ -110,7 +110,7 @@ def test_native_backend_missing_is_explicit():
     x, y = Vi("x"), Vj("y")
     for name in ("cuda", "hip", "sycl"):
         if importlib.util.find_spec(f"kernox.backends.{name}") is None:
-            with pytest.raises(BackendUnavailableError, match="aucun repli"):
+            with pytest.raises(BackendUnavailableError, match="no fallback"):
                 kp.compile((x * y).sum_over("j"), dtype="float32", backend=name)
 
 
@@ -132,7 +132,7 @@ class FakeBackend:
         self.calls, self.compiles = [], 0
 
     def supports(self, plan, device):
-        return Support(plan.dtype == "float32", "float32 seulement")
+        return Support(plan.dtype == "float32", "float32 only")
 
     def compile(self, plan, device):
         self.compiles += 1
@@ -148,17 +148,17 @@ def test_registry_validation_and_output_allocation():
     xs, ys = torch.randn(4, 2), torch.randn(3, 2)
     with pytest.raises(ValidationError):
         run(x=xs.double(), y=ys)
-    assert fake.calls == []  # aucune validation ratée n'atteint le backend
+    assert fake.calls == []  # no failed validation reaches the backend
     v, i = run(x=xs, y=ys)
     assert fake.calls[-1][1] == {"value": ((4, 5), torch.float32), "index": ((4, 5), torch.int64)}
     run(x=xs, y=ys)
-    assert fake.compiles == 1  # cache par device
+    assert fake.compiles == 1  # per-device cache
     n = len(fake.calls)
-    v, i = run(x=xs[:0], y=ys)  # M = 0 : pas de lancement
+    v, i = run(x=xs[:0], y=ys)  # M = 0: no launch
     assert v.shape == (0, 5) and len(fake.calls) == n
     v, i = kp.compile(d2.kmin_argkmin(0, over="j"), dtype="float32", backend="fake")(x=xs, y=ys)
-    assert v.shape == (4, 0) and len(fake.calls) == n  # K = 0 : pas de lancement
-    with pytest.raises(UnsupportedError, match="float32 seulement"):
+    assert v.shape == (4, 0) and len(fake.calls) == n  # K = 0: no launch
+    with pytest.raises(UnsupportedError, match="float32 only"):
         kp.compile(d2.sum_over("j"), dtype="float64", backend="fake")(x=xs.double(), y=ys.double())
 
 
@@ -219,7 +219,7 @@ def test_call_caches_keep_validation_and_param_values():
     with pytest.raises(ValidationError):
         run(x=X, y=Y, s=True)
     with pytest.raises(ValidationError):
-        run(x=X, y=torch.ones(3, 2, dtype=torch.float64)[:, :1], s=0.5)  # non contigu
+        run(x=X, y=torch.ones(3, 2, dtype=torch.float64)[:, :1], s=0.5)  # not contiguous
     with pytest.raises(ValidationError):
         run(x=X, y=Y)
     assert run(x=torch.ones(5, 1, dtype=torch.float64), y=Y, s=0.5).shape == (5, 1)

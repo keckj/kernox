@@ -1,6 +1,6 @@
-"""Correction du backend CUDA sur GPU réel (référence Torch locale).
+"""Correctness of the CUDA backend on a real GPU (local Torch reference).
 
-À remplacer/compléter par l'oracle du noyau quand il est livré.
+To be replaced/extended by the core oracle once it is delivered.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 from kernox.backends.base import UnsupportedError  # noqa: E402
 from kernox.backends.cuda import CudaBackend  # noqa: E402
@@ -87,7 +87,7 @@ def test_sum_nan_propagates():
 @pytest.mark.parametrize("dtype", ["float64", "float32"])
 def test_count(dtype):
     tdt = getattr(torch, dtype)
-    # coordonnées entières : distances exactes, rayon exactement atteint
+    # integer coordinates: exact distances, radius reached exactly
     g = torch.Generator().manual_seed(3)
     x = torch.randint(0, 6, (257, 3), generator=g).to(DEV, tdt)
     y = torch.randint(0, 6, (3001, 3), generator=g).to(DEV, tdt)
@@ -96,7 +96,7 @@ def test_count(dtype):
     plan = make_plan([("x", "i", 3), ("y", "j", 3), ("r2", "param", 1)], 1, "count", dtype, tag="c")
     out, _ = run(CudaBackend(pair_from(count_body)), plan, {"x": x, "y": y, "r2": r2}, 257)
     d2 = sqdist_ref(x.cpu().double(), y.cpu().double())
-    ref = (d2 <= 4.0).sum(1, keepdim=True)  # NaN <= 4 est faux
+    ref = (d2 <= 4.0).sum(1, keepdim=True)  # NaN <= 4 is false
     assert out["value"].dtype == torch.int64
     assert torch.equal(out["value"].cpu(), ref)
 
@@ -110,7 +110,7 @@ def test_count(dtype):
 def test_minmax_two_components(kind, dtype, M, N):
     tdt = getattr(torch, dtype)
     g = torch.Generator().manual_seed(M + N)
-    # petits entiers : nombreuses égalités exactes
+    # small integers: many exact ties
     x = torch.randint(-3, 4, (M, 2), generator=g).to(DEV, tdt)
     y = torch.randint(-3, 4, (N, 2), generator=g).to(DEV, tdt)
     y[1, 0] = float("nan")
@@ -126,12 +126,12 @@ def test_minmax_two_components(kind, dtype, M, N):
 
 
 def test_arg_all_nan_and_inf():
-    # ligne 0 : que des NaN -> -1 / +inf ; ligne 1 : +inf valide -> indice >= 0
+    # row 0: all NaN -> -1 / +inf; row 1: valid +inf -> index >= 0
     x = torch.tensor([[0.0], [1.0]], dtype=torch.float64, device=DEV)
     nan, inf = float("nan"), float("inf")
     y = torch.tensor([[nan], [inf], [nan]], dtype=torch.float64, device=DEV)
 
-    def body(plan, T):  # ligne 0 -> NaN partout ; ligne 1 -> y_j
+    def body(plan, T):  # row 0 -> NaN everywhere; row 1 -> y_j
         return " r.o0 = (a0[0] == 0.0) ? (" + T + ")NAN : a1[0];"
 
     be = CudaBackend(pair_from(body))
@@ -166,7 +166,7 @@ def test_kmin_ties(kind, dtype, K, M, N):
 
 
 def test_kmin_random_float_values_match():
-    # données continues : comparaison des valeurs, cohérence indice -> valeur
+    # continuous data: compare values, check index -> value consistency
     M, N, K = 200, 20000, 16
     x = torch.rand(M, 3, dtype=torch.float64, device=DEV)
     y = torch.rand(N, 3, dtype=torch.float64, device=DEV)
@@ -199,7 +199,7 @@ def test_k_padding_with_inf_candidate():
     assert out["value"].cpu().tolist() == [[3.0, math.inf, math.inf, math.inf]] * 2
 
 
-# ------------------------------------------------------------------ bords
+# ------------------------------------------------------------------ edge cases
 
 
 def test_k_zero_no_launch():
@@ -264,8 +264,8 @@ def test_bad_input_rejected_before_launch():
 
 
 def test_non_default_stream_and_split():
-    """Entrées produites sur un stream non défaut ; lancement sur ce stream ;
-    pas de synchro hôte dans launch ; partition de j active (M petit, N grand)."""
+    """Inputs produced on a non-default stream; launch on that stream;
+    no host sync in launch; j partition active (small M, large N)."""
     be = CudaBackend(pair_from(sqdist_body))
     plan = make_plan([("x", "i", 3), ("y", "j", 3)], 1, "kmin_argkmin", k=4, tag="sq")
     s = torch.cuda.Stream(device=DEV)
@@ -278,7 +278,7 @@ def test_non_default_stream_and_split():
         outs = {n: torch.empty(sh, dtype=getattr(torch, dt), device=DEV)
                 for n, (sh, dt) in output_shapes(plan, 8).items()}
         comp.launch({"x": x, "y": y}, outs)
-        res = outs["value"] + 0  # consommation sur le même stream
+        res = outs["value"] + 0  # consumed on the same stream
     s.synchronize()
     rv = sqdist_ref(x.cpu(), y.cpu()).sort(1).values[:, :4]
     assert torch.allclose(res.cpu(), rv, rtol=1e-12, atol=0)
@@ -286,8 +286,8 @@ def test_non_default_stream_and_split():
 
 @pytest.mark.parametrize("n", [1000, 1003, 37])
 def test_split_reduces_launch_tile(n):
-    """split-policy-3 : N petit devant la tuile, partition active via une tuile
-    de lancement réduite (multiple de 4, >= 16) ; résultat exact (KMIN)."""
+    """split-policy-3: N small compared to the tile, partition enabled through a reduced
+    launch tile (multiple of 4, >= 16); exact result (KMIN)."""
     be = CudaBackend(pair_from(sqdist_body))
     plan = make_plan([("x", "i", 3), ("y", "j", 3)], 1, "kmin_argkmin", k=3, tag="sq")
     comp = be.compile(plan, DEV)
@@ -319,7 +319,7 @@ def test_cache_hit_second_backend(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("kind,k", [("argmin", None), ("kmin_argkmin", 5)])
 def test_wide_index_variant_matches(kind, k):
-    """Variante à indices locaux int64 (utilisée si N >= 2^31) forcée sur un petit cas."""
+    """Variant with int64 local indices (used when N >= 2^31) forced on a small case."""
     g = torch.Generator().manual_seed(9)
     x = torch.randint(0, 4, (50, 3), generator=g).to(DEV, torch.float64)
     y = torch.randint(0, 4, (3000, 3), generator=g).to(DEV, torch.float64)
@@ -338,7 +338,7 @@ def test_wide_index_variant_matches(kind, k):
         assert torch.equal(outs[0][key], outs[1][key])
 
 
-# ------------------------------------------------------------------ variantes (contrat v0.2)
+# ------------------------------------------------------------------ variants (contract v0.2)
 
 
 @pytest.mark.parametrize("effort", ["measure", "patient"])
@@ -374,9 +374,9 @@ def test_variants_same_semantics(effort):
 
 
 def test_split_policy4_auto_factor():
-    """split-policy-4 : "auto" vise 2 vagues pour les listes K >= 8 bon marché
-    (FP32, j <= 16 composantes) ou M très petit ; 4 vagues sinon. Les modes
-    explicites x2/x4 sont des variantes valides et proposées au tuning."""
+    """split-policy-4: "auto" targets 2 waves for cheap K >= 8 lists
+    (FP32, j <= 16 components) or very small M; 4 waves otherwise. The explicit
+    x2/x4 modes are valid variants and are offered to tuning."""
     from kernox.backends.base import Sizes
 
     be = CudaBackend(pair_from(sqdist_body))
@@ -396,9 +396,9 @@ def test_split_policy4_auto_factor():
 
 
 def test_fp_contract_controls_fmad():
-    """Contrat v0.3 : --fmad suit Plan.fp_contract (défaut True) ; l'option fait partie
-    de la clé de cache. x = y = 1 + 2^-30, z = -(1 + 2^-29) en FP64 :
-    sans contraction x*y arrondi = 1 + 2^-29 -> 0 ; avec FMA -> 2^-60 exactement."""
+    """Contract v0.3: --fmad follows Plan.fp_contract (default True); the option is part
+    of the cache key. x = y = 1 + 2^-30, z = -(1 + 2^-29) in FP64:
+    without contraction x*y rounds to 1 + 2^-29 -> 0; with FMA -> exactly 2^-60."""
     from dataclasses import replace
 
     def fma_body(plan, T):
@@ -422,12 +422,12 @@ def test_fp_contract_controls_fmad():
         res[fc] = (o["value"].cpu(), comp.info.source_sha256, comp)
     assert torch.equal(res[True][0], torch.full((4, 1), 2.0 ** -60, dtype=torch.float64))
     assert torch.equal(res[False][0], torch.zeros(4, 1, dtype=torch.float64))
-    assert res[True][2] is not res[False][2]  # clés de cache distinctes (options)
+    assert res[True][2] is not res[False][2]  # distinct cache keys (options)
 
 
 def test_fp_contract_off_through_api():
-    """Contrat v0.3 : le backend déclare fp_contract_off ; l'API accepte fp_contract=False
-    et l'option --fmad=false atteint NVRTC (x*y + z de test_fp_contract_controls_fmad)."""
+    """Contract v0.3: the backend declares fp_contract_off; the API accepts fp_contract=False
+    and the --fmad=false option reaches NVRTC (x*y + z from test_fp_contract_controls_fmad)."""
     import kernox as kp
 
     assert CudaBackend.fp_contract_off is True
@@ -447,9 +447,9 @@ def test_fp_contract_off_through_api():
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 @pytest.mark.parametrize("D", [384, 990, 2000])
 def test_large_dim_global_staging(dtype, D):
-    """Grand D : une ligne j ne tient plus en mémoire partagée (tuile de 16) ; lecture
-    globale directe (staging=global), même résultat que la référence Torch FP64.
-    Conformance : test_min_argmin_chunked (D = 990), qui levait UnsupportedError."""
+    """Large D: one j row no longer fits in shared memory (tile of 16); direct global
+    reads (staging=global), same result as the FP64 Torch reference.
+    Conformance: test_min_argmin_chunked (D = 990), which used to raise UnsupportedError."""
     import kernox as kp
     from kernox.backends.cuda.backend import row_bytes, staging_for
 
@@ -475,8 +475,8 @@ def test_large_dim_global_staging(dtype, D):
 
 
 def test_launch_cache_per_variant():
-    """Coût hôte : configurations de lancement mémorisées par (M, N), propres à chaque
-    variante (with_variant ne partage pas le cache) ; résultats identiques."""
+    """Host cost: launch configurations cached per (M, N), separately for each
+    variant (with_variant does not share the cache); identical results."""
     import kernox as kp
     from kernox.backends.base import Variant
 
@@ -494,4 +494,4 @@ def test_launch_cache_per_variant():
         assert c._lc["configs"][(100, 20000)] == c.launch_config(100, 20000)
         outs[sp] = o[c._outs[0]].clone()
     assert base._lc is not None and all(torch.equal(outs["auto"], v) for v in outs.values())
-    assert base.launch_config(100, 20000)[0] != 1  # la partition est bien exercée
+    assert base.launch_config(100, 20000)[0] != 1  # the partition is actually exercised

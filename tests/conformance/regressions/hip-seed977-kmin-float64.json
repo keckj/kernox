@@ -16,6 +16,6 @@
   "kp.where(kp.ne(kp.where(kp.ne(x[0], y[0]), 0, x[2]), 0), x[2] / kp.where(kp.ne(x[0], y[0]), 0, x[2]), 0)"
  ],
  "backend": "hip",
- "error": "UnsupportedError: expression non réelle : Piecewise((x[2]*Piecewise((zoo, Ne(x[0], y[0])), (1/x[2], True)), ITE(Ne(x[0], y[0]), False, Ne(x[2], 0))), (0, True))",
+ "error": "UnsupportedError: non-real expression: Piecewise((x[2]*Piecewise((zoo, Ne(x[0], y[0])), (1/x[2], True)), ITE(Ne(x[0], y[0]), False, Ne(x[2], 0))), (0, True))",
  "original_seed": 977
 }

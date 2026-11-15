@@ -1,5 +1,5 @@
-"""Opérateurs de dérivation dans la formule (parité PyKeOps : Grad, Diff,
-GradMatrix, Divergence, Laplacian, TraceOperator), contre ``torch.func``."""
+"""Derivative operators inside formulas (PyKeOps parity: Grad, Diff,
+GradMatrix, Divergence, Laplacian, TraceOperator), checked against ``torch.func``."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ F64 = torch.float64
 
 
 def _pairs(formula, **tensors):
-    """Valeur de ``formula`` sur les paires (i, j=0) : y a une seule ligne."""
+    """Value of ``formula`` on the pairs (i, j=0): y has a single row."""
     run = formula.sum_over("j").compile("float64", backend="oracle")
     return run(**{k: v for k, v in tensors.items() if k in formula.variables})
 
@@ -44,7 +44,7 @@ def test_grad_diff_grad_matrix(data):
     torch.testing.assert_close(got, torch.einsum("mkc,mc->mk", J, data["u"]), rtol=1e-12, atol=1e-12)
     got = _pairs(f.grad_matrix(x), **data)
     torch.testing.assert_close(got, J.reshape(6, 9), rtol=1e-12, atol=1e-12)
-    # par rapport à une variable j et à un paramètre
+    # with respect to a j variable and to a parameter
     got = _pairs(f.grad(y, e), **data)
     Jy = torch.stack([torch.func.jacrev(_f_torch, argnums=1)(xi, data["y"][0], data["b"][0]) for xi in data["x"]])
     torch.testing.assert_close(got, torch.einsum("mkc,mk->mc", Jy, data["e"]), rtol=1e-12, atol=1e-12)
@@ -63,7 +63,7 @@ def test_divergence_laplacian(data):
 
 
 def test_trace_operator_of_linear_map(data):
-    """f(v) = A v (A variable j, 3×3) : trace de l'application = trace(A)."""
+    """f(v) = A v (A is a j variable, 3×3): trace of the linear map = trace(A)."""
     x, A = kp.Vi("x", 3), kp.Vj("A", 9)
     f = A.matvecmult(x)
     Am = torch.randn(1, 9, dtype=F64)
@@ -72,7 +72,7 @@ def test_trace_operator_of_linear_map(data):
 
 
 def test_derivative_ops_are_differentiable_formulas(data):
-    """Le résultat est une formule ordinaire : réduite et dérivée à nouveau (ordre 2)."""
+    """The result is an ordinary formula: it can be reduced and differentiated again (order 2)."""
     x, y, b, e = kp.Vi("x", 3), kp.Vj("y", 3), kp.Vj("b", 3), kp.Vi("e", 3)
     X = data["x"].clone().requires_grad_(True)
     out = _pairs(_f_kp(x, y, b).grad(x, e), x=X, y=data["y"], b=data["b"], e=data["e"])
@@ -89,12 +89,12 @@ def test_validation():
     x, y = kp.Vi("x", 3), kp.Vj("y", 3)
     f = (x * y).sum()
     with pytest.raises(ValidationError):
-        f.grad(x * 2, kp.Vi("e", 1))  # pas une variable
+        f.grad(x * 2, kp.Vi("e", 1))  # not a variable
     with pytest.raises(ValidationError):
-        f.grad(x, kp.Vi("e", 2))  # e de la dimension de f
+        f.grad(x, kp.Vi("e", 2))  # e has the dimension of f
     with pytest.raises(ValidationError):
         (x * y).divergence(kp.Vi("z", 2))
     with pytest.raises(ValidationError):
-        (x * y).laplacian(x)  # f non scalaire
+        (x * y).laplacian(x)  # f is not scalar
     with pytest.raises(ValidationError):
         kp.diff(f, x, kp.Vi("u", 2))

@@ -1,16 +1,17 @@
-"""Diagnostics de ressources des kernels hip (registres, spills, LDS, scratch).
+"""Resource diagnostics for hip kernels (registers, spills, LDS, scratch).
 
-Deux sources complémentaires :
+Two complementary sources:
 
-1. ``HipCompiledReduction.resources()`` : attributs du code object **réellement
-   chargé** (hipRTC) via ``hipFuncGetAttribute`` (VGPR, scratch par thread, LDS).
-2. ``resource_remarks(source, flags)`` : remarques
-   ``-Rpass-analysis=kernel-resource-usage`` de l'``amdclang++`` embarqué dans
-   le même paquet ROCm que Torch (même LLVM que hipRTC), sur la même source et
-   les mêmes options : SGPR/VGPR, spills, scratch, occupation.
+1. ``HipCompiledReduction.resources()``: attributes of the code object
+   **actually loaded** (hipRTC), via ``hipFuncGetAttribute`` (VGPRs, scratch
+   per thread, LDS).
+2. ``resource_remarks(source, flags)``: ``-Rpass-analysis=kernel-resource-usage``
+   remarks from the ``amdclang++`` shipped in the same ROCm package as Torch
+   (same LLVM as hipRTC), on the same source with the same options: SGPRs/VGPRs,
+   spills, scratch, occupancy.
 
-Usage : ``python -m kernox.backends.hip.diagnostics`` (compilation seule,
-aucun kernel lancé : utilisable même quand le GPU est occupé).
+Usage: ``python -m kernox.backends.hip.diagnostics`` (compilation only, no
+kernel is launched: usable even while the GPU is busy).
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ def resource_remarks(source: str, flags: list[str], kernel: str = "kp_reduce") -
         src = os.path.join(d, "k.hip")
         with open(src, "w") as f:
             f.write(source)
-        # hipRTC inclut hip_runtime.h d'office ; on le reproduit pour amdclang++.
+        # hipRTC implicitly includes hip_runtime.h; do the same for amdclang++.
         cmd = [clang, "-x", "hip", f"--rocm-path={root}", f"--rocm-device-lib-path={devlib}",
                "-I", os.path.join(root, "include"), "-include", "hip/hip_runtime.h",
                "--offload-device-only", *flags, "-Rpass-analysis=kernel-resource-usage",

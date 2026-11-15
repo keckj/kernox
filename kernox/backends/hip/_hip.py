@@ -1,12 +1,12 @@
-"""Liaisons ctypes minimales vers le runtime HIP et hipRTC **de Torch ROCm**.
+"""Minimal ctypes bindings to the HIP runtime and hipRTC **of Torch ROCm**.
 
-Règle centrale (voir ``docs/backend-hip.md``) : on charge exactement les
-bibliothèques ``libamdhip64`` et ``libhiprtc`` que Torch a déjà chargées dans
-le processus (paquet ``_rocm_sdk_core`` des wheels ROCm officielles, ou
-``torch/lib`` pour les anciennes wheels). Charger un second runtime HIP (par ex.
-``/opt/rocm/lib``) créerait un second état de runtime : contextes, streams et
-allocations de Torch n'y seraient pas valides. ``hip_runtime()`` vérifie donc
-via ``/proc/self/maps`` que la bibliothèque ouverte est bien celle de Torch.
+Core rule (see ``docs/backend-hip.md``): load exactly the ``libamdhip64`` and
+``libhiprtc`` libraries that Torch has already loaded into the process (the
+``_rocm_sdk_core`` package of the official ROCm wheels, or ``torch/lib`` for
+older wheels). Loading a second HIP runtime (e.g. from ``/opt/rocm/lib``) would
+create a second runtime state, in which Torch's contexts, streams and
+allocations would not be valid. ``hip_runtime()`` therefore checks through
+``/proc/self/maps`` that the opened library is indeed Torch's.
 """
 
 from __future__ import annotations
@@ -20,19 +20,20 @@ _lock = threading.Lock()
 _rt = None
 _rtc = None
 
-# hipFunction_attribute (hip/driver_types.h, énumération commençant à 0)
+# hipFunction_attribute (hip/driver_types.h, enumeration starting at 0)
 FUNC_ATTR_MAX_THREADS_PER_BLOCK = 0
 FUNC_ATTR_SHARED_SIZE_BYTES = 1
 FUNC_ATTR_LOCAL_SIZE_BYTES = 3
 FUNC_ATTR_NUM_REGS = 4
 
 
-# Toujours RTLD_LOCAL. Rouvrir avec RTLD_GLOBAL une bibliothèque que Torch a déjà chargée
-# en local la promeut, avec ses dépendances (libamd_comgr → libLLVM.so de _rocm_sdk_core),
-# dans la portée globale. Les constructeurs statiques de ``triton/_C/libtriton.so`` (LLVM
-# embarquée, symboles visibles) se lient alors à ``llvm::cl::Option::addArgument`` de
-# libLLVM.so : SIGSEGV à l'import de torch._dynamo / triton (torch.compile après Kernox).
-# ctypes résout nos symboles par le handle : la portée globale n'est jamais nécessaire.
+# Always RTLD_LOCAL. Reopening with RTLD_GLOBAL a library that Torch already loaded
+# locally promotes it, along with its dependencies (libamd_comgr → libLLVM.so from
+# _rocm_sdk_core), to global scope. The static constructors of ``triton/_C/libtriton.so``
+# (bundled LLVM, visible symbols) then bind to libLLVM.so's
+# ``llvm::cl::Option::addArgument``: SIGSEGV when importing torch._dynamo / triton
+# (torch.compile after Kernox). ctypes resolves our symbols through the handle, so global
+# scope is never needed.
 _DLOPEN_MODE = os.RTLD_LOCAL | os.RTLD_NOW
 
 
@@ -41,7 +42,7 @@ class HipError(RuntimeError):
 
 
 def _loaded_path(fragment: str) -> str | None:
-    """Chemin d'une bibliothèque déjà projetée dans le processus."""
+    """Path of a library already mapped into the process."""
     try:
         with open("/proc/self/maps") as f:
             for line in f:
@@ -57,12 +58,12 @@ def _torch_hip_path(fragment: str) -> str:
     import torch
 
     if torch.version.hip is None:
-        raise HipError("Torch n'est pas une build ROCm (torch.version.hip est None)")
-    # Garantit que Torch a initialisé et projeté son runtime HIP.
+        raise HipError("Torch is not a ROCm build (torch.version.hip is None)")
+    # Make sure Torch has initialized and mapped its HIP runtime.
     torch.cuda.init()
     path = _loaded_path(fragment)
     if path is None and fragment == "libhiprtc":
-        # hipRTC peut être chargé paresseusement : on cherche à côté du runtime.
+        # hipRTC may be loaded lazily: look for it next to the runtime.
         rt = _loaded_path("libamdhip64")
         if rt is not None:
             d = os.path.dirname(rt)
@@ -71,7 +72,7 @@ def _torch_hip_path(fragment: str) -> str:
                     path = os.path.join(d, name)
                     break
     if path is None:
-        raise HipError(f"bibliothèque {fragment} de Torch introuvable dans le processus")
+        raise HipError(f"Torch library {fragment} not found in the process")
     return path
 
 
@@ -103,8 +104,8 @@ class _Runtime:
 
     def check(self, err: int, what: str) -> None:
         if err != 0:
-            # Consomme l'erreur « last error » du runtime : sinon Torch la relève
-            # au prochain contrôle de lancement et l'attribue à son propre kernel.
+            # Consume the runtime's "last error": otherwise Torch picks it up at its
+            # next launch check and attributes it to its own kernel.
             self.lib.hipGetLastError()
             msg = self.lib.hipGetErrorString(err)
             raise HipError(f"{what}: hipError {err} ({msg.decode() if msg else '?'})")
@@ -149,7 +150,7 @@ class _Runtime:
         return v.value
 
     def launch(self, fn, grid: tuple, block: tuple, shmem: int, stream: int, args: list) -> None:
-        """``args`` : objets ctypes (valeurs) ; ils doivent vivre jusqu'au retour."""
+        """``args``: ctypes objects (values); they must stay alive until the call returns."""
         n = len(args)
         params = (ctypes.c_void_p * n)(*[ctypes.cast(ctypes.pointer(a), ctypes.c_void_p) for a in args])
         err = self.lib.hipModuleLaunchKernel(
@@ -190,7 +191,7 @@ class _Rtc:
     def check(self, err: int, what: str, log: str = "") -> None:
         if err != 0:
             msg = self.lib.hiprtcGetErrorString(err)
-            extra = f"\n--- journal hipRTC ---\n{log}" if log else ""
+            extra = f"\n--- hipRTC log ---\n{log}" if log else ""
             raise HipError(f"{what}: hiprtcResult {err} ({msg.decode() if msg else '?'}){extra}")
 
     def version(self) -> tuple[int, int]:
@@ -240,7 +241,7 @@ def hiprtc() -> _Rtc:
 
 
 def same_runtime_as_torch() -> bool:
-    """Vrai si une seule ``libamdhip64`` est projetée et que c'est la nôtre."""
+    """True if exactly one ``libamdhip64`` is mapped and it is ours."""
     rt = hip_runtime()
     paths = set()
     with open("/proc/self/maps") as f:

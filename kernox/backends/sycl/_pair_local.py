@@ -1,16 +1,16 @@
-"""Fonction de paire TEMPORAIRE pour le backend sycl.
+"""TEMPORARY pair function for the sycl backend.
 
-Remplacée par ``kernox.codegen.pair.pair_function(plan, "sycl")`` (noyau)
-dès que celle-ci est disponible ; le backend l'utilise automatiquement s'il existe.
+Superseded by ``kernox.codegen.pair.pair_function(plan, "sycl")`` (core)
+as soon as it is available; the backend uses it automatically when it exists.
 
-Produit la signature du contrat v0 (``docs/kernel-backend-contract.md``) :
+Produces the contract v0 signature (``docs/kernel-backend-contract.md``):
 
-    struct kp_out { T o0; ...; };            // bool pour une sortie booléenne
-    inline kp_out kp_pair(const T* __restrict__ a0, ...);   // ordre de plan.args
+    struct kp_out { T o0; ...; };            // bool for a boolean output
+    inline kp_out kp_pair(const T* __restrict__ a0, ...);   // plan.args order
 
-en enveloppant ``symox.extra.codegen.sycl.syclcode_function`` (arguments
-scalaires par valeur). symox désactive lui-même la CSE globale en présence de
-conditionnelles ; aucune option fast-math n'est émise par symox.
+by wrapping ``symox.extra.codegen.sycl.syclcode_function`` (scalar arguments
+passed by value). symox itself disables global CSE in the presence of
+conditionals; symox emits no fast-math option.
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ class PairSource:
     name: str
     out_type: str
     arg_layout: tuple  # ((name, role, dim), ...)
-    out_types: tuple  # type C++ de chaque champ o0..o{D-1}
+    out_types: tuple  # C++ type of each field o0..o{D-1}
 
 
 def pair_function(plan, dialect: str = "sycl") -> PairSource:
     if dialect != "sycl":
-        raise ValueError("fonction de paire locale : dialecte sycl uniquement")
+        raise ValueError("local pair function: sycl dialect only")
     from symox import _core
     from symox.extra.codegen.sycl import syclcode_function
 

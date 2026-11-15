@@ -1,8 +1,8 @@
-"""Autograd des réductions SUM sur chaque backend GPU présent.
+"""Autograd of SUM reductions on each available GPU backend.
 
-``gradcheck`` FP64 (ordre 1, et ordre 2 sur un cas) et comparaison à Torch
-dense (FP32 et FP64) ; les gradients sont exécutés par le backend lui-même
-(réductions de gradient fusionnées, cf. ``kernox.autograd``).
+FP64 ``gradcheck`` (first order, and second order on one case) and comparison
+with dense Torch (FP32 and FP64); the gradients are run by the backend itself
+(fused gradient reductions, see ``kernox.autograd``).
 """
 
 from __future__ import annotations

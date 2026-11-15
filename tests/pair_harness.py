@@ -1,8 +1,8 @@
-"""Harnais de test : enveloppe ``kp_pair`` dans un kernel « une paire par thread ».
+"""Test harness: wraps ``kp_pair`` in a "one pair per thread" kernel.
 
-Sert uniquement à vérifier que la source de paire compile (NVRTC, hipcc, icpx)
-et, sur GPU NVIDIA, qu'elle calcule les bonnes valeurs. Ce n'est pas un kernel
-de réduction.
+Only used to check that the pair source compiles (NVRTC, hipcc, icpx)
+and, on NVIDIA GPUs, that it computes the right values. This is not a
+reduction kernel.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def _call(ps, plan):
 
 
 def eval_source(plan, dialect):
-    """Unité de compilation complète : pair + kernel ``kp_eval`` (sortie (M, N, D) en T)."""
+    """Complete compilation unit: pair + ``kp_eval`` kernel (output (M, N, D) of type T)."""
     ps = pair_function(plan, dialect)
     T = ps.scalar_type
     params = ", ".join(f"const {T}* __restrict__ {l.param}" for l in ps.arg_layout)
@@ -56,11 +56,11 @@ sycl::event kp_eval(sycl::queue& q, long long M, long long N, {params}, {T}* __r
 """
 
 
-# ---------------------------------------------------------------- compilateurs
+# ---------------------------------------------------------------- compilers
 def nvrtc_default_arch(preferred=52):
-    """Architecture de test : ``preferred`` si la NVRTC chargée la sait encore
-    compiler, sinon la plus ancienne qu'elle supporte (CUDA 13 a retiré
-    sm_52, d'où « invalid value for --gpu-architecture »)."""
+    """Test architecture: ``preferred`` if the loaded NVRTC can still compile
+    for it, otherwise the oldest one it supports (CUDA 13 dropped sm_52,
+    hence "invalid value for --gpu-architecture")."""
     import ctypes as ct
 
     from symox.extra.codegen.cuda import _library
@@ -75,14 +75,14 @@ def nvrtc_default_arch(preferred=52):
         archs = (ct.c_int * n.value)()
         if nvrtc.nvrtcGetSupportedArchs(archs):
             return str(preferred)
-    except AttributeError:  # NVRTC < 11.2 : pas d'introspection, sm_52 encore supporté
+    except AttributeError:  # NVRTC < 11.2: no introspection, sm_52 still supported
         return str(preferred)
     supported = sorted(archs)
     return str(preferred if preferred in supported else supported[0])
 
 
 def nvrtc_compile(source, arch=None):
-    """PTX via NVRTC (symox.extra.codegen.cuda._compile), sans cache."""
+    """PTX via NVRTC (symox.extra.codegen.cuda._compile), uncached."""
     from symox.extra.codegen.cuda import _compile
 
     ptx, _, _ = _compile(source, (), arch or nvrtc_default_arch(), False)
@@ -121,9 +121,9 @@ def icpx_check(source, tmp_path, mode="-fsyntax-only"):
     assert r.returncode == 0, r.stderr[-4000:]
 
 
-# ---------------------------------------------------------------- exécution CUDA
+# ---------------------------------------------------------------- CUDA execution
 def cuda_eval(plan, inputs, device=0):
-    """Évalue toutes les paires sur GPU NVIDIA via le driver CUDA (symox), renvoie (M, N, D)."""
+    """Evaluates all pairs on an NVIDIA GPU through the CUDA driver (symox), returns (M, N, D)."""
     import ctypes as ct
 
     import numpy as np

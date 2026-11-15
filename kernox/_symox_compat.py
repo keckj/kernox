@@ -1,19 +1,19 @@
-"""Détection des capacités de symox utilisées par Kernox.
+"""Detection of the symox capabilities used by Kernox.
 
-Kernox est épinglé sur symox ``53d9576e`` (GitHub main), qui contient les
-extensions de codegen ci-dessous, et reste compatible avec ``2e623e66``
-(révision minimale), qui ne les a pas :
+Kernox is pinned to symox ``53d9576e`` (GitHub main), which contains the
+codegen extensions below, and remains compatible with ``2e623e66``
+(minimum revision), which lacks them:
 
-- ``cudacode`` : opérateurs logiques ``And/Or/Xor/Not`` ;
-- ``cudacode`` : option ``reciprocal_sqrt`` (``1/sqrt(x)``, opt-in) ;
-- ``symox.extra.cudacode_function`` : fonction device CUDA/HIP générique
-  (arguments pointeurs, struct de sortie nommée, sans macro mathématique) ;
-- ``lambdify`` NumPy natif avec diffusion NumPy.
+- ``cudacode``: logical operators ``And/Or/Xor/Not``;
+- ``cudacode``: ``reciprocal_sqrt`` option (``1/sqrt(x)``, opt-in);
+- ``symox.extra.cudacode_function``: generic CUDA/HIP device function
+  (pointer arguments, named output struct, no math macro);
+- native NumPy ``lambdify`` with NumPy broadcasting.
 
-La détection teste le **comportement** (et non un numéro de version : les deux
-révisions portent la version 0.1.1). Chaque sonde est mise en cache ; la
-variable d'environnement ``KERNOX_SYMOX_COMPAT=pinned`` force le chemin du
-commit épinglé (tests de non-régression).
+Detection tests the **behavior** (not a version number: both revisions
+carry version 0.1.1). Each probe is cached; the environment variable
+``KERNOX_SYMOX_COMPAT=pinned`` forces the pinned-commit code path
+(regression tests).
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from functools import lru_cache
 from ._env import getenv
 
 PINNED_SYMOX = "53d9576e9f39db16e9ca8b3483d754385ebaf986"  # https://github.com/keckj/symox (main, printer SYCL sycl::half)
-# Révision minimale encore prise en charge (chemin de compatibilité, sans les
-# extensions de codegen) ; KERNOX_SYMOX_COMPAT=pinned force ce chemin.
+# Minimum revision still supported (compatibility path, without the
+# codegen extensions); KERNOX_SYMOX_COMPAT=pinned forces this path.
 MIN_SUPPORTED_SYMOX = "2e623e66bb31882e31f6dbfff6f77ae4bd945408"
 
 
@@ -89,32 +89,32 @@ def _sycl_half() -> bool:
 
 
 def sycl_half() -> bool:
-    """``_syclcode(..., dtype="float16")`` imprime du ``sycl::half`` (avenant v0.9, backend sycl)."""
+    """``_syclcode(..., dtype="float16")`` prints ``sycl::half`` (sycl backend)."""
     return not _forced_pinned() and _sycl_half()
 
 
 def cuda_logic() -> bool:
-    """``cudacode`` imprime ``And/Or/Xor/Not``."""
+    """``cudacode`` prints ``And/Or/Xor/Not``."""
     return not _forced_pinned() and _cuda_logic()
 
 
 def cuda_reciprocal_sqrt() -> bool:
-    """``cudacode(..., reciprocal_sqrt=True)`` est disponible."""
+    """``cudacode(..., reciprocal_sqrt=True)`` is available."""
     return not _forced_pinned() and _cuda_reciprocal_sqrt()
 
 
 def cudacode_function() -> bool:
-    """``symox.extra.cudacode_function`` est disponible (implique ``cuda_logic``)."""
+    """``symox.extra.cudacode_function`` is available (implies ``cuda_logic``)."""
     return not _forced_pinned() and _cudacode_function() and _cuda_logic()
 
 
 def lambdify_broadcasts() -> bool:
-    """Le ``lambdify`` NumPy natif diffuse les formes comme NumPy."""
+    """The native NumPy ``lambdify`` broadcasts shapes like NumPy."""
     return not _forced_pinned() and _lambdify_broadcasts()
 
 
 def capabilities() -> dict:
-    """Résumé (diagnostics, rapports de benchmark)."""
+    """Summary (diagnostics, benchmark reports)."""
     import symox
 
     return {

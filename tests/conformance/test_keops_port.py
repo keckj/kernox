@@ -1,10 +1,10 @@
-"""Port ciblé de tests PyKeOps (getkeops/keops @ ef72bc907df78cd18bff866d3dc7cb6375f11a4d,
-licence MIT ; provenance détaillée dans THIRD_PARTY.md).
+"""Targeted port of PyKeOps tests (getkeops/keops @ ef72bc907df78cd18bff866d3dc7cb6375f11a4d,
+MIT license; detailed provenance in THIRD_PARTY.md).
 
-Repris : formules, dimensions et distributions de données des tests en avant
-(sans autograd, sans batch, sans LogSumExp ni block-sparse, hors périmètre v0).
-Les tolérances KeOps (``atol`` fixes) sont remplacées par le jugement commun
-de la suite (borne d'erreur par terme, voir ``_support.py``), plus strict.
+Taken over: formulas, dimensions and data distributions of the forward tests
+(no autograd, no batch, no LogSumExp or block-sparse, outside the v0 scope).
+The KeOps tolerances (fixed ``atol``) are replaced by the suite's shared
+judgment (per-term error bound, see ``_support.py``), which is stricter.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ DTYPES = ("float32", "float64")
 
 
 def _rand(rng, *shape):
-    return rng.random(shape)  # torch.rand : uniforme [0, 1)
+    return rng.random(shape)  # torch.rand: uniform [0, 1)
 
 
 @pytest.mark.parametrize("dtype", DTYPES)
@@ -39,7 +39,7 @@ def test_generic_syntax(backend, dtype):
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_chunks_large_dimension(backend, dtype):
-    # pykeops/test/test_chunks.py : M, N, D, DV = 200, 300, 300, 1 ; exp(-|x-y|^2) @ b
+    # pykeops/test/test_chunks.py: M, N, D, DV = 200, 300, 300, 1; exp(-|x-y|^2) @ b
     name, dev = backend
     M, N, D, DV = 200, 300, 300, 1
     x, y, b = kp.Vi("x", D), kp.Vj("y", D), kp.Vj("b", DV)
@@ -52,7 +52,7 @@ def test_chunks_large_dimension(backend, dtype):
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_finalchunks_large_output(backend, dtype):
-    # pykeops/test/test_finalchunks.py : M, N, D, DV = 200, 300, 3, 300 (sortie de dimension 300)
+    # pykeops/test/test_finalchunks.py: M, N, D, DV = 200, 300, 3, 300 (output of dimension 300)
     name, dev = backend
     M, N, D, DV = 200, 300, 3, 300
     x, y, b = kp.Vi("x", D), kp.Vj("y", D), kp.Vj("b", DV)
@@ -65,7 +65,7 @@ def test_finalchunks_large_output(backend, dtype):
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_clamp(backend, dtype):
-    # pykeops/test/test_lazytensor_clamp.py (avant) : M = N = 1000, D = 3, a = -1.23, b = 1.54
+    # pykeops/test/test_lazytensor_clamp.py (forward): M = N = 1000, D = 3, a = -1.23, b = 1.54
     name, dev = backend
     x, y = kp.Vi("x", 3), kp.Vj("y", 3)
     dxy = kp.clamp(x * y, -1.23, 1.54).sum()
@@ -77,8 +77,8 @@ def test_clamp(backend, dtype):
 @pytest.mark.parametrize("over", ("i", "j"))
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_min_argmin(backend, dtype, over):
-    # pykeops/test/test_torch.py::test_LazyTensor_min (sans batch) :
-    # D_ij = log(1 + (relu(l_i x_i + y_j) s)^2).sum ; K_ij = cos(D^1.5 + 1) sin(D (3.2 + s))
+    # pykeops/test/test_torch.py::test_LazyTensor_min (no batch):
+    # D_ij = log(1 + (relu(l_i x_i + y_j) s)^2).sum; K_ij = cos(D^1.5 + 1) sin(D (3.2 + s))
     name, dev = backend
     x, l, y, s = kp.Vi("x", 3), kp.Vi("l", 1), kp.Vj("y", 3), kp.Param("s", 1)
     d = kp.log(1.0 + (kp.maximum(l * x + y, 0.0) * s) ** 2).sum()
@@ -91,7 +91,7 @@ def test_min_argmin(backend, dtype, over):
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_min_argmin_chunked(backend, dtype):
-    # pykeops/test/test_torch.py::test_LazyTensor_min_chunked : D = 990, min_argmin sur i (dim=0)
+    # pykeops/test/test_torch.py::test_LazyTensor_min_chunked: D = 990, min_argmin over i (dim=0)
     name, dev = backend
     x, y = kp.Vi("x", 990), kp.Vj("y", 990)
     kxy = kp.exp(-((x + y) ** 2)).sum()
@@ -103,7 +103,7 @@ def test_min_argmin_chunked(backend, dtype):
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_argkmin(backend, dtype):
-    # pykeops/test/test_numpy.py::test_argkmin : SqDist(x, y), ArgKMin K = 3, M = 10, N = 6, D = 3
+    # pykeops/test/test_numpy.py::test_argkmin: SqDist(x, y), ArgKMin K = 3, M = 10, N = 6, D = 3
     name, dev = backend
     x, y = kp.Vi("x", 3), kp.Vj("y", 3)
     rng = np.random.default_rng(42)
@@ -113,8 +113,8 @@ def test_argkmin(backend, dtype):
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_gaussian_kernel_sum(backend, dtype):
-    # pykeops/test/test_torch.py::test_LazyTensor_sum (sans batch, avant) :
-    # D_ij = (0.5 (l_i x_i - y_j)^2 / s).sum ; a_i = sum_j exp(-D_ij)
+    # pykeops/test/test_torch.py::test_LazyTensor_sum (no batch, forward):
+    # D_ij = (0.5 (l_i x_i - y_j)^2 / s).sum; a_i = sum_j exp(-D_ij)
     name, dev = backend
     x, l, y, s = kp.Vi("x", 3), kp.Vi("l", 1), kp.Vj("y", 3), kp.Param("s", 3)
     expr = kp.exp(-(0.5 * (l * x - y) ** 2 / s).sum()).sum_over("j")

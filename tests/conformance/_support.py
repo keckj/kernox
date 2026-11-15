@@ -1,21 +1,21 @@
-"""Outils communs de la suite de conformance (tous backends GPU).
+"""Shared tools for the conformance suite (all GPU backends).
 
-Référence : la formule est évaluée terme à terme en FP64 par
-``kernox.oracle.evaluate_numpy`` (lambdify NumPy de symox, chemin
-indépendant des backends et de l'oracle Torch) sur les entrées **déjà
-arrondies au dtype** du plan, puis réduite selon le contrat v0 (NaN ignorés,
-égalités au plus petit j, complétion (+inf, −1)).
+Reference: the formula is evaluated term by term in FP64 by
+``kernox.oracle.evaluate_numpy`` (symox NumPy lambdify, a path independent
+of the backends and of the Torch oracle) on inputs **already rounded to the
+plan dtype**, then reduced according to the v0 contract (NaNs ignored, ties
+go to the smallest j, padding with (+inf, -1)).
 
-Tolérances (voir ``docs/conformance.md``) : chaque terme reçoit une borne
-d'erreur d'évaluation ``T_ij`` ; elle est nulle quand l'évaluation FP32 de la
-formule reproduit exactement le FP64 (données entières : comparaison exacte,
-égalités comprises). Sinon ``T_ij = 4 (E_ij + C_ij) + 4 u |F_ij| + plancher``, où
-``E_ij`` est l'écart mesuré entre une évaluation FP32 indépendante (Torch CPU,
-oracle) et la référence FP64, mis à l'échelle ``u64/u32`` pour un plan FP64, et
-``C_ij`` la sensibilité FP64 du terme à une perturbation relative ``u`` des
-entrées (conditionnement : annulations, fonctions près d'un zéro).
-Un terme dont la finitude diffère entre les deux évaluations (dépassement en
-FP32, NaN d'un seul côté) est « indéterminé » et sa ligne n'est pas jugée.
+Tolerances (see ``docs/conformance.md``): each term gets an evaluation error
+bound ``T_ij``; it is zero when the FP32 evaluation of the formula reproduces
+the FP64 one exactly (integer data: exact comparison, ties included).
+Otherwise ``T_ij = 4 (E_ij + C_ij) + 4 u |F_ij| + floor``, where ``E_ij`` is
+the measured gap between an independent FP32 evaluation (Torch CPU, oracle)
+and the FP64 reference, scaled by ``u64/u32`` for an FP64 plan, and ``C_ij``
+is the FP64 sensitivity of the term to a relative perturbation ``u`` of the
+inputs (conditioning: cancellations, functions near a zero).
+A term whose finiteness differs between the two evaluations (FP32 overflow,
+NaN on one side only) is "undetermined" and its row is not judged.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ BACKENDS = ("cuda", "hip", "sycl")
 
 # --------------------------------------------------------------- backends
 def device_for(name: str):
-    """Device Torch du backend ``name`` ou None (jamais simulé)."""
+    """Torch device of backend ``name``, or None (never simulated)."""
     if name == "cuda":
         ok = torch.cuda.is_available() and torch.version.hip is None
         return "cuda:0" if ok else None
@@ -60,13 +60,13 @@ def device_for(name: str):
 
 
 def backend_status(name: str):
-    """``(device, None)`` si le backend est utilisable, ``(None, raison)`` sinon."""
+    """``(device, None)`` if the backend is usable, ``(None, reason)`` otherwise."""
     wanted = os.environ.get("KP_CONFORMANCE_BACKENDS")
     if wanted and name not in wanted.split(","):
-        return None, f"exclu par KP_CONFORMANCE_BACKENDS={wanted}"
+        return None, f"excluded by KP_CONFORMANCE_BACKENDS={wanted}"
     dev = device_for(name)
     if dev is None:
-        return None, f"aucun device Torch pour le backend {name}"
+        return None, f"no Torch device for backend {name}"
     try:
         kp.get_backend(name)
     except BackendUnavailableError as exc:
@@ -82,9 +82,9 @@ def synchronize(device):
         torch.xpu.synchronize(dev)
 
 
-# ----------------------------------------------------------------- entrées
+# ------------------------------------------------------------------ inputs
 def to_inputs(plan, arrays: dict, device):
-    """Arrondit les tableaux FP64 au dtype du plan. Retourne (tenseurs device, FP64 arrondis)."""
+    """Rounds the FP64 arrays to the plan dtype. Returns (device tensors, rounded FP64)."""
     dt = plan.dtype
     dev_t, ref = {}, {}
     for a in plan.args:
@@ -97,7 +97,7 @@ def to_inputs(plan, arrays: dict, device):
 
 
 def random_arrays(plan, m, n, rng, *, kind="normal", scale=1.0):
-    """Tableaux FP64 par argument du plan (rôles après échange éventuel i/j)."""
+    """FP64 arrays per plan argument (roles after any i/j swap)."""
     out = {}
     for a in plan.args:
         rows = {"i": m, "j": n, "param": None}[a.role]
@@ -111,24 +111,24 @@ def random_arrays(plan, m, n, rng, *, kind="normal", scale=1.0):
         else:
             raise ValueError(kind)
         if a.role == "param":
-            v = np.abs(v) + 0.5  # paramètres strictement positifs (échelles, seuils)
+            v = np.abs(v) + 0.5  # strictly positive parameters (scales, thresholds)
         out[a.name] = v
     return out
 
 
-# --------------------------------------------------------------- référence
+# --------------------------------------------------------------- reference
 @dataclass
 class Terms:
-    """Valeurs FP64 terme à terme et bornes d'erreur d'évaluation."""
+    """Term-by-term FP64 values and evaluation error bounds."""
 
-    F: np.ndarray  # (M, N, D) float64 (bool pour COUNT)
-    T: np.ndarray  # (M, N, D) borne d'erreur (inf : indéterminé) ; COUNT : ambiguïté (bool)
+    F: np.ndarray  # (M, N, D) float64 (bool for COUNT)
+    T: np.ndarray  # (M, N, D) error bound (inf: undetermined); COUNT: ambiguity (bool)
     dtype: str
     notes: list = field(default_factory=list)
 
 
 def _torch_terms(plan32, ref):
-    """Évaluation FP32 indépendante (oracle Torch CPU) du plan FP32, (M, N, D)."""
+    """Independent FP32 evaluation (Torch CPU oracle) of the FP32 plan, (M, N, D)."""
     red = OracleReduction(plan32, "cpu")
     inputs = {k: torch.from_numpy(np.asarray(v, dtype=np.float32)) for k, v in ref.items()}
     m = next(inputs[a.name].shape[0] for a in plan32.args if a.role == "i")
@@ -139,13 +139,13 @@ def _torch_terms(plan32, ref):
 
 
 def _conditioning(plan, ref, F, u, patterns=2):
-    """Sensibilité FP64 de chaque terme à une perturbation relative ``u`` des entrées.
+    """FP64 sensitivity of each term to a relative perturbation ``u`` of the inputs.
 
-    Un backend correct calcule la formule exacte d'entrées perturbées de
-    quelques ``u`` (contraction FMA, libm différente, ordre des opérations) ;
-    une seule évaluation FP32 (Torch) peut tomber juste par chance sur un
-    terme mal conditionné (annulation, ``cos`` près d'un zéro). On prend le
-    plus grand écart sur ``patterns`` tirages de signes ± fixés.
+    A correct backend computes the exact formula of inputs perturbed by a few
+    ``u`` (FMA contraction, different libm, operation order); a single FP32
+    evaluation (Torch) may be right by chance on an ill-conditioned term
+    (cancellation, ``cos`` near a zero). We take the largest gap over
+    ``patterns`` draws of fixed ± signs.
     """
     rng = np.random.default_rng(0x5EED)
     C = np.zeros(F.shape)
@@ -161,13 +161,13 @@ def _conditioning(plan, ref, F, u, patterns=2):
 
 
 def _rounding_samples(plan, plan32, ref, samples=4):
-    """Écart FP32/FP64 sur des entrées voisines (perturbations relatives ``k·u32``).
+    """FP32/FP64 gap on neighboring inputs (relative perturbations ``k·u32``).
 
-    Une seule évaluation FP32 peut arrondir par chance un intermédiaire
-    presque exactement (``atan2(x, c) + 1`` après annulation, ``exp`` d'un
-    argument amplifié) et sous-estimer l'erreur d'arrondi intermédiaire
-    qu'un backend correct (libm à 1-2 ulp) commet légitimement. On prend le
-    plus grand écart sur quelques voisins ; les classes non finies sont ignorées.
+    A single FP32 evaluation may by chance round an intermediate almost
+    exactly (``atan2(x, c) + 1`` after cancellation, ``exp`` of an amplified
+    argument) and underestimate the intermediate rounding error that a
+    correct backend (libm within 1-2 ulp) legitimately makes. We take the
+    largest gap over a few neighbors; non-finite classes are ignored.
     """
     rng = np.random.default_rng(0xACC)
     E = 0.0
@@ -181,14 +181,14 @@ def _rounding_samples(plan, plan32, ref, samples=4):
                 Fp = evaluate_numpy(plan, pert)
                 Gp = _torch_terms(plan32, pert).astype(np.float64)
                 Ep = np.where(np.isfinite(Fp) & np.isfinite(Gp), np.abs(Gp - Fp), 0.0)
-        except Exception:  # pragma: no cover - évaluation voisine impossible
+        except Exception:  # pragma: no cover - neighbor evaluation failed
             continue
         E = np.maximum(E, Ep)
     return E
 
 
 def terms(plan, ref, plan32=None) -> Terms:
-    """Référence FP64 et bornes ``T`` (voir la docstring du module)."""
+    """FP64 reference and ``T`` bounds (see the module docstring)."""
     with np.errstate(all="ignore"):
         F = evaluate_numpy(plan, ref)
     dt = plan.dtype
@@ -201,9 +201,9 @@ def terms(plan, ref, plan32=None) -> Terms:
     try:
         with np.errstate(all="ignore"):
             G = _torch_terms(plan32, ref).astype(np.float64 if F.dtype != bool else bool)
-    except Exception as exc:  # pragma: no cover - plan FP32 non constructible
+    except Exception as exc:  # pragma: no cover - FP32 plan cannot be built
         G = None
-        note = f"pas d'évaluation FP32 ({type(exc).__name__}: {exc})"
+        note = f"no FP32 evaluation ({type(exc).__name__}: {exc})"
     if F.dtype == bool:
         amb = np.zeros(F.shape, bool) if G is None else (G != F)
         return Terms(F, amb, dt)
@@ -227,7 +227,7 @@ def terms(plan, ref, plan32=None) -> Terms:
 
 
 def reduce_ref(kind, k, F):
-    """Réduction du contrat sur F (M, N, D) FP64, vectorisée. dict sortie -> ndarray."""
+    """Contract reduction of F (M, N, D) in FP64, vectorized. dict output -> ndarray."""
     m, n, d = F.shape
     if kind is R.SUM:
         with np.errstate(all="ignore"):
@@ -272,10 +272,10 @@ def reduce_ref(kind, k, F):
 
 
 def _soft_ref(kind, F):
-    """LOGSUMEXP / SUMSOFTMAXWEIGHT FP64 (avenant v0.5), vectorisé.
+    """LOGSUMEXP / SUMSOFTMAXWEIGHT in FP64 (amendment v0.5), vectorized.
 
-    Retourne (valeur, poids softmax p (M, N, Ds), classe) ; classe : 0 fini,
-    1 NaN imposé, 2 +inf (LSE) / NaN (SSMW), 3 vide (−inf / NaN).
+    Returns (value, softmax weights p (M, N, Ds), class); class: 0 finite,
+    1 forced NaN, 2 +inf (LSE) / NaN (SSMW), 3 empty (-inf / NaN).
     """
     m, n, d = F.shape
     f = F if kind is R.LOGSUMEXP else F[:, :, :1]
@@ -302,7 +302,7 @@ def _soft_ref(kind, F):
     return val, p, cls
 
 
-# ---------------------------------------------------------------- jugement
+# ----------------------------------------------------------------- judging
 class Mismatch(AssertionError):
     pass
 
@@ -313,9 +313,9 @@ def _fail(msg, **ctx):
 
 
 def check(plan, got: dict, t: Terms, *, acc_dtype=None):
-    """Compare les sorties du backend (dict NumPy) à la référence ; lève Mismatch.
+    """Compares the backend outputs (NumPy dict) with the reference; raises Mismatch.
 
-    Retourne le nombre de lignes non jugées (indéterminées).
+    Returns the number of rows not judged (undetermined).
     """
     kind, k = plan.reduction.kind, plan.reduction.k
     F, T = t.F, t.T
@@ -324,7 +324,7 @@ def check(plan, got: dict, t: Terms, *, acc_dtype=None):
     for key, r in ref.items():
         g = got[key]
         if g.shape != r.shape:
-            _fail("forme", key=key, got=g.shape, want=r.shape)
+            _fail("shape", key=key, got=g.shape, want=r.shape)
     skipped = 0
     if m == 0:
         return 0
@@ -348,8 +348,8 @@ def check(plan, got: dict, t: Terms, *, acc_dtype=None):
             L1 = finite_terms.sum(axis=1)
             gamma = n * ua / (1 - n * ua) if n * ua < 1 else math.inf
             tol = np.where(np.isfinite(T), T, 0.0).sum(axis=1) + gamma * L1 + 4 * TINY[acc]
-            # termes exacts multiples de 1/2 et L1 < 2**-2/u : toute somme partielle est
-            # représentable, l'ordre de sommation est indifférent -> égalité exacte
+            # exact terms that are multiples of 1/2 and L1 < 2**-2/u: every partial sum is
+            # representable, the summation order does not matter -> exact equality
             halves = np.where(np.isfinite(F), F * 2.0, 0.0)
             exact_rows = ((T == 0.0) & (halves == np.round(halves))).all(axis=1) & (2.0 * L1 < 0.25 / ua)
             tol = np.where(exact_rows, 0.0, tol)
@@ -362,7 +362,7 @@ def check(plan, got: dict, t: Terms, *, acc_dtype=None):
                 want, have = r[i, c], g[i, c]
                 if math.isnan(want) or math.isinf(want):
                     if not (have == want or (math.isnan(want) and math.isnan(have))):
-                        _fail("SUM non fini", i=i, c=c, got=have, want=want)
+                        _fail("SUM non-finite", i=i, c=c, got=have, want=want)
                     continue
                 if not abs(have - want) <= tol[i, c]:
                     _fail("SUM", i=i, c=c, got=have, want=want, tol=float(tol[i, c]), L1=float(L1[i, c]))
@@ -404,41 +404,41 @@ def check(plan, got: dict, t: Terms, *, acc_dtype=None):
         if "value" in got:
             gv = got["value"][i].astype(np.float64)
             if not (gv[nvalid:] == math.inf).all():
-                _fail("KMIN complétion", i=i, got=gv.tolist(), want=rv.tolist())
+                _fail("KMIN padding", i=i, got=gv.tolist(), want=rv.tolist())
             for r in range(nvalid):
                 ok = gv[r] == rv[r] if (tmax == 0.0 or math.isinf(rv[r])) else abs(gv[r] - rv[r]) <= tmax
                 if not ok:
                     _fail("KMIN", i=i, rank=r, got=float(gv[r]), want=float(rv[r]), tol=tmax)
             if nvalid > 1 and not (gv[1:nvalid] >= gv[:nvalid - 1]).all():
-                _fail("KMIN non trié", i=i, got=gv.tolist())
+                _fail("KMIN not sorted", i=i, got=gv.tolist())
         if "index" in got:
             gi = got["index"][i].astype(np.int64)
             if not (gi[nvalid:] == -1).all():
-                _fail("ARGKMIN complétion", i=i, got=gi.tolist(), want=ri.tolist())
+                _fail("ARGKMIN padding", i=i, got=gi.tolist(), want=ri.tolist())
             sel = gi[:nvalid]
             if ((sel < 0) | (sel >= n)).any() or len(set(sel.tolist())) != nvalid:
-                _fail("ARGKMIN indices invalides", i=i, got=sel.tolist())
+                _fail("ARGKMIN invalid indices", i=i, got=sel.tolist())
             if tmax == 0.0:
                 if not np.array_equal(sel, ri[:nvalid]):
                     _fail("ARGKMIN (exact)", i=i, got=sel.tolist(), want=ri[:nvalid].tolist())
             else:
                 fv = f[i, sel]
                 if np.isnan(fv).any():
-                    _fail("ARGKMIN sur NaN", i=i, got=sel.tolist())
+                    _fail("ARGKMIN on NaN", i=i, got=sel.tolist())
                 if not (np.abs(fv - rv[:nvalid]) <= Tm[i, sel] + tmax).all():
                     _fail("ARGKMIN", i=i, got=sel.tolist(), want=ri[:nvalid].tolist())
                 if "value" in got and not (np.abs(got["value"][i][:nvalid] - fv) <= Tm[i, sel] + tmax).all():
-                    _fail("KMIN/ARGKMIN incohérents", i=i)
+                    _fail("KMIN/ARGKMIN inconsistent", i=i)
     return skipped
 
 
 def _check_soft(plan, g, F, T, row_undet, acc_dtype):
-    """Borne d'erreur : perturbation des termes (T), arrondi des poids, de la somme et du log.
+    """Error bound: term perturbation (T), rounding of the weights, of the sum and of the log.
 
-    LOGSUMEXP est 1-lipschitzienne en norme max des termes ; une erreur relative
-    δ sur la somme des poids donne δ sur le log. Poids : erreur relative
-    ``δ_j = T_j + 2 u_acc |f_j − m| + 8 u_acc`` (terme, décalage, exp). SUMSOFTMAXWEIGHT :
-    moyenne pondérée, erreur ``Σ p_j (δ_j |g_j − out| + T_g,j) + (γ + 4u) Σ p_j |g_j|``.
+    LOGSUMEXP is 1-Lipschitz in the max norm of the terms; a relative error δ
+    on the sum of the weights gives δ on the log. Weights: relative error
+    ``δ_j = T_j + 2 u_acc |f_j - m| + 8 u_acc`` (term, shift, exp). SUMSOFTMAXWEIGHT:
+    weighted mean, error ``Σ p_j (δ_j |g_j - out| + T_g,j) + (γ + 4u) Σ p_j |g_j|``.
     """
     kind = plan.reduction.kind
     acc = acc_dtype or plan.acc_dtype
@@ -463,7 +463,7 @@ def _check_soft(plan, g, F, T, row_undet, acc_dtype):
                 for e in outs:
                     have, want = g[i, e], val[i, e]
                     if not (have == want or (math.isnan(have) and math.isnan(want))):
-                        _fail(f"{kind.value} spécial", i=i, e=e, got=have, want=want, cls=int(cls[i, cc]))
+                        _fail(f"{kind.value} special", i=i, e=e, got=have, want=want, cls=int(cls[i, cc]))
                 continue
             pj = p[i, :, cc]
             live = pj > 0
@@ -473,9 +473,9 @@ def _check_soft(plan, g, F, T, row_undet, acc_dtype):
             delta = Tf[i, :, cc] + 2 * ua * shift + 8 * ua
             for e in outs:
                 have, want = g[i, e], val[i, e]
-                if not math.isfinite(want):  # NaN d'un poids g vivant (propagé)
+                if not math.isfinite(want):  # NaN from a live weight g (propagated)
                     if not (have == want or (math.isnan(have) and math.isnan(want))):
-                        _fail(f"{kind.value} non fini", i=i, e=e, got=have, want=want)
+                        _fail(f"{kind.value} non-finite", i=i, e=e, got=have, want=want)
                     continue
                 if lse:
                     tol = float((pj * delta).sum()) + 4 * gamma + 4 * ua * abs(want) + 4 * TINY[acc]
@@ -498,10 +498,10 @@ def _check_arg(f, Tr, have, want, is_min, what, i, c):
             _fail(what, i=i, c=c, got=have, want=-1)
         return
     if not 0 <= have < n or math.isnan(f[have]):
-        _fail(what + " hors bornes ou NaN", i=i, c=c, got=have, want=want)
+        _fail(what + " out of bounds or NaN", i=i, c=c, got=have, want=want)
     best = f[want]
     if Tr.max() == 0.0 or math.isinf(best):
-        # évaluation exacte : sémantique exacte (plus petit j atteignant l'extremum)
+        # exact evaluation: exact semantics (smallest j reaching the extremum)
         if have != want:
             _fail(what + " (exact)", i=i, c=c, got=have, want=want, fgot=float(f[have]), fwant=float(best))
         return
@@ -511,12 +511,12 @@ def _check_arg(f, Tr, have, want, is_min, what, i, c):
     if not near[have]:
         _fail(what, i=i, c=c, got=have, want=want, fgot=float(f[have]), fwant=float(best))
     if near.sum() == 1 and have != want:
-        _fail(what + " (séparé)", i=i, c=c, got=have, want=want)
+        _fail(what + " (separated)", i=i, c=c, got=have, want=want)
 
 
-# ------------------------------------------------------------------ exécution
+# ------------------------------------------------------------------ execution
 def run_case(backend, device, expr, arrays, dtype, *, acc_dtype=None):
-    """Compile, exécute sur le backend et juge contre la référence. Retourne le nombre de lignes non jugées."""
+    """Compiles, runs on the backend and judges against the reference. Returns the number of rows not judged."""
     plan = expr.to_plan(dtype, acc_dtype=acc_dtype)
     try:
         plan32 = expr.to_plan("float32") if dtype == "float64" else plan

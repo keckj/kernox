@@ -1,8 +1,8 @@
-"""Bout en bout : frontend + fonction de paire du noyau + backend CUDA, contre l'oracle.
+"""End to end: frontend + core pair function + CUDA backend, against the oracle.
 
-Corpus partagé ``tests/corpus.py``. ``pair.py`` contourne le bug
-de parenthésage de ``symox.cudacode`` (anciennes révisions) grâce
-aux helpers ``kp_pow*`` ; ce test le vérifie sur tout le corpus.
+Shared corpus ``tests/corpus.py``. ``pair.py`` works around the
+parenthesization bug of ``symox.cudacode`` (older revisions) through
+the ``kp_pow*`` helpers; this test checks it on the whole corpus.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("symox")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from corpus import reductions  # noqa: E402
@@ -55,8 +55,8 @@ def test_frontend_vs_oracle(name, dtype, M, N):
     for a, b in zip(got, ref):
         assert a.shape == b.shape and a.dtype == b.dtype
         if a.dtype == torch.int64 and name != "count" and name != "logic":
-            # indices : comparer les valeurs atteintes serait plus robuste ; données
-            # continues aléatoires -> égalités exactes improbables
+            # indices: comparing the reached values would be more robust; continuous
+            # random data -> exact ties are unlikely
             assert torch.equal(a.cpu(), b.cpu()), (a[:3], b[:3])
         elif a.dtype == torch.int64:
             assert torch.equal(a.cpu(), b.cpu())

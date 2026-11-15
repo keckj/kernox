@@ -1,6 +1,6 @@
-"""Lecture des variables d'environnement ``KERNOX_*``.
+"""Reading of the ``KERNOX_*`` environment variables.
 
-Une valeur vide équivaut à une variable absente.
+An empty value is treated as an unset variable.
 """
 
 from __future__ import annotations
@@ -9,5 +9,5 @@ import os
 
 
 def getenv(name: str, default: str | None = None) -> str | None:
-    """Valeur de ``name`` si elle est définie et non vide, sinon ``default``."""
+    """Value of ``name`` if it is set and non-empty, otherwise ``default``."""
     return os.environ.get(name) or default

@@ -1,12 +1,12 @@
-"""Liaison ctypes minimale : CUDA Driver API + NVRTC (compilation en CUBIN).
+"""Minimal ctypes binding: CUDA Driver API + NVRTC (compilation to CUBIN).
 
-Provenance : structure inspirée de ``symox/python/symox/extra/codegen/cuda.py``
-(keckj/symox @ 2e623e66, licence MIT/Apache-2.0, même auteur), réécrite pour
-Kernox : sortie CUBIN (pas de JIT PTX), occupation, attributs de fonction,
-contexte primaire partagé avec Torch. Voir ``THIRD_PARTY.md``.
+Origin: structure inspired by ``symox/python/symox/extra/codegen/cuda.py``
+(keckj/symox @ 2e623e66, MIT/Apache-2.0 license, same author), rewritten for
+Kernox: CUBIN output (no PTX JIT), occupancy, function attributes, primary
+context shared with Torch. See ``THIRD_PARTY.md``.
 
-Aucune allocation ni copie mémoire n'est faite ici : les tampons viennent de
-l'allocateur Torch.
+No memory allocation or copy happens here: buffers come from the Torch
+allocator.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from ..._env import getenv
 
 
 class CudaError(RuntimeError):
-    """Échec d'un appel CUDA Driver ou NVRTC."""
+    """Failure of a CUDA Driver or NVRTC call."""
 
 
 def _bind(lib, name, restype, *argtypes):
@@ -35,7 +35,7 @@ def _bind(lib, name, restype, *argtypes):
 
 # --------------------------------------------------------------------------- driver
 
-# Attributs CUdevice_attribute utilisés.
+# CUdevice_attribute values used.
 ATTR_MAX_SHARED_PER_BLOCK = 8
 ATTR_MULTIPROCESSOR_COUNT = 16
 ATTR_CC_MAJOR = 75
@@ -56,10 +56,10 @@ class Driver:
             try:
                 self.lib = ct.CDLL(n)
                 break
-            except OSError as e:  # pragma: no cover - dépend de l'hôte
+            except OSError as e:  # pragma: no cover - host-dependent
                 errors.append(str(e))
         else:  # pragma: no cover
-            raise ImportError("libcuda introuvable : " + "; ".join(errors))
+            raise ImportError("libcuda not found: " + "; ".join(errors))
         p, i, u, z = ct.c_void_p, ct.c_int, ct.c_uint, ct.c_size_t
         I = ct.c_int
         specs = {
@@ -130,7 +130,7 @@ def driver() -> Driver:
 
 
 class PrimaryContext:
-    """Contexte primaire du device (celui qu'utilise le runtime CUDA de Torch)."""
+    """Primary context of the device (the one used by the Torch CUDA runtime)."""
 
     def __init__(self, ordinal: int):
         self.drv = driver()
@@ -147,8 +147,8 @@ class PrimaryContext:
             prev = ct.c_void_p()
             self.drv.call("cuCtxPopCurrent_v2", ct.byref(prev))
 
-    # Pas de release dans __del__ : le contexte primaire est partagé avec Torch
-    # et doit vivre jusqu'à la fin du processus (retain unique par device).
+    # No release in __del__: the primary context is shared with Torch and must
+    # live until the end of the process (a single retain per device).
 
 
 _CONTEXTS: dict[int, PrimaryContext] = {}
@@ -165,7 +165,7 @@ def primary_context(ordinal: int) -> PrimaryContext:
 
 
 class Module:
-    """Module CUBIN chargé dans le contexte primaire ; fonctions par nom."""
+    """CUBIN module loaded in the primary context; functions looked up by name."""
 
     def __init__(self, ctx: PrimaryContext, image: bytes):
         self.ctx = ctx
@@ -180,7 +180,7 @@ class Module:
             self.ctx.drv.call("cuModuleGetFunction", ct.byref(f), self.handle, name.encode())
         return Function(self, f)
 
-    def __del__(self):  # pragma: no cover - fin de processus
+    def __del__(self):  # pragma: no cover - process teardown
         try:
             if self.handle:
                 with self.ctx.current():
@@ -215,15 +215,15 @@ class Function:
         return v.value
 
     def launch(self, args, grid, block, smem, stream: int):
-        """Lancement asynchrone ; ``args`` : valeurs ctypes."""
+        """Asynchronous launch; ``args``: ctypes values."""
         ptrs = (ct.c_void_p * len(args))(*(ct.addressof(a) for a in args))
         self.launch_params(ptrs, grid, block, smem, stream)
 
     def launch_params(self, params, grid, block, smem, stream: int):
-        """Lancement asynchrone ; ``params`` : tableau ctypes de pointeurs vers les
-        valeurs des paramètres. Chemin court : si le contexte primaire est déjà
-        courant sur ce thread (cas usuel avec Torch), deux appels driver
-        (cuCtxGetCurrent, cuLaunchKernel) au lieu de quatre (push/pop)."""
+        """Asynchronous launch; ``params``: ctypes array of pointers to the
+        parameter values. Fast path: if the primary context is already current
+        on this thread (the usual case with Torch), two driver calls
+        (cuCtxGetCurrent, cuLaunchKernel) instead of four (push/pop)."""
         ctx = self.module.ctx
         drv = ctx.drv
         cur = ct.c_void_p()
@@ -247,8 +247,8 @@ def _nvrtc_candidates():
     if override:
         yield override
         return
-    # Priorité : NVRTC installé dans l'environnement (wheel nvidia-cuda-nvrtc,
-    # épinglée avec torch), puis toolkit système.
+    # Priority: NVRTC installed in the environment (nvidia-cuda-nvrtc wheel,
+    # pinned with torch), then the system toolkit.
     for root in sys.path:
         for p in sorted(Path(root, "nvidia/cuda_nvrtc/lib").glob("libnvrtc.so.*")):
             if "builtins" not in p.name and "alt" not in p.name:
@@ -277,7 +277,7 @@ class Nvrtc:
             except OSError as e:
                 errors.append(str(e))
         else:
-            raise ImportError("libnvrtc introuvable : " + "; ".join(errors))
+            raise ImportError("libnvrtc not found: " + "; ".join(errors))
         p, i, z, c = ct.c_void_p, ct.c_int, ct.c_size_t, ct.c_char_p
         specs = {
             "nvrtcVersion": (ct.POINTER(i), ct.POINTER(i)),
@@ -298,7 +298,7 @@ class Nvrtc:
     @staticmethod
     def _check(r, op):
         if r:
-            raise CudaError(f"{op}: erreur NVRTC {r}")
+            raise CudaError(f"{op}: NVRTC error {r}")
 
     def compile_cubin(self, source: str, options: tuple[str, ...], filename="kernox.cu"):
         prog = ct.c_void_p()
@@ -315,7 +315,7 @@ class Nvrtc:
             self.nvrtcGetProgramLog(prog, log)
             log = log.value.decode(errors="replace")
             if r:
-                raise CudaError(f"nvrtcCompileProgram a échoué ({r}) :\n{log}")
+                raise CudaError(f"nvrtcCompileProgram failed ({r}):\n{log}")
             self._check(self.nvrtcGetCUBINSize(prog, ct.byref(size)), "nvrtcGetCUBINSize")
             buf = ct.create_string_buffer(size.value)
             self._check(self.nvrtcGetCUBIN(prog, buf), "nvrtcGetCUBIN")

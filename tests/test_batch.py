@@ -1,4 +1,4 @@
-"""Dimensions de batch (avenant v0.6) : plan, runtime, oracle, autograd (CPU)."""
+"""Batch dimensions (v0.6 amendment): plan, runtime, oracle, autograd (CPU)."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _rand(*shape, seed=0, dtype=F64):
 
 
 def _loop(run, B, inputs):
-    """Référence : appels v0 élément par élément (entrées diffusées explicitement)."""
+    """Reference: v0 calls element by element (inputs explicitly broadcast)."""
     full = {}
     for k, v in inputs.items():
         if not isinstance(v, torch.Tensor) or v.dim() <= 1:
@@ -85,7 +85,7 @@ def test_batched_equals_loop_of_v0_calls(case):
                                *([shapes["s"][:-1]] if len(shapes["s"]) > 1 else []))
     assert out.shape == (*B, shapes["x"][-2], 2)
     assert _eq(out, _loop(run, tuple(B), t))
-    # tables d'offsets en cache : second appel sans nouvelle entrée
+    # offset tables are cached: a second call adds no new entry
     child = run._batched[len(B)]
     before = len(child._layouts)
     run(**t)
@@ -95,7 +95,7 @@ def test_batched_equals_loop_of_v0_calls(case):
 def test_strided_and_expanded_batch_dims():
     run = kp.compile(_gauss(), dtype="float64", backend="oracle")
     base = _rand(6, 5, 3)
-    X = base[::2]                          # stride de batch non standard
+    X = base[::2]                          # non-standard batch stride
     Y = _rand(1, 7, 3).expand(3, 7, 3)     # stride 0
     Bw = _rand(7, 3, 2, seed=2).transpose(0, 1).contiguous()
     S = torch.tensor([0.5], dtype=F64)
@@ -122,7 +122,7 @@ def _all_kinds():
 @pytest.mark.parametrize("kind", [k for k, v in _all_kinds().items() if v is not None])
 def test_all_reductions_batched_local_indices(kind):
     run = kp.compile(_all_kinds()[kind], dtype="float32", backend="oracle")
-    # données entières : égalités, indices locaux à chaque élément
+    # integer data: ties, indices local to each batch element
     X = torch.randint(-2, 3, (3, 1, 6, 2), generator=torch.Generator().manual_seed(1)).float()
     Y = torch.randint(-2, 3, (1, 2, 5, 2), generator=torch.Generator().manual_seed(2)).float()
     out = run(x=X, y=Y)
@@ -137,7 +137,7 @@ def test_all_reductions_batched_local_indices(kind):
 @pytest.mark.parametrize("shapes", [
     dict(x=(0, 5, 3), y=(0, 7, 3), b=(0, 7, 2)),     # nb = 0
     dict(x=(2, 0, 3), y=(2, 7, 3), b=(2, 7, 2)),     # M = 0
-    dict(x=(2, 5, 3), y=(2, 0, 3), b=(2, 0, 2)),     # N = 0 : neutres
+    dict(x=(2, 5, 3), y=(2, 0, 3), b=(2, 0, 2)),     # N = 0: neutral elements
 ])
 def test_zero_sizes(shapes):
     run = kp.compile(_gauss(), dtype="float64", backend="oracle")
@@ -163,11 +163,11 @@ def test_python_param_and_scalar_param_batched():
 
 # ------------------------------------------------------------- validation
 @pytest.mark.parametrize("bad,msg", [
-    (dict(x=(2, 5, 3), y=(7, 3), b=(7, 2)), "rang commun"),
-    (dict(x=(2, 5, 3), y=(3, 7, 3), b=(3, 7, 2)), "non diffusables"),
-    (dict(x=(2, 5, 3), y=(2, 7, 3), b=(2, 7, 2), s=(2, 2, 1)), r"\(1,\) ou \(\*B, 1\)"),
+    (dict(x=(2, 5, 3), y=(7, 3), b=(7, 2)), "rank shared"),
+    (dict(x=(2, 5, 3), y=(3, 7, 3), b=(3, 7, 2)), "cannot be broadcast"),
+    (dict(x=(2, 5, 3), y=(2, 7, 3), b=(2, 7, 2), s=(2, 2, 1)), r"\(1,\) or \(\*B, 1\)"),
     (dict(x=(2, 5, 3), y=(2, 7, 3), b=(2, 6, 2)), "N=6"),
-    (dict(x=(2, 5, 4), y=(2, 7, 3), b=(2, 7, 2)), "au lieu de"),
+    (dict(x=(2, 5, 4), y=(2, 7, 3), b=(2, 7, 2)), "instead of"),
 ])
 def test_validation_errors(bad, msg):
     run = kp.compile(_gauss(), dtype="float64", backend="oracle")
@@ -179,8 +179,8 @@ def test_validation_errors(bad, msg):
 
 def test_non_contiguous_last_dims_refused():
     run = kp.compile(_gauss(), dtype="float64", backend="oracle")
-    X = _rand(2, 3, 5).transpose(1, 2)  # (2, 5, 3), dernière dimension non contiguë
-    with pytest.raises(ValidationError, match="non contiguës"):
+    X = _rand(2, 3, 5).transpose(1, 2)  # (2, 5, 3), last dimension not contiguous
+    with pytest.raises(ValidationError, match="non-contiguous last two"):
         run(x=X, y=_rand(2, 7, 3), b=_rand(2, 7, 2), s=0.5)
 
 
@@ -192,9 +192,9 @@ def test_batch_plan_called_without_batch_is_refused():
     assert run(x=_rand(2, 5, 3), y=_rand(2, 7, 3), b=_rand(2, 7, 2), s=0.5).shape == (2, 5, 2)
 
 
-# ------------------------------------------- backends sans batch : refus
+# ---------------------------------- backends without batch: refusal
 class _NoBatchBackend:
-    """Backend factice qui accepte tout plan mais ne déclare pas ``batch``."""
+    """Fake backend that accepts any plan but does not declare ``batch``."""
 
     name = "nobatch"
 
@@ -203,11 +203,11 @@ class _NoBatchBackend:
 
     def supports(self, plan, device):
         if self.honest and plan.batch_rank:
-            return Support(False, "dimensions de batch (avenant v0.6) non implémentées")
+            return Support(False, "batch dimensions (v0.6 amendment) not implemented")
         return Support(True)
 
-    def compile(self, plan, device):  # pragma: no cover - jamais atteint
-        raise AssertionError("ne doit pas compiler un plan batché")
+    def compile(self, plan, device):  # pragma: no cover - never reached
+        raise AssertionError("must not compile a batched plan")
 
 
 @pytest.mark.parametrize("honest", [True, False])
@@ -217,7 +217,7 @@ def test_backend_without_batch_is_refused(honest):
     run = kp.compile(_gauss(), dtype="float64", backend=name)
     with pytest.raises(UnsupportedError, match="batch"):
         run(x=_rand(2, 5, 3), y=_rand(2, 7, 3), b=_rand(2, 7, 2), s=0.5)
-    with pytest.raises(UnsupportedError, match="batch"):  # même sans lancement (nb = 0)
+    with pytest.raises(UnsupportedError, match="batch"):  # even without a launch (nb = 0)
         run(x=_rand(0, 5, 3), y=_rand(0, 7, 3), b=_rand(0, 7, 2), s=0.5)
 
 
@@ -237,9 +237,9 @@ def test_batched_gradients_match_dense_and_expanded_inputs():
     run = kp.compile(_gauss(), dtype="float64", backend="oracle")
     X = _rand(3, 5, 3).requires_grad_()
     Y0 = _rand(7, 3, seed=1).requires_grad_()
-    Y = Y0.expand(3, 7, 3)                         # stride 0 : gradient sommé sur le batch
+    Y = Y0.expand(3, 7, 3)                         # stride 0: gradient summed over the batch
     Bw = _rand(3, 7, 2, seed=2).requires_grad_()
-    S = (_rand(3, 1, seed=3).abs() + 0.3).requires_grad_()   # paramètre par élément
+    S = (_rand(3, 1, seed=3).abs() + 0.3).requires_grad_()   # per-element parameter
     G = _rand(3, 5, 2, seed=4)
     (run(x=X, y=Y, b=Bw, s=S) * G).sum().backward()
     got = [t.grad.clone() for t in (X, Y0, Bw, S)]

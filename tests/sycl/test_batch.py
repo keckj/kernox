@@ -1,9 +1,9 @@
-"""Dimensions de batch natives du backend sycl (avenant v0.6 §1), G31.
+"""Native batch dimensions of the sycl backend (v0.6 amendment §1), on the G31.
 
-Chaque élément de batch doit être identique au bit près à l'appel v0 sur
-l'élément (copie contiguë), quelle que soit la variante : un work-item par
-ligne, top-K coopératif, partition de j forcée (temporaires (NB, M, S, W)),
-diffusion par strides nuls, param batché, ``nb`` premier.
+Each batch element must be bit-identical to the v0 call on that element
+(contiguous copy), whatever the variant: one work-item per row, cooperative
+top-K, forced j partition (temporaries (NB, M, S, W)), broadcasting through
+zero strides, batched param, prime ``nb``.
 """
 
 import dataclasses
@@ -20,7 +20,7 @@ from kernox.plan import output_shapes
 
 from ._helpers import DEV, backend
 
-B = (3, 1, 5)  # nb = 15 après diffusion (3, 2, 5)
+B = (3, 1, 5)  # nb = 15; (3, 2, 5) after broadcasting
 BF = (3, 2, 5)
 
 
@@ -44,15 +44,15 @@ def _inputs(dtype, M, N, seed=0):
     def r(*shape):
         return torch.randint(-3, 4, shape, generator=g).to(T).to(DEV)
 
-    x = r(3, 1, 1, M, 3).expand(3, 2, 1, M, 3)          # stride 0 sur l'axe 2 (avant diffusion)
-    y = r(1, 2, 5, N + 3, 3)[..., 3:, :]                 # tranche : offset de stockage non nul
+    x = r(3, 1, 1, M, 3).expand(3, 2, 1, M, 3)          # stride 0 on axis 2 (before broadcasting)
+    y = r(1, 2, 5, N + 3, 3)[..., 3:, :]                 # slice: nonzero storage offset
     w = r(3, 2, 5, N, 2)
-    s = torch.tensor([0.7], dtype=T, device=DEV)         # param sans batch
+    s = torch.tensor([0.7], dtype=T, device=DEV)         # param without batch
     return {"x": x, "y": y, "w": w, "s": s}
 
 
 def _layout(plan, t):
-    """BatchLayout du runtime (même calcul que Reduction._layout)."""
+    """Runtime BatchLayout (same computation as Reduction._layout)."""
     host, dev = {}, {}
     nb = 1
     for b in BF:
@@ -115,7 +115,7 @@ def test_batched_equals_loop(name, dtype, vi):
         for k in ref:
             g_, r_ = got[k][idx].nan_to_num(123.0), ref[k].nan_to_num(123.0)
             if name in ("sum", "lse", "ssmw") and rc.last_split[0] != cr.last_split[0]:
-                # partition de j propre au batch (split_j(..., nb)) : ordre de sommation différent
+                # batch-specific j partition (split_j(..., nb)): different summation order
                 torch.testing.assert_close(g_, r_, rtol=1e-5 if dtype == "float32" else 1e-13, atol=1e-6)
             else:
                 assert torch.equal(g_, r_), (name, b, k)
@@ -142,7 +142,7 @@ def test_batched_coop(G):
 
 
 def test_runtime_batched_matches_oracle():
-    """Par le runtime (BatchLayout réel, param batché, nb premier) contre l'oracle."""
+    """Through the runtime (real BatchLayout, batched param, prime nb) against the oracle."""
     x, y, w, s = Vi("x", 2), Vj("y", 2), Vj("w", 1), Param("s", 1)
     red = (kp.exp(-((x - y) ** 2).sum() * s[0]) * w).sum_over("j")
     g = torch.Generator().manual_seed(3)
@@ -170,5 +170,5 @@ def test_check_rejects_bad_layout():
         _launch(pb, t, M)
     bad = dict(lay.host_offsets)
     bad["w"] = bad["w"] + 10**9
-    with pytest.raises(ValueError, match="hors du stockage"):
+    with pytest.raises(ValueError, match="out of storage bounds"):
         _launch(pb, t, M, batch=BatchLayout(lay.shape, lay.nb, lay.offsets, bad))

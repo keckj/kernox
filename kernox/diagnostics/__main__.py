@@ -1,4 +1,4 @@
-"""``python -m kernox.diagnostics [--check] [--backend NOM] [--json]``."""
+"""``python -m kernox.diagnostics [--check] [--backend NAME] [--json]``."""
 
 from . import main
 

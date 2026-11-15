@@ -1,4 +1,4 @@
-"""Contrat v0.3 : contraction FMA autorisée par défaut, interdite si ``plan.fp_contract=False``."""
+"""Contract v0.3: FMA contraction allowed by default, forbidden if ``plan.fp_contract=False``."""
 
 import dataclasses
 
@@ -65,9 +65,9 @@ def test_flags_key_and_tolerance(be, dtype):
 
 
 def test_contraction_really_changes_code(be):
-    """Preuve que le drapeau agit : d0*d0 + d1*d1 + d2*d2 en FP64 diffère au bit près
-    entre les deux modes sur au moins un couple, et seul ``off`` égale la référence
-    Torch (sans FMA) bit à bit."""
+    """Proof that the flag takes effect: d0*d0 + d1*d1 + d2*d2 in FP64 differs bitwise
+    between the two modes on at least one pair, and only ``off`` matches the Torch
+    reference (without FMA) bitwise."""
     M, N = 256, 512
     h = _host(M, N, seed=2)
     on = make_plan(SQDIST, R.KMIN, "float64", 1, fp_contract=True)
@@ -90,7 +90,7 @@ def test_explicit_override_option():
 
 
 def test_runtime_accepts_fp_contract_false():
-    """Le runtime exige ``fp_contract_off`` du backend pour fp_contract=False (contrat v0.3)."""
+    """The runtime requires ``fp_contract_off`` from the backend for fp_contract=False (contract v0.3)."""
     import kernox as kp
 
     x, y = kp.Vi("x", 2), kp.Vj("y", 2)

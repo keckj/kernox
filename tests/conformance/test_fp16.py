@@ -1,5 +1,5 @@
-"""FP16 (avenant v0.9) sur chaque backend : refus explicite (``UnsupportedError``,
-avant tout lancement) tant que le backend ne le déclare pas, sinon égalité à l'oracle."""
+"""FP16 (amendment v0.9) on each backend: explicit refusal (``UnsupportedError``,
+before any launch) as long as the backend does not declare it, otherwise matches the oracle."""
 
 from __future__ import annotations
 
@@ -32,16 +32,16 @@ def test_fp16_refused_or_matches_oracle(backend, name):
         out = run(**ins)
     except UnsupportedError as e:
         assert "float16" in str(e) or "dtype" in str(e), e
-        pytest.skip(f"{bname} : refus explicite ({e})")
+        pytest.skip(f"{bname}: explicit refusal ({e})")
     synchronize(dev)
     ref = kp.compile(expr, dtype="float16", backend="oracle")(**{k: v.cpu() for k, v in ins.items()})
     assert out.dtype == ref.dtype
     if out.is_floating_point():
-        # L'ordre des additions d'une formule diffère entre printers (C : x0, x1, x2 ;
-        # Torch : x2, x0, x1) : en FP16, chaque terme peut différer d'un ulp de l'oracle, et
-        # une somme de N termes de signes mêlés dépasse alors 2e-3 absolu. Critère : écart
-        # à l'oracle FP16 dans 2e-3, ou erreur contre la référence FP64 (mêmes entrées FP16)
-        # au plus deux fois celle de l'oracle, plus 2e-3.
+        # The order of additions in a formula differs between printers (C: x0, x1, x2;
+        # Torch: x2, x0, x1): in FP16, each term may differ from the oracle by one ulp, and
+        # a sum of N terms of mixed signs then exceeds 2e-3 absolute. Criterion: gap to the
+        # FP16 oracle within 2e-3, or error against the FP64 reference (same FP16 inputs)
+        # at most twice that of the oracle, plus 2e-3.
         close = torch.isclose(out.cpu(), ref, rtol=2e-3, atol=2e-3)
         if not bool(close.all()):
             r64 = kp.compile(expr, dtype="float64", backend="oracle")(

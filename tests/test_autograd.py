@@ -1,4 +1,4 @@
-"""Autograd des réductions SUM (oracle CPU) : gradcheck FP64, Torch dense, règles."""
+"""Autograd of SUM reductions (CPU oracle): FP64 gradcheck, dense Torch, rules."""
 
 import pytest
 
@@ -49,7 +49,7 @@ def test_matches_dense_torch():
 
 def test_over_i_and_partial_requires_grad():
     x, y = Vi("x", 2), Vj("y", 2)
-    red = (kp.sin(x - y) * kp.cos(y)).sum().sum_over("i")  # sortie indexée par j
+    red = (kp.sin(x - y) * kp.cos(y)).sum().sum_over("i")  # output indexed by j
     run = kp.compile(red, dtype="float64", backend="oracle")
     X, Y = _t(4, 2, seed=8), _t(5, 2, seed=9, grad=False)
     out = run(x=X, y=Y)
@@ -65,7 +65,7 @@ def test_over_i_and_partial_requires_grad():
 def test_where_gradient_of_active_branch():
     x, y = Vi("x", 1), Vj("y", 1)
     d = x[0] - y[0]
-    red = where(d > 0, kp.sqrt(d), d * d).sum_over("j")  # sqrt(d < 0) jamais retenue
+    red = where(d > 0, kp.sqrt(d), d * d).sum_over("j")  # sqrt(d < 0) never selected
     run = kp.compile(red, dtype="float64", backend="oracle")
     X = torch.tensor([[0.5], [-1.0], [2.0]], dtype=F64, requires_grad=True)
     Y = torch.tensor([[0.0], [1.0], [3.0]], dtype=F64, requires_grad=True)
@@ -86,7 +86,7 @@ def test_max_tie_splits_gradient_and_abs_sign():
     X = torch.tensor([[1.0]], dtype=F64, requires_grad=True)
     Y = torch.tensor([[1.0], [0.0]], dtype=F64, requires_grad=True)
     gx, gy = torch.autograd.grad(run(x=X, y=Y).sum(), (X, Y))
-    # égalité : max -> 1/2 chacun, abs -> sign(0) = 0 ; y = 0 : max -> x, abs -> +1 pour x
+    # tie: max -> 1/2 each, abs -> sign(0) = 0; y = 0: max -> x, abs -> +1 for x
     assert gx.item() == 0.5 + 1.0 + 1.0
     assert gy[:, 0].tolist() == [0.5, -1.0]
 
@@ -113,7 +113,7 @@ def test_scalar_param_tensor_and_python_param():
     S = torch.tensor(2.0, dtype=F64, requires_grad=True)  # 0-d
     (gs,) = torch.autograd.grad(run(x=X, y=Y, s=S).sum(), (S,))
     assert gs.shape == () and torch.allclose(gs, (X.sum() * Y.sum()).detach())
-    gx, = torch.autograd.grad(run(x=X, y=Y, s=2.0).sum(), (X,))  # paramètre Python : pas de gradient
+    gx, = torch.autograd.grad(run(x=X, y=Y, s=2.0).sum(), (X,))  # Python parameter: no gradient
     torch.testing.assert_close(gx, 2.0 * Y.sum().detach().expand(3, 1))
 
 
@@ -127,8 +127,8 @@ def test_empty_sizes():
 
 @pytest.mark.parametrize("method", ["min", "max", "kmin"])
 def test_select_outputs_are_differentiable_once(method):
-    """MIN/MAX/KMIN : gradient au terme retenu (détails : test_reduction_gradients.py) ;
-    pas de dérivée seconde (once_differentiable)."""
+    """MIN/MAX/KMIN: gradient flows to the selected term (details: test_reduction_gradients.py);
+    no second derivative (once_differentiable)."""
     x, y = Vi("x", 1), Vj("y", 1)
     f = (x[0] - y[0]) ** 2
     red = f.kmin(2, over="j") if method == "kmin" else getattr(f, method)(over="j")

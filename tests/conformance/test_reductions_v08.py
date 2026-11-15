@@ -1,10 +1,10 @@
-"""Avenant v0.8 (MIN_ARGMIN, MAX_ARGMAX, LOGSUMEXPWEIGHT) sur chaque backend GPU.
+"""Amendment v0.8 (MIN_ARGMIN, MAX_ARGMAX, LOGSUMEXPWEIGHT) on each GPU backend.
 
-Un backend qui répond ``Support(False)`` doit lever ``UnsupportedError``
-avant tout lancement : le test est alors **sauté** avec la raison. Sinon :
-MIN_ARGMIN / MAX_ARGMAX doivent coïncider bit à bit avec MIN et ARGMIN
-(resp. MAX, ARGMAX) du même backend, eux-mêmes jugés par la conformance ;
-LOGSUMEXPWEIGHT est comparé à la référence FP64 dense.
+A backend that answers ``Support(False)`` must raise ``UnsupportedError``
+before any launch: the test is then **skipped** with the reason. Otherwise:
+MIN_ARGMIN / MAX_ARGMAX must match bit for bit MIN and ARGMIN (resp. MAX,
+ARGMAX) of the same backend, themselves judged by the conformance suite;
+LOGSUMEXPWEIGHT is compared with the dense FP64 reference.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def _compile_or_skip(expr, dtype, backend, x):
     try:
         return run(**x)
     except UnsupportedError as e:
-        pytest.skip(f"{backend} : {e}")
+        pytest.skip(f"{backend}: {e}")
 
 
 @pytest.mark.parametrize("is_min", (True, False))

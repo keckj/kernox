@@ -61,9 +61,9 @@ BUDGET_SECONDS = {"measure": 2.0, "patient": 30.0}
 REPEATS = 5
 WARMUP = 1
 MAX_SPREAD = 0.25
-WISDOM_FORMAT = "kernox-wisdom-v3"  # classe (M, N, nb, 1/ρ)
-#: Rang des niveaux de mesure : une entrée n'est réutilisée que par un niveau
-#: d'effort inférieur ou égal à celui qui l'a produite (``wisdom_only`` : toutes).
+WISDOM_FORMAT = "kernox-wisdom-v3"  # class (M, N, nb, 1/ρ)
+#: Rank of the measurement levels: an entry is only reused by an effort level
+#: lower than or equal to the one that produced it (``wisdom_only``: all of them).
 _EFFORT = {"wisdom_only": 0, "measure": 1, "patient": 2}
 
 
@@ -71,7 +71,7 @@ def check_level(level) -> str:
     if level not in LEVELS:
         from .errors import ValidationError
 
-        raise ValidationError(f"tuning invalide {level!r} (attendu : {LEVELS})")
+        raise ValidationError(f"invalid tuning {level!r} (expected one of {LEVELS})")
     return level
 
 
@@ -95,12 +95,12 @@ def size_class(m: int, n: int, nb: int = 1, density: float = 1.0) -> tuple[int, 
 
 def variant_from_json(data) -> Variant:
     if not isinstance(data, dict) or not isinstance(data.get("name"), str):
-        raise ValueError("variante JSON invalide")
+        raise ValueError("invalid JSON variant")
     params = data.get("params", {})
     if not isinstance(params, dict) or not all(
         isinstance(k, str) and isinstance(v, (int, str)) and not isinstance(v, bool) for k, v in params.items()
     ):
-        raise ValueError("paramètres de variante invalides")
+        raise ValueError("invalid variant parameters")
     return Variant(data["name"], tuple(sorted(params.items())))
 
 
@@ -123,7 +123,7 @@ class TuningDecision:
 
 
 # --------------------------------------------------------------------------
-# capacités du backend
+# backend capabilities
 # --------------------------------------------------------------------------
 
 
@@ -179,7 +179,7 @@ def _locked(path: Path):
 
 
 def _read(path: Path, identity: dict | None = None) -> dict:
-    """Contenu valide du fichier, ou fichier vide ; ignore tout contenu invalide."""
+    """Valid file contents, or an empty file; any invalid content is ignored."""
     empty = {"format": WISDOM_FORMAT, "identity": identity, "entries": {}}
     try:
         data = json.loads(path.read_text())
@@ -276,7 +276,7 @@ def import_wisdom(source) -> int:
     """Merges an exported wisdom (dict or path). Returns the number of valid entries imported."""
     data = source if isinstance(source, dict) else json.loads(Path(source).read_text())
     if not isinstance(data, dict) or data.get("format") != WISDOM_FORMAT:
-        raise ValueError(f"wisdom de format inconnu (attendu {WISDOM_FORMAT})")
+        raise ValueError(f"wisdom has an unknown format (expected {WISDOM_FORMAT})")
     count = 0
     for block in (data.get("devices") or {}).values():
         identity = block.get("identity") if isinstance(block, dict) else None
@@ -308,12 +308,12 @@ def forget_wisdom() -> int:
 
 
 # --------------------------------------------------------------------------
-# mesure
+# measurement
 # --------------------------------------------------------------------------
 
 
 class _Timer:
-    """Chronométrage par événements GPU sur le stream courant ; horloge hôte sur CPU."""
+    """Timing with GPU events on the current stream; host clock on CPU."""
 
     def __init__(self, device):
         import torch
@@ -323,7 +323,7 @@ class _Timer:
         self.mod = mod if mod is not None and hasattr(mod, "Event") else None
 
     def run(self, fn) -> float:
-        """Durée de ``fn()`` en millisecondes."""
+        """Duration of ``fn()`` in milliseconds."""
         if self.mod is None:
             t0 = time.perf_counter()
             fn()
@@ -347,7 +347,7 @@ def candidates(backend, plan, device, sizes: Sizes, level: str, default: Variant
     seen, out = set(), []
     for v in [default] + raw:
         if not isinstance(v, Variant):
-            raise TypeError(f"le backend {backend.name!r} a renvoyé une variante invalide : {v!r}")
+            raise TypeError(f"backend {backend.name!r} returned an invalid variant: {v!r}")
         if v not in seen:
             seen.add(v)
             out.append(v)
@@ -356,7 +356,7 @@ def candidates(backend, plan, device, sizes: Sizes, level: str, default: Variant
     if len(out) > limit:
         truncated_from = len(out)
         log.warning(
-            "backend %r : %d candidats pour tuning=%r, tronqués à %d (contrat v0.2)",
+            "backend %r: %d candidates for tuning=%r, truncated to %d (contract v0.2)",
             backend.name, len(out), level, limit,
         )
         out = out[:limit]
@@ -377,7 +377,7 @@ def measure(level, compile_variant, candidates_list, inputs, output_shapes_fn, d
     results = []
     for index, variant in enumerate(candidates_list):
         if index > 0 and time.perf_counter() - t0 > budget:
-            log.info("tuning=%r : budget %.1fs épuisé après %d candidats", level, budget, index)
+            log.info("tuning=%r: budget of %.1fs exhausted after %d candidates", level, budget, index)
             break
         c0 = time.perf_counter()
         compiled = compile_variant(variant)

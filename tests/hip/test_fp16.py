@@ -1,12 +1,12 @@
-"""FP16 (avenant v0.9) natif sur le backend hip : type ``kp_h`` (``_Float16``, chaque
-opération arrondie en binary16), accumulateur FP32 par défaut, ``acc_dtype="float16"``
-avec ``block`` par défaut, sorties FP16.
+"""Native FP16 (amendment v0.9) on the hip backend: ``kp_h`` type (``_Float16``, each
+operation rounded to binary16), FP32 accumulator by default, ``acc_dtype="float16"``
+with ``block`` by default, FP16 outputs.
 
-Les termes sont des formules à une opération (``x * y``, ``x - y``), dont l'arrondi FP16
-ne dépend pas de l'ordre d'évaluation : MIN/MAX/ARG*/KMIN sont comparés à l'oracle au bit
-près, les sommes à une borne d'erreur d'accumulation. Le calcul en FP16 est prouvé par
-débordement (``x·y/1000`` avec ``x·y > 65504``), la conversion finale par une somme FP32
-qui dépasse 65504.
+The terms are single-operation formulas (``x * y``, ``x - y``), whose FP16 rounding
+does not depend on evaluation order: MIN/MAX/ARG*/KMIN are compared bitwise to the
+oracle, sums against an accumulation error bound. FP16 arithmetic is proven by
+overflow (``x·y/1000`` with ``x·y > 65504``), the final conversion by an FP32 sum
+that exceeds 65504.
 """
 
 import dataclasses
@@ -72,7 +72,7 @@ def _oracle(plan, host, M):
 @pytest.mark.parametrize("name", list(_exprs()))
 def test_selection_bitwise(opts, name):
     plan = _exprs()[name].to_plan("float16")
-    assert plan.acc_dtype == "float16"            # pas d'accumulateur : FP16
+    assert plan.acc_dtype == "float16"            # no accumulator: FP16
     host = _data(61, 900, seed=len(opts))
     got, cr = _run(HipBackend(HipOptions(**opts)), plan, host, 61)
     if name == "kmin_argkmin64":
@@ -99,8 +99,8 @@ def test_sum_accumulators(opts, acc):
     got, cr = _run(HipBackend(HipOptions(**opts)), plan, host, 61)
     assert got["value"].dtype == torch.float16
     assert f"sum_scheme={plan.sum_scheme}" in cr.info.options
-    # termes x·y exacts à 1/2 ulp FP16 près ; accumulation : block (acc FP16) ~ (T + N/T)·u16,
-    # direct (acc FP32) N·u32 ; conversion finale u16·|résultat|
+    # x·y terms exact to within 1/2 FP16 ulp; accumulation: block (FP16 acc) ~ (T + N/T)·u16,
+    # direct (FP32 acc) N·u32; final conversion u16·|result|
     r64 = (host["x"].double() * host["y"].double().T).sum(1, keepdim=True)
     l1, N = _sum_l1(host), host["y"].shape[0]
     T = cr.config.tile_j
@@ -108,15 +108,15 @@ def test_sum_accumulators(opts, acc):
     tol = (k + U16) * l1 + U16 * r64.abs() + 1e-7
     assert torch.all((got["value"].double() - r64).abs() <= tol)
     if acc == "float32":
-        # même accumulateur FP32 que l'oracle : écart d'au plus un ulp FP16 du résultat
+        # same FP32 accumulator as the oracle: at most one FP16 ulp of the result apart
         ref = _oracle(plan, host, 61)["value"].double()
         ulp = torch.clamp(ref.abs(), min=2.0 ** -14) * 2.0 ** -10
         assert torch.all((got["value"].double() - ref).abs() <= ulp + N * U32 * l1)
 
 
 def test_fp16_compute_proven_by_overflow():
-    """x·y = 90000 > 65504 : +inf en FP16, donc sqrt(x·y) = +inf (300 si calcul en FP32).
-    (``x·y/1000`` ne convient pas : symox le réécrit ``0.001·x·y``.)"""
+    """x·y = 90000 > 65504: +inf in FP16, hence sqrt(x·y) = +inf (300 if computed in FP32).
+    (``x·y/1000`` does not work: symox rewrites it as ``0.001·x·y``.)"""
     x, y = kp.Vi("x", 1), kp.Vj("y", 1)
     plan = kp.sqrt(x * y).max(over="j").to_plan("float16")
     host = {"x": torch.tensor([[300.0], [2.0]], dtype=torch.float16),
@@ -127,9 +127,9 @@ def test_fp16_compute_proven_by_overflow():
 
 
 def test_sum_output_overflow_and_acc_fp32():
-    """Accumulation FP32 : 3 × 30000 = 90000 → ±inf à la conversion finale ; 3 × 20000 =
-    60000 reste fini (représentable). Accumulation FP16 : 30000 + 30000 + 30000 déborde
-    pendant la somme."""
+    """FP32 accumulation: 3 × 30000 = 90000 → ±inf at the final conversion; 3 × 20000 =
+    60000 stays finite (representable). FP16 accumulation: 30000 + 30000 + 30000 overflows
+    during the sum."""
     x, y = kp.Vi("x", 1), kp.Vj("y", 1)
     plan = (x * y).sum_over("j").to_plan("float16")
     host = {"x": torch.tensor([[30000.0], [20000.0], [-30000.0]], dtype=torch.float16),
@@ -138,7 +138,7 @@ def test_sum_output_overflow_and_acc_fp32():
     got, _ = _run(HipBackend(HipOptions(split="off")), plan, host, 3)
     v = got["value"][:, 0]
     assert v[0] == INF and v[1] == 60000.0 and v[2] == -INF
-    # acc FP16 : la somme partielle 30000 + 30000 déborde déjà
+    # FP16 acc: the partial sum 30000 + 30000 already overflows
     p16 = (x * y).sum_over("j").to_plan("float16", acc_dtype="float16")
     got16, _ = _run(HipBackend(HipOptions(split="off")), p16, host, 3)
     assert got16["value"][0, 0] == INF
@@ -159,7 +159,7 @@ def test_soft_family(acc, name):
         assert got["value"].dtype == torch.float16
         p64 = kp.builder.make_plan(plan.outputs, plan.reduction, "float64", args=plan.args)
         ref = _oracle(p64, {k: v.double() for k, v in host.items()}, 37)["value"]
-        # termes : f exact à 1/2 ulp FP16 près (|f| <= 9) ; état en acc_dtype
+        # terms: f exact to within 1/2 FP16 ulp (|f| <= 9); state in acc_dtype
         u = U16 if acc == "float16" else U32
         tol = 9 * U16 * 4 + 400 * u * 4 * (1 + ref.abs()) + U16 * ref.abs()
         assert torch.all((got["value"].double() - ref).abs() <= tol), (name, acc, opts)
@@ -172,7 +172,7 @@ def test_batch_and_ranges_fp16():
         plan = expr.to_plan("float16")
         host = _data(150, 700, seed=3)
         host["y"][5, 0] = 1.0
-        # batch : 3 éléments = 3 appels non batchés, au bit près
+        # batch: 3 elements = 3 non-batched calls, bitwise
         xs = torch.stack([host["x"], -host["x"], 2 * host["x"]])
         ys = torch.stack([host["y"], host["y"] / 2, -host["y"]])
         pb = dataclasses.replace(plan, batch_rank=1)
@@ -186,7 +186,7 @@ def test_batch_and_ranges_fp16():
             one, _ = _run(be, plan, {"x": xs[b], "y": ys[b]}, 150)
             for k in one:
                 assert torch.equal(outs[k][b].cpu(), one[k]), (b, k)
-        # ranges denses = appel non ranges, au bit près
+        # dense ranges = call without ranges, bitwise
         r = kp.Ranges.dense(150, 700, DEV)
         tr = Triplet(r.ranges_i, r.slices_i, r.redranges_j)
         crr = be.compile(dataclasses.replace(plan, ranges=True), DEV)

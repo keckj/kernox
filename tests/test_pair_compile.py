@@ -1,7 +1,7 @@
-"""La source de paire compile pour chaque dialecte (et s'exécute sur NVIDIA si disponible).
+"""The pair source compiles for each dialect (and runs on NVIDIA when available).
 
-Sauté proprement si l'outil n'est pas présent sur l'hôte :
-NVRTC (wheel nvidia-cuda-nvrtc-cu12 ou CUDA toolkit), hipcc (ROCm), icpx (oneAPI).
+Cleanly skipped when the tool is missing on the host:
+NVRTC (nvidia-cuda-nvrtc-cu12 wheel or CUDA toolkit), hipcc (ROCm), icpx (oneAPI).
 """
 import os
 
@@ -34,21 +34,21 @@ def _cuda_device_available():
         return False
 
 
-@pytest.mark.skipif(not _nvrtc_available(), reason="NVRTC absent")
+@pytest.mark.skipif(not _nvrtc_available(), reason="NVRTC not found")
 @pytest.mark.parametrize("name,dtype", CASES)
 def test_nvrtc(name, dtype):
     _, src = H.eval_source(reductions()[name].to_plan(dtype), "cuda")
     assert b".entry kp_eval" in H.nvrtc_compile(src, os.environ.get("KP_NVRTC_ARCH"))
 
 
-@pytest.mark.skipif(H.find_hipcc() is None, reason="hipcc absent")
+@pytest.mark.skipif(H.find_hipcc() is None, reason="hipcc not found")
 @pytest.mark.parametrize("name,dtype", CASES)
 def test_hipcc(name, dtype, tmp_path):
     _, src = H.eval_source(reductions()[name].to_plan(dtype), "hip")
     H.hipcc_compile(src, tmp_path, os.environ.get("KP_HIP_ARCH", "gfx1201"))
 
 
-@pytest.mark.skipif(H.find_icpx() is None, reason="icpx absent")
+@pytest.mark.skipif(H.find_icpx() is None, reason="icpx not found")
 @pytest.mark.parametrize("name,dtype", CASES)
 def test_icpx(name, dtype, tmp_path):
     _, src = H.eval_source(reductions()[name].to_plan(dtype), "sycl")
@@ -56,10 +56,10 @@ def test_icpx(name, dtype, tmp_path):
 
 
 @pytest.mark.gpu
-@pytest.mark.skipif(not (_nvrtc_available() and _cuda_device_available()), reason="GPU NVIDIA absent")
+@pytest.mark.skipif(not (_nvrtc_available() and _cuda_device_available()), reason="no NVIDIA GPU")
 @pytest.mark.parametrize("name,dtype", CASES)
 def test_cuda_pair_values(name, dtype):
-    """Valeurs de la fonction de paire sur GPU NVIDIA vs oracle NumPy FP64."""
+    """Pair function values on an NVIDIA GPU vs the FP64 NumPy oracle."""
     from conftest import make_inputs
 
     plan = reductions()[name].to_plan(dtype)

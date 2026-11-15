@@ -1,9 +1,9 @@
-"""Top-K coopératif (16 <= K <= 1024) du backend CUDA : G lanes par ligne i.
+"""Cooperative top-K (16 <= K <= 1024) of the CUDA backend: G lanes per row i.
 
-Données entières (égalités nombreuses, valeurs exactes), NaN ignorés, ±inf
-valides, N < K (complément +inf / −1), partition de j forcée (fusion
-coopérative des tranches), G imposé 8 / 16 / 32 : résultat identique à la
-référence ordonnée (valeur, j).
+Integer data (many ties, exact values), NaN ignored, valid ±inf,
+N < K (padding with +inf / −1), forced j partition (cooperative merge
+of the slices), G imposed to 8 / 16 / 32: result identical to the
+(value, j) ordered reference.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 from kernox.backends.base import Variant  # noqa: E402
 from kernox.backends.cuda import CudaBackend  # noqa: E402
@@ -28,14 +28,14 @@ DEV = torch.device("cuda", 0)
 
 
 def ref_topk(vals, K):
-    """(M, N) FP64 -> (valeurs, indices) (M, K) : ordre (valeur, j), NaN ignorés,
-    complément (+inf, −1)."""
+    """(M, N) FP64 -> (values, indices) (M, K): (value, j) order, NaN ignored,
+    padding (+inf, −1)."""
     M, N = vals.shape
     nan = torch.isnan(vals)
     key = torch.where(nan, torch.full_like(vals, math.inf), vals)
-    sv, si = torch.sort(key, dim=1, stable=True)            # égalités : plus petit j d'abord
+    sv, si = torch.sort(key, dim=1, stable=True)            # ties: smallest j first
     valid = ~torch.gather(nan, 1, si)
-    # NaN placés en fin (clé +inf, après les vrais +inf grâce à un tri stable sur valid)
+    # NaN placed last (key +inf, after the real +inf thanks to a stable sort on valid)
     order = torch.sort((~valid).to(torch.int8), dim=1, stable=True).indices
     sv, si, valid = sv.gather(1, order), si.gather(1, order), valid.gather(1, order)
     ov = torch.full((M, K), math.inf, dtype=torch.float64)
@@ -83,7 +83,7 @@ def _check(out, x, y, K):
 def test_coop_group_policy():
     assert coop_group(15) == 0 and coop_group(16) == 16 and coop_group(32) == 16 and coop_group(33) == 32
     assert coop_group(256) == 32 and coop_group(512) == 32 and coop_group(1024) == 32
-    # Maxwell (cc 5.x) : liste par thread jusqu'à K = 31 (mesuré sur 980 Ti)
+    # Maxwell (cc 5.x): per-thread list up to K = 31 (measured on a 980 Ti)
     assert coop_group(16, 5) == 0 and coop_group(31, 5) == 0 and coop_group(32, 5) == 16
     assert coop_group(16, 7) == 16 and coop_group(16, 12) == 16 and coop_group(64, 5) == 32
 
@@ -127,7 +127,7 @@ def test_coop_k_greater_than_n(N):
 
 
 def test_coop_large_m_partial_warps():
-    """M non multiple de B / G : groupes inactifs dans un warp actif (flot uniforme)."""
+    """M not a multiple of B / G: inactive groups in an active warp (uniform control flow)."""
     K = 600
     x, y = _data(1001, 2500, "float32", 5)
     plan = make_plan([("x", "i", 3), ("y", "j", 3)], 1, "argkmin", "float32", k=K, tag="sq")

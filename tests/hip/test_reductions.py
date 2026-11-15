@@ -1,4 +1,4 @@
-"""Correction du backend hip sur le GPU réel contre la référence Torch CPU."""
+"""Correctness of the hip backend on the real GPU against the CPU Torch reference."""
 
 import math
 
@@ -18,7 +18,7 @@ DTYPES = ["float64", "float32"]
 def run(backend, plan, host_inputs, M):
     T = getattr(torch, plan.dtype)
     inp = {k: v.to(T).to(DEV) for k, v in host_inputs.items()}
-    outs = {n: torch.full(s, 7, dtype=getattr(torch, d), device=DEV)  # sentinelle
+    outs = {n: torch.full(s, 7, dtype=getattr(torch, d), device=DEV)  # sentinel
             for n, (s, d) in output_shapes(plan, M).items()}
     cr = backend.compile(plan, DEV)
     cr.launch(inp, outs)
@@ -31,7 +31,7 @@ def check(out, ref, kind, F=None):
         o = out[n]
         assert o.dtype == r.dtype, (n, o.dtype, r.dtype)
         if kind is R.SUM:
-            # tolérance relative à la norme L1 des termes (ordre de sommation libre)
+            # tolerance relative to the L1 norm of the terms (summation order is free)
             l1 = F.abs().to(r.dtype).sum(1)
             eps = torch.finfo(F.dtype).eps
             assert torch.all((o - r).abs() <= 8 * eps * F.shape[1] ** 0.5 * l1 + 1e-300), n
@@ -79,7 +79,7 @@ def test_sum_fp32_with_fp64_accumulator(backend):
     assert out["value"].dtype == torch.float64
     F = GAUSS.torch_f(cast).to(torch.float64)
     ref = F.sum(1)
-    assert torch.all((out["value"] - ref).abs() <= 1e-6 * F.abs().sum(1))  # exp FP32 non correctement arrondi
+    assert torch.all((out["value"] - ref).abs() <= 1e-6 * F.abs().sum(1))  # FP32 exp is not correctly rounded
 
 
 ALL = [(VEC, R.SUM, None), (COUNT_BALL, R.COUNT, None), (VEC, R.MIN, None), (VEC, R.MAX, None),
@@ -145,7 +145,7 @@ def _tie_nan_inputs(M, N, nan_frac, inf_frac, seed):
                          ids=lambda v: getattr(v, "value", v))
 @pytest.mark.parametrize("nan_frac,inf_frac", [(0.0, 0.0), (0.3, 0.1), (0.95, 0.0), (1.0, 0.0), (0.0, 1.0)])
 def test_ties_nan_inf(backend, kind, k, dtype, nan_frac, inf_frac):
-    """Égalités massives (valeurs entières), NaN ignorés, +inf candidat valide."""
+    """Massive ties (integer values), NaN ignored, +inf is a valid candidate."""
     M, N = 70, 600
     host = _tie_nan_inputs(M, N, nan_frac, inf_frac, seed=int(nan_frac * 100 + inf_frac * 10))
     plan = make_plan(ABS1, kind, dtype, k)
@@ -169,11 +169,11 @@ def test_count_nan_is_false(backend):
     assert torch.equal(out["value"], ref_reduce(COUNT_BALL.torch_f(cast), R.COUNT)["value"])
 
 
-# --------------------------------------------------------------- refus explicites
+# --------------------------------------------------------------- explicit refusals
 @pytest.mark.parametrize("make,why", [
-    (lambda: make_plan(VEC, R.KMIN, "float64", 3), "scalaire"),
-    (lambda: make_plan(SQDIST, R.KMIN, "float64", -1), "K invalide"),
-    (lambda: make_plan(SQDIST, R.KMIN, "float64", 2.0), "K invalide"),
+    (lambda: make_plan(VEC, R.KMIN, "float64", 3), "scalar"),
+    (lambda: make_plan(SQDIST, R.KMIN, "float64", -1), "invalid K"),
+    (lambda: make_plan(SQDIST, R.KMIN, "float64", 2.0), "invalid K"),
     (lambda: make_plan(SQDIST, R.KMIN, "float64", 10**6), "K_MAX"),
     (lambda: make_plan(SQDIST, R.SUM, "float64", acc_dtype="float32"), "acc_dtype"),
 ])
@@ -205,7 +205,7 @@ def test_launch_revalidates(backend):
     with pytest.raises(ValueError):
         cr.launch({"x": x.float(), "y": y}, {"value": out})
     with pytest.raises(ValueError):
-        cr.launch({"x": x, "y": y.t().contiguous().t()}, {"value": out})  # non contigu
+        cr.launch({"x": x, "y": y.t().contiguous().t()}, {"value": out})  # non-contiguous
     with pytest.raises(ValueError):
         cr.launch({"x": x.cpu(), "y": y}, {"value": out})
     with pytest.raises(ValueError):
@@ -215,7 +215,7 @@ def test_launch_revalidates(backend):
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("k", [32, 64, 128, 256])
 def test_large_k_with_spills(backend, dtype, k):
-    """Grands K (spills mesurés dès K=64 FP64 / K=128 FP32) : correction exacte."""
+    """Large K (spills measured from K=64 FP64 / K=128 FP32): exact correctness."""
     M, N = 130, 700
     host = _tie_nan_inputs(M, N, 0.1, 0.05, seed=k)
     plan = make_plan(ABS1, R.KMIN_ARGKMIN, dtype, k)

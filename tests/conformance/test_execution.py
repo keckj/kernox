@@ -1,13 +1,13 @@
-"""Règles d'exécution du contrat (M1) sur chaque backend GPU présent.
+"""Contract execution rules (M1) on each available GPU backend.
 
-- stream / queue non défaut : entrées produites sur ce stream derrière un long
-  calcul, kernel enfilé sur le stream courant, sortie consommée sur ce stream ;
-- zéro élément : M = 0, N = 0 (neutres du contrat) et K = 0 ;
-- destruction de la réduction et de l'objet compilé pendant qu'un kernel tourne ;
-- absence de copie hôte ↔ device pendant l'appel (hook de dispatch Torch, tous
-  backends ; profileur d'activité device quand Torch le fournit) ;
-- multi-GPU : seulement si Torch voit au moins deux devices du même backend
-  (sinon sauté avec motif ; cf. ``docs/conformance.md``).
+- non-default stream / queue: inputs produced on that stream behind a long
+  computation, kernel enqueued on the current stream, output consumed on that stream;
+- zero elements: M = 0, N = 0 (contract neutral values) and K = 0;
+- destruction of the reduction and of the compiled object while a kernel runs;
+- no host ↔ device copy during the call (Torch dispatch hook, all backends;
+  device activity profiler when Torch provides one);
+- multi-GPU: only if Torch sees at least two devices of the same backend
+  (otherwise skipped with a reason; see ``docs/conformance.md``).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import weakref
 
 import pytest
 import torch
-import torch._dynamo  # noqa: F401 - avant tout backend : voir test_dynamo_import_after_backend_load
+import torch._dynamo  # noqa: F401 - before any backend: see test_dynamo_import_after_backend_load
 from torch.utils._python_dispatch import TorchDispatchMode
 
 import kernox as kp
@@ -31,7 +31,7 @@ from kernox import Param, Vi, Vj
 from ._support import synchronize
 
 
-# ------------------------------------------------------------------ outils
+# ------------------------------------------------------------------- tools
 def _api(device):
     return torch.xpu if torch.device(device).type == "xpu" else torch.cuda
 
@@ -46,13 +46,13 @@ def _inputs(m, n, device, seed=0):
     g = torch.Generator().manual_seed(seed)
     X = torch.randn(m, 3, generator=g)
     Y = torch.randn(n, 3, generator=g)
-    B = torch.rand(n, 2, generator=g) + 0.1  # poids positifs : norme L1 = valeur
+    B = torch.rand(n, 2, generator=g) + 0.1  # positive weights: L1 norm = value
     S = torch.tensor([0.7])
     return {k: v.to(device) for k, v in dict(x=X, y=Y, b=B, s=S).items()}
 
 
 def _reference(t, rows=None, sigma_tag=0.0):
-    """Somme gaussienne FP64 sur CPU (lignes ``rows`` seulement si donné)."""
+    """FP64 Gaussian sum on CPU (only rows ``rows`` if given)."""
     X, Y, B, s = (t[k].detach().double().cpu() for k in ("x", "y", "b", "s"))
     if rows is not None:
         X = X[rows]
@@ -64,27 +64,27 @@ def _reference(t, rows=None, sigma_tag=0.0):
 
 
 def _assert_close_l1(got, want, rtol=2e-5):
-    # FP32, termes positifs : erreur relative bornée par ~N u ; marge large mais
-    # incompatible avec des entrées nulles ou périmées.
+    # FP32, positive terms: relative error bounded by ~N u; a wide margin, but
+    # incompatible with zero or stale inputs.
     got = got.double().cpu()
     err = (got - want).abs() / want.abs().clamp_min(1e-300)
     assert torch.isfinite(got).all()
     assert err.max().item() <= rtol, err.max().item()
 
 
-# ------------------------------------------------------- stream non défaut
+# ----------------------------------------------------- non-default stream
 def test_non_default_stream_dependencies(backend):
-    """Le kernel suit les dépendances du stream courant et y produit sa sortie.
+    """The kernel follows the current stream's dependencies and produces its output there.
 
-    Les entrées sont écrites sur ``s`` derrière ~centaines de ms de calcul :
-    un kernel lancé sur un autre stream (ou sans ordre) lirait des zéros.
+    The inputs are written on ``s`` behind a few hundred ms of computation:
+    a kernel launched on another stream (or unordered) would read zeros.
     """
     bname, dev = backend
     api = _api(dev)
     run = kp.compile(_gauss(), dtype="float32", backend=bname)
     m, n = 4096, 8192
     true = _inputs(m, n, dev)
-    run(**true)  # compilation hors de la mesure
+    run(**true)  # compilation outside the measurement
     synchronize(dev)
 
     s = api.Stream(device=dev)
@@ -92,22 +92,22 @@ def test_non_default_stream_dependencies(backend):
     with api.stream(s):
         t = {k: torch.zeros_like(v) for k, v in true.items()}
         big = torch.rand(2048, 2048, device=dev)
-        for _ in range(40):  # retarde le stream s
+        for _ in range(40):  # delays stream s
             big = torch.tanh(big @ big)
         for k in t:
-            t[k].copy_(true[k] + 0.0 * big[0, 0])  # dépendance sur le long calcul
+            t[k].copy_(true[k] + 0.0 * big[0, 0])  # dependency on the long computation
         out = run(**t)
-        consumed = out * 2.0  # consommation sur s
+        consumed = out * 2.0  # consumption on s
         done = api.Event()
         done.record(s)
     assert out.device == torch.device(dev)
-    done.synchronize()  # synchronisation de s seulement
+    done.synchronize()  # synchronize s only
     want = _reference(true)
     _assert_close_l1(consumed / 2.0, want)
 
 
 def test_stream_dependency_on_output_consumer(backend):
-    """Sortie consommée sur un second stream après ``wait_stream`` : valeurs finales."""
+    """Output consumed on a second stream after ``wait_stream``: final values."""
     bname, dev = backend
     api = _api(dev)
     run = kp.compile(_gauss(), dtype="float32", backend=bname)
@@ -124,7 +124,7 @@ def test_stream_dependency_on_output_consumer(backend):
     _assert_close_l1(consumed, _reference(t))
 
 
-# ------------------------------------------------------------ zéro élément
+# ----------------------------------------------------------- zero elements
 def _kinds():
     x, y = Vi("x", 3), Vj("y", 3)
     d2 = ((x - y) ** 2).sum()
@@ -174,7 +174,7 @@ def test_k_zero(backend, kind):
 
 
 def test_zero_elements_gradient(backend):
-    """N = 0 : somme nulle, gradients nuls (aucune matrice, aucun lancement inutile)."""
+    """N = 0: zero sum, zero gradients (no matrix, no useless launch)."""
     bname, dev = backend
     run = kp.compile(_gauss(), dtype="float32", backend=bname)
     t = _inputs(9, 0, dev)
@@ -188,13 +188,13 @@ def test_zero_elements_gradient(backend):
     assert torch.equal(t["s"].grad.cpu(), torch.zeros(1))
 
 
-# ---------------------------------------- destruction pendant l'exécution
+# ------------------------------------------- destruction during execution
 def test_destroy_compiled_while_running(backend):
-    """``del`` de la réduction et de l'objet compilé pendant le kernel : résultat intact.
+    """``del`` of the reduction and of the compiled object during the kernel: result intact.
 
-    Plan unique (constante propre au test) : aucun autre objet Python du test
-    ne partage le module. Les caches internes du backend peuvent le garder en
-    vie ; le contrat exige seulement que le kernel enfilé reste valide.
+    Unique plan (test-specific constant): no other Python object of the test
+    shares the module. The backend's internal caches may keep it alive; the
+    contract only requires the enqueued kernel to stay valid.
     """
     bname, dev = backend
     api = _api(dev)
@@ -215,19 +215,19 @@ def test_destroy_compiled_while_running(backend):
     still_running = not ev.query()
     del run, comp
     gc.collect()
-    # nouvelle activité sur le device après la destruction
+    # new device activity after the destruction
     other = kp.compile(_gauss(), dtype="float32", backend=bname)(**_inputs(128, 256, dev, seed=3))
     synchronize(dev)
     rows = torch.arange(0, m, 509)
     _assert_close_l1(out[rows], _reference(t, rows, sigma_tag=tag))
     _assert_close_l1(other, _reference(_inputs(128, 256, "cpu", seed=3)))
-    print(f"kernel encore en cours à la destruction : {still_running} ; "
-          f"objet compilé collecté : {None if ref is None else ref() is None}")
+    print(f"kernel still running at destruction: {still_running}; "
+          f"compiled object collected: {None if ref is None else ref() is None}")
 
 
-# ---------------------------------------------------- aucune copie hôte
+# ------------------------------------------------------- no host copy
 class _HostTransfers(TorchDispatchMode):
-    """Relève toute op ATen qui fait passer des données entre hôte et device."""
+    """Records every ATen op that moves data between host and device."""
 
     def __init__(self):
         super().__init__()
@@ -258,7 +258,7 @@ def test_no_host_copy_during_call(backend, params):
     t = _inputs(1024, 2048, dev)
     if params == "python_cached":
         t["s"] = 0.7
-    run(**t)  # compilation, sélection de variante, mise en cache du paramètre
+    run(**t)  # compilation, variant selection, parameter caching
     synchronize(dev)
 
     hook = _HostTransfers()
@@ -269,7 +269,7 @@ def test_no_host_copy_during_call(backend, params):
 
     act = _device_activity(dev)
     if act is None:
-        pytest.skip(f"profileur sans activité device pour {dev} (hook ATen vérifié)")
+        pytest.skip(f"profiler has no device activity for {dev} (ATen hook checked)")
     with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU, act]) as prof:
         run(**t)
         synchronize(dev)
@@ -279,17 +279,17 @@ def test_no_host_copy_during_call(backend, params):
         "copyhosttodevice", "_local_scalar_dense"))]
     assert copies == [], copies
     kernels = [nm for nm in names if "kp" in nm.lower() or "kernox" in nm.lower()]
-    print(f"profileur {act.name} : {len(names)} évènements, noyaux kernox vus : {sorted(set(kernels))[:4]}")
+    print(f"profiler {act.name}: {len(names)} events, kernox kernels seen: {sorted(set(kernels))[:4]}")
 
 
-# ------------------------------------------- cohabitation avec torch.compile
+# ------------------------------------------ coexistence with torch.compile
 def test_dynamo_import_after_backend_load(backend):
-    """Importer ``torch._dynamo`` (donc triton) après un lancement du backend.
+    """Import ``torch._dynamo`` (hence triton) after a backend launch.
 
-    Cas d'un utilisateur qui appelle ``torch.compile`` après Kernox (hip : SIGSEGV
-    corrigé par l'ouverture RTLD_LOCAL des bibliothèques HIP, cf. docs/backend-hip.md). Exécuté
-    dans un sous-processus : un plantage natif est un échec, pas la fin de la
-    suite (le module de test importe ``torch._dynamo`` d'emblée pour cela).
+    Case of a user calling ``torch.compile`` after Kernox (hip: SIGSEGV fixed
+    by opening the HIP libraries with RTLD_LOCAL, see docs/backend-hip.md). Run
+    in a subprocess: a native crash is a failure, not the end of the suite
+    (the test module imports ``torch._dynamo`` upfront for that reason).
     """
     bname, dev = backend
     code = textwrap.dedent(f"""
@@ -305,7 +305,7 @@ def test_dynamo_import_after_backend_load(backend):
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [root, os.environ.get("PYTHONPATH")])))
     p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=600, env=env)
     assert p.returncode == 0 and "ok (10, 1)" in p.stdout, (
-        f"code {p.returncode} ; stderr : {p.stderr[-600:]}")
+        f"code {p.returncode}; stderr: {p.stderr[-600:]}")
 
 
 # ------------------------------------------------------------- multi-GPU
@@ -317,8 +317,8 @@ def test_multi_gpu_same_backend(backend):
     bname, dev = backend
     count = _same_backend_devices(dev)
     if count < 2:
-        pytest.skip(f"{bname} : {count} device visible ; multi-GPU non testable sur cet hôte "
-                    "(docs/conformance.md, limite multi-GPU)")
+        pytest.skip(f"{bname}: {count} visible device; multi-GPU cannot be tested on this host "
+                    "(docs/conformance.md, multi-GPU limitation)")
     kind = torch.device(dev).type
     run = kp.compile(_gauss(), dtype="float32", backend=bname)
     outs = {}

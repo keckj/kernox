@@ -1,10 +1,10 @@
-"""LOGSUMEXP / SUMSOFTMAXWEIGHT sur le backend sycl (contrat v0.5), G31.
+"""LOGSUMEXP / SUMSOFTMAXWEIGHT on the sycl backend (v0.5 contract), on the G31.
 
-Calqué sur tests/hip/test_softmax.py : partition de j forcée (tranches
-entièrement à −inf, donc états partiels vides), tuiles minuscules, valeurs
-1e4 / −1e4 / ±inf / NaN par ligne, variantes ``patient``, acc_dtype FP64,
-fp_contract on/off, schémas de sommation. Référence : oracle Torch FP64 du
-noyau sur les entrées arrondies au dtype.
+Modeled on tests/hip/test_softmax.py: forced j partition (slices entirely
+at −inf, hence empty partial states), tiny tiles, values
+1e4 / −1e4 / ±inf / NaN per row, ``patient`` variants, FP64 acc_dtype,
+fp_contract on/off, summation schemes. Reference: the core FP64 Torch oracle
+on the inputs rounded to the dtype.
 """
 
 import math
@@ -36,7 +36,7 @@ def _inputs(M, N, seed=0):
     x = torch.randn(M, 1, generator=g, dtype=torch.float64)
     x[1], x[2], x[3], x[4], x[5] = 1e4, -1e4, INF, -INF, NAN
     y = 3 * torch.randn(N, 1, generator=g, dtype=torch.float64)
-    y[: N // 2] = INF                     # première moitié de j : f = −inf (tranches vides)
+    y[: N // 2] = INF                     # first half of j: f = −inf (empty slices)
     w = torch.randn(N, 3, generator=g, dtype=torch.float64)
     return {"x": x, "y": y, "w": w}
 
@@ -71,13 +71,13 @@ def _close(got, ref, dtype, N):
     assert torch.equal(torch.isnan(got), torch.isnan(ref)), (got, ref)
     assert torch.equal(got[~fin & ~torch.isnan(ref)].double(), ref[~fin & ~torch.isnan(ref)])
     u = 2.0 ** -24 if dtype == "float32" else 2.0 ** -53
-    # |f| <= 1e4 + 10 : erreur des termes u·|f| (arrondi de f dans le dtype) + sommation
+    # |f| <= 1e4 + 10: term error u·|f| (rounding of f to the dtype) + summation
     tol = 4 * u * (2e4 + 20) + 8 * N * u * (1 + ref[fin].abs())
     assert torch.all((got[fin].double() - ref[fin]).abs() <= tol), (got[fin].double() - ref[fin]).abs().max()
 
 
-# (tuile j, cible de work-groups) : 0 = heuristiques ; tuiles de 8 et beaucoup de
-# work-groups -> nombreuses tranches, dont les premières entièrement à −inf.
+# (j tile, work-group target): 0 = heuristics; tiles of 8 and many
+# work-groups -> many slices, the first ones entirely at −inf.
 SPLITS = [(0, 1), (8, None), (8, 4096), (32, 2048), (0, None)]
 
 
@@ -95,7 +95,7 @@ def test_split_special_rows(tj, groups, dtype, name, scheme):
         assert cr.last_split[0] == 1
     ref = _ref(plan, host)
     _close(got, ref, dtype, 1500)
-    # couverture : x = ±1e4 finis (décalage), x = +inf (inf − inf : NaN), x = −inf (tous −inf), NaN
+    # coverage: x = ±1e4 finite (shift), x = +inf (inf − inf: NaN), x = −inf (all −inf), NaN
     assert torch.isfinite(ref[1]).all() and torch.isfinite(ref[2]).all() and torch.isnan(ref[3]).all()
     assert torch.isnan(ref[5]).all()
     assert (ref[4] == -INF).all() if name != "ssmw" else torch.isnan(ref[4]).all()
@@ -104,7 +104,7 @@ def test_split_special_rows(tj, groups, dtype, name, scheme):
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("name", list(_exprs()))
 def test_pos_inf_and_empty_rows(dtype, name):
-    """y sans +inf : x = +inf donne f = +inf partout (LSE +inf, SSMW NaN) ; N = 0, 1."""
+    """y without +inf: x = +inf gives f = +inf everywhere (LSE +inf, SSMW NaN); N = 0, 1."""
     plan = _exprs()[name].to_plan(dtype)
     for N in (0, 1, 3000):
         host = _inputs(9, max(N, 1), seed=N)
@@ -139,8 +139,8 @@ def test_all_patient_variants_agree(dtype, name):
 @pytest.mark.parametrize("scheme", ["direct", "block", "kahan"])
 @pytest.mark.parametrize("name", ["lse", "ssmw"])
 def test_fp32_acc_fp64(name, scheme):
-    # Termes f = x − y : une seule soustraction FP32, arrondie à l'identique sur GPU et par
-    # Torch CPU. Référence : oracle du même plan (termes FP32, état FP64).
+    # Terms f = x − y: a single FP32 subtraction, rounded identically on the GPU and by
+    # Torch on CPU. Reference: oracle of the same plan (FP32 terms, FP64 state).
     x, y, w = kp.Vi("x", 1), kp.Vj("y", 1), kp.Vj("w", 3)
     expr = (x - y).logsumexp(over="j") if name == "lse" else (x - y).sumsoftmaxweight(w, over="j")
     plan = expr.to_plan("float32", acc_dtype="float64", sum_scheme=scheme)

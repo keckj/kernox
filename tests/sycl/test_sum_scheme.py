@@ -1,9 +1,9 @@
-"""Schémas de sommation direct / block / kahan sur le backend sycl (avenant v0.7), G31.
+"""direct / block / kahan summation schemes on the sycl backend (v0.7 amendment), on the G31.
 
-Données mal conditionnées (termes ±1e8 qui s'annulent plus de petits termes,
-FP32), référence ``math.fsum`` en FP64 des termes exacts ; partition de j
-forcée (tranches multiples, tranches vides), tuiles variées, acc_dtype FP64,
-fp_contract on/off, valeurs spéciales.
+Ill-conditioned data (cancelling ±1e8 terms plus small terms, FP32),
+FP64 ``math.fsum`` reference of the exact terms; forced j partition
+(multiple slices, empty slices), various tiles, FP64 acc_dtype,
+fp_contract on/off, special values.
 """
 
 import math
@@ -19,7 +19,7 @@ from kernox.plan import output_shapes
 from ._helpers import DEV, backend
 
 U32 = 2.0 ** -24
-SCALES = torch.tensor([[1.0], [-1.0], [0.5], [2.0]], dtype=torch.float64)  # produits exacts
+SCALES = torch.tensor([[1.0], [-1.0], [0.5], [2.0]], dtype=torch.float64)  # exact products
 
 
 def _plan(dtype="float32", **kw):
@@ -27,7 +27,7 @@ def _plan(dtype="float32", **kw):
 
 
 def _higham(N, seed=0):
-    """Paires ±1e8 (signe opposé, positions mélangées) + petits termes dans [0, 1)."""
+    """±1e8 pairs (opposite signs, shuffled positions) + small terms in [0, 1)."""
     g = torch.Generator().manual_seed(seed)
     nb = N // 8
     big = (1e8 * (1 + torch.rand(nb, generator=g, dtype=torch.float64))).float().double()
@@ -50,7 +50,7 @@ def _run(plan, w, variant=None, groups=None, a=SCALES):
 
 
 def _errors(got, w, a=SCALES):
-    """(erreur absolue par ligne, Σ|terme| par ligne) contre math.fsum des termes exacts."""
+    """(absolute error per row, Σ|term| per row) against math.fsum of the exact terms."""
     terms = w.double()[:, 0]
     ref = torch.tensor([math.fsum((terms * s).tolist()) for s in a[:, 0].tolist()], dtype=torch.float64)
     mag = torch.tensor([float(s) for s in a[:, 0].abs()], dtype=torch.float64) * terms.abs().sum()
@@ -77,7 +77,7 @@ def test_bounds_ill_conditioned(N, tj, groups):
         else:
             T = _block_T(cr)
             S = cr.last_split[0]
-            # somme par tuiles de T termes, puis tuiles, puis S partiels de tranches
+            # sum over tiles of T terms, then over tiles, then over S slice partials
             assert torch.all(e <= (N / T + T + S + 2) * U32 * mag), (e / (U32 * mag)).max()
     if N >= 100_000:
         assert torch.all(err["kahan"] * 10 < err["direct"]), (err["kahan"], err["direct"])
@@ -85,7 +85,7 @@ def test_bounds_ill_conditioned(N, tj, groups):
 
 @pytest.mark.parametrize("fp_contract", [True, False])
 def test_kahan_fp_contract_modes(fp_contract):
-    """La compensation (additions seules) résiste à la contraction w·a + s."""
+    """The compensation (additions only) withstands the w·a + s contraction."""
     w = _higham(200_000, seed=7)
     got, cr = _run(_plan(sum_scheme="kahan", fp_contract=fp_contract), w, groups=4096)
     assert ("-ffp-contract=off" in cr.info.options) is (not fp_contract)

@@ -1,7 +1,7 @@
-"""Variantes du backend hip : partition de j (+ fusion), KMIN coopératif, sélection auto.
+"""Variants of the hip backend: j partition (+ merge), cooperative KMIN, auto selection.
 
-Petits cas uniquement (GPU partagé). Références : sémantique du contrat
-(``ref_reduce``) et oracle du noyau.
+Small cases only (shared GPU). References: contract semantics
+(``ref_reduce``) and the core oracle.
 """
 
 import math
@@ -67,7 +67,7 @@ def _check(out, ref, kind, F=None):
             assert torch.equal(o, r), (n, (o != r).nonzero()[:5])
 
 
-# ------------------------------------------------------------- partition de j
+# ------------------------------------------------------------- j partition
 SPLIT_OPTS = [dict(split="force", tile_j=8), dict(split="force", tile_j=8, jchunk=24),
               dict(split="force", tile_j=32, jchunk=40), dict(split="auto")]
 
@@ -79,9 +79,9 @@ SPLIT_OPTS = [dict(split="force", tile_j=8), dict(split="force", tile_j=8, jchun
                                     (R.KMIN_ARGKMIN, 20), (R.KMIN_ARGKMIN, 300)],
                          ids=lambda v: getattr(v, "value", v))
 def test_split_ties_nan_inf(opts, dtype, kind, k):
-    """Égalités massives à cheval sur les plages : départage par plus petit j après fusion."""
+    """Massive ties straddling the ranges: tie-breaking by smallest j after the merge."""
     if k is not None and k > 256:
-        k = 200  # K > N (N = 150) avec liste longue
+        k = 200  # K > N (N = 150) with a long list
     M, N = 37, 150
     be = _be(**opts)
     plan = make_plan(ABS1, kind, dtype, k)
@@ -130,7 +130,7 @@ def test_split_auto_decision_and_temp_bound():
     plan = make_plan(SQDIST, R.SUM, "float32")
     cr = be.compile(plan, DEV)
     big_m = cr.config.rows_per_block * cr.cu_count * HipOptions().split_blocks_per_cu
-    assert cr.split_plan(big_m, 10**6)[0] == 1             # grille déjà pleine
+    assert cr.split_plan(big_m, 10**6)[0] == 1             # grid already full
     S, jc = cr.split_plan(100, 10**6)
     assert S > 1 and jc % cr.config.tile_j == 0 and S * jc >= 10**6
     assert cr.temp_bytes(100, 10**6) == S * 100 * 4
@@ -141,7 +141,7 @@ def test_split_auto_decision_and_temp_bound():
     assert off.split_plan(1, 10**6) == (1, 10**6) and off.info.temp_bytes_per_launch == 0
 
 
-# ------------------------------------------------------------- KMIN coopératif
+# ------------------------------------------------------------- cooperative KMIN
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("group", [2, 4, 8, 16, 32])
 @pytest.mark.parametrize("k", [1, 7, 33, 64])
@@ -161,7 +161,7 @@ def test_coop_auto_large_k(dtype, k, split):
     be = _be(split=split, tile_j=64 if split == "force" else None)
     plan = make_plan(SQDIST, R.KMIN_ARGKMIN, dtype, k)
     host = _rand(SQDIST, M, N, seed=k)
-    host["y"][::7] = host["y"][3]   # doublons exacts → égalités de valeur
+    host["y"][::7] = host["y"][3]   # exact duplicates → value ties
     host["y"][5::11, 0] = math.nan
     out, cast, cr = _run(be, plan, host, M)
     assert cr.config.strategy == ("coop" if k >= COOP_K_MIN else "thread")
@@ -222,14 +222,14 @@ def test_frontend_vs_oracle(opts):
     (1024, 700, dict(split="off")), (1000, 700, dict(split="force", tile_j=32, jchunk=96)),   # K > N
 ], ids=lambda v: "-".join(f"{a}{b}" for a, b in v.items()) if isinstance(v, dict) else str(v))
 def test_coop_k_up_to_1024(dtype, k, N, opts):
-    """K = 512/1024 (coop G=16/32, <= 32 rangs par lane, sans débordement) : égalités de
-    valeur, NaN, K > N, partition de j ; correction exacte contre la référence Torch."""
+    """K = 512/1024 (coop G=16/32, <= 32 ranks per lane, no spill): value ties,
+    NaN, K > N, j partition; exact correctness against the Torch reference."""
     M = 29
     be = _be(**opts)
     for kind in (R.KMIN_ARGKMIN, R.ARGKMIN):
         plan = make_plan(SQDIST, kind, dtype, k)
         host = _rand(SQDIST, M, N, seed=k + N)
-        host["y"][::7] = host["y"][3]   # doublons exacts → égalités de valeur
+        host["y"][::7] = host["y"][3]   # exact duplicates → value ties
         host["y"][5::11, 0] = math.nan
         out, cast, cr = _run(be, plan, host, M)
         assert cr.config.strategy == "coop" and cr.config.slots(k) <= 32

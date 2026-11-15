@@ -1,9 +1,9 @@
-"""Top-K coopératif (variante ``coop`` : G lanes d'un sous-groupe par ligne i).
+"""Cooperative top-K (``coop`` variant: G lanes of a sub-group per row i).
 
-Contre la référence FP64 CPU, résultats exacts attendus : données entières
-(nombreuses égalités, règle du plus petit j), NaN injectés, K aux bornes
-(1, multiple ou non de G, K = N, K > N), partition de l'axe j (fusion
-coopérative), lignes partiellement actives (M non multiple des lignes par
+Against the FP64 CPU reference, exact results expected: integer data
+(many ties, smallest-j rule), injected NaNs, K at the bounds
+(1, multiple of G or not, K = N, K > N), partition of the j axis (cooperative
+merge), partially active rows (M not a multiple of the rows per
 work-group).
 """
 
@@ -65,7 +65,7 @@ def test_coop_single_outputs(dtype, kind):
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("k,N", [(50, 50), (64, 37), (256, 300), (130, 0)])
 def test_coop_k_bounds(dtype, k, N):
-    """K = N, K > N (rangs vides : +inf / -1), K = 256, N = 0."""
+    """K = N, K > N (empty ranks: +inf / -1), K = 256, N = 0."""
     p, X, Y, ref = _case(dtype, "kmin_argkmin", k, M=45, N=N, seed=k + N)
     _check(p, X, Y, ref, _variant(sg=16, coop=16))
 
@@ -73,14 +73,14 @@ def test_coop_k_bounds(dtype, k, N):
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("G,k", [(4, 64), (8, 128), (16, 128), (16, 256)])
 def test_coop_split_j_merge(dtype, G, k):
-    """Petit M, grand N : plusieurs tranches + fusion coopérative ; égalités entre tranches."""
+    """Small M, large N: several slices + cooperative merge; ties across slices."""
     p, X, Y, ref = _case(dtype, "kmin_argkmin", k, M=21, N=60001, D=2, seed=G + k, lo=-5, hi=6)
     c = _check(p, X, Y, ref, _variant(sg=16, coop=G))
     assert c.last_split[0] > 1, c.last_split
 
 
 def test_coop_split_j_forced_many_slices():
-    """Beaucoup de tranches courtes (fusion longue), valeurs variées exactes en FP32."""
+    """Many short slices (long merge), varied values that are exact in FP32."""
     x, y = arg("x", "i", 3), arg("y", "j", 3)
     p = plan([x, y], [_sq(x, y)], "kmin_argkmin", "float32", k=100)
     gen = torch.Generator().manual_seed(9)
@@ -136,7 +136,7 @@ def test_coop_invalid_refused():
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("k", [512, 1024])
 def test_coop_very_large_k_default_variant(dtype, k):
-    """L = K/16 > 16 rangs par lane (GRF 256), variante par défaut ; K > N et partition j."""
+    """L = K/16 > 16 ranks per lane (GRF 256), default variant; K > N and j partition."""
     p, X, Y, ref = _case(dtype, "kmin_argkmin", k, M=40, N=3000, seed=k)
     v = backend().default_variant(p, DEV, None)
     assert dict(v.params)["coop"] in (16, 32) and dict(v.params)["grf"] == 256
@@ -151,13 +151,13 @@ def test_coop_very_large_k_default_variant(dtype, k):
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("G", [2, 4, 8])
 def test_coop_k16(dtype, G):
-    """Seuil coop : K = 16 en variante coop (comparaison au registre par ligne)."""
+    """Coop threshold: K = 16 with the coop variant (compared with the per-row register version)."""
     p, X, Y, ref = _case(dtype, "kmin_argkmin", 16, M=150, N=2000, seed=G)
     _check(p, X, Y, ref, _variant(sg=16, coop=G))
 
 
 def test_default_threshold_k16_by_dtype():
-    """Seuils mesurés : coop dès K = 16 en FP64, dès K = 32 en FP32."""
+    """Measured thresholds: coop from K = 16 in FP64, from K = 32 in FP32."""
     for dtype, k, coop in (("float64", 16, 4), ("float32", 16, 0), ("float32", 32, 8), ("float64", 8, 0)):
         p, *_ = _case(dtype, "argkmin", k, M=4, N=4)
         assert dict(backend().default_variant(p, DEV, None).params)["coop"] == coop, (dtype, k)

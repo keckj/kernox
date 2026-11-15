@@ -8,7 +8,7 @@ symox = pytest.importorskip("symox")
 
 
 def make_inputs(plan, m, n, *, seed=0, dtype=None, device="cpu", scale=1.0):
-    """Entrées aléatoires conformes au plan (noms -> tenseurs Torch)."""
+    """Random inputs matching the plan (names -> Torch tensors)."""
     import torch
 
     g = torch.Generator().manual_seed(seed)

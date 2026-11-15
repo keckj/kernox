@@ -1,7 +1,7 @@
-"""Contrat v0.2 : default_variant / variants / compile(variant) du backend hip.
+"""Contract v0.2: default_variant / variants / compile(variant) of the hip backend.
 
-Toutes les variantes ``patient`` d'un plan donnent des résultats identiques
-pour les réductions exactes et restent dans la tolérance pour SUM.
+All ``patient`` variants of a plan give identical results for exact
+reductions and stay within tolerance for SUM.
 """
 
 import math
@@ -31,7 +31,7 @@ def _inputs(case, M, N, seed):
         L = M if a.role == "i" else N
         t[a.name] = (torch.randn(L, a.dim, generator=g, dtype=torch.float64) if a.role != "param"
                      else torch.full((a.dim,), 1.3, dtype=torch.float64))
-    if case is ABS1:  # égalités massives + NaN + inf
+    if case is ABS1:  # massive ties + NaN + inf
         t = {"x": torch.randint(-3, 4, (M, 1), generator=g).double(),
              "y": torch.randint(-3, 4, (N, 1), generator=g).double()}
         t["y"][::9] = math.nan
@@ -58,10 +58,10 @@ def test_default_variant_heuristic(be):
     assert be.default_variant(make_plan(SQDIST, R.KMIN, "float32", 8), DEV, big).name == "row"
     v = be.default_variant(make_plan(SQDIST, R.ARGKMIN, "float64", 128), DEV, small)
     assert v.name == "coop_topk" and dict(v.params)["group"] == 16 and dict(v.params)["split"] == "auto"
-    # top-K K>=32 : pas de partition dès 4 blocs/CU (mesuré : M=50 000, K=32 → G2, 391 blocs)
+    # top-K K>=32: no partition from 4 blocks/CU (measured: M=50 000, K=32 → G2, 391 blocks)
     v = be.default_variant(make_plan(SQDIST, R.KMIN, "float32", 32), DEV, Sizes(50_000, 50_000))
     assert v.name == "coop_topk" and dict(v.params)["group"] == 2 and dict(v.params)["split"] == "off"
-    # G16 : partition sous 4 blocs/CU, dimensionnée sur 8 blocs/CU (mesuré : M=1024 → S=4)
+    # G16: partition below 4 blocks/CU, sized for 8 blocks/CU (measured: M=1024 → S=4)
     v = be.default_variant(make_plan(SQDIST, R.KMIN, "float32", 128), DEV, Sizes(1024, 200_000))
     assert dict(v.params) == {"block": 256, "tile_j": dict(v.params)["tile_j"], "group": 16,
                               "split": "auto", "blocks_per_cu": 8}
@@ -70,9 +70,9 @@ def test_default_variant_heuristic(be):
         assert cr.split_plan(1024, 200_000)[0] == 4
     v = be.default_variant(make_plan(SQDIST, R.KMIN, "float32", 128), DEV, Sizes(2048, 200_000))
     assert dict(v.params)["split"] == "off"
-    # K=48 : G2 (24 rangs par lane)
+    # K=48: G2 (24 ranks per lane)
     assert dict(be.default_variant(make_plan(SQDIST, R.KMIN, "float32", 48), DEV, big).params)["group"] == 2
-    # déterministe
+    # deterministic
     assert be.default_variant(make_plan(SQDIST, R.SUM, "float32"), DEV, small) == \
         be.default_variant(make_plan(SQDIST, R.SUM, "float32"), DEV, small)
 
@@ -110,7 +110,7 @@ def test_variant_in_cache_key_and_info(be):
     crs = [be.compile(plan, DEV, v) for v in vs]
     assert [c.info.variant for c in crs] == vs
     assert len({c.cache_key for c in crs}) == len(vs)
-    assert be.compile(plan, DEV).info.variant is not None  # variant=None : variante par défaut publiée
+    assert be.compile(plan, DEV).info.variant is not None  # variant=None: published default variant
 
 
 CASES = [(VEC, R.MIN, None, "float32"), (VEC, R.ARGMAX, None, "float64"), (ABS1, R.ARGMIN, None, "float32"),
@@ -148,7 +148,7 @@ def test_all_patient_variants_agree(be, case, kind, k, dtype, M, N):
 
 
 def test_default_variant_heavy_row():
-    """Ligne j >= 64 dimensions : thread à K=32, coop dès K=48 (mesuré, D64)."""
+    """j row with >= 64 dimensions: thread at K=32, coop from K=48 (measured, D64)."""
     import kernox as kp
 
     from kernox.backends.hip._kernel import COOP_HEAVY_D, COOP_K_MIN_HEAVY

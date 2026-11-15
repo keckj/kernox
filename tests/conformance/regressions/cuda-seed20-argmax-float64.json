@@ -16,6 +16,6 @@
   "kp.maximum(kp.cos(-1), kp.where((x[2] <= y[1]), y[2], x[1]))"
  ],
  "backend": "cuda",
- "error": "CudaError: nvrtcCompileProgram a échoué (6) :\nkernox.cu(43): error: more than one instance of overloaded function \"cos\" matches the argument list:\n            function \"cos(float)\" (declared implicitly)\n            function \"cos(double)\" (declared implicitly)\n            argument types are: (int)\n  )), cos(1)));\n      ^\n\n1 error detected in the compilation of \"kernox.cu\".\n",
+ "error": "CudaError: nvrtcCompileProgram failed (6):\nkernox.cu(43): error: more than one instance of overloaded function \"cos\" matches the argument list:\n            function \"cos(float)\" (declared implicitly)\n            function \"cos(double)\" (declared implicitly)\n            argument types are: (int)\n  )), cos(1)));\n      ^\n\n1 error detected in the compilation of \"kernox.cu\".\n",
  "original_seed": 20
 }

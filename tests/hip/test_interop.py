@@ -1,4 +1,4 @@
-"""M1 : interop HIP/Torch ROCm : runtime partagé, streams, dépendances, durée de vie."""
+"""M1: HIP/Torch ROCm interop: shared runtime, streams, dependencies, lifetime."""
 
 import gc
 import subprocess
@@ -14,7 +14,7 @@ from kernox.plan import ReductionKind as R
 
 pytestmark = pytest.mark.gpu
 DEV = "cuda"
-SLEEP_CYCLES = 20_000_000  # ~10 ms : garde le GPU occupé sans charge mémoire
+SLEEP_CYCLES = 20_000_000  # ~10 ms: keeps the GPU busy without memory load
 
 
 def _ref_sum(x, y):
@@ -28,16 +28,16 @@ def test_single_hip_runtime_shared_with_torch():
     rtc = _hip.hiprtc()
     import os
     assert os.path.dirname(os.path.realpath(rtc.path)) == os.path.dirname(os.path.realpath(rt.path))
-    # le device courant HIP est celui de Torch
+    # the current HIP device is Torch's
     assert rt.get_device() == torch.cuda.current_device()
 
 
 def test_non_default_stream_dependencies(backend):
-    """Entrées produites sur un stream non défaut, consommation sur ce même stream.
+    """Inputs produced on a non-default stream, consumed on that same stream.
 
-    Le stream est d'abord bloqué par un kernel de sommeil, puis les entrées y
-    sont écrites : si le kernel était lancé sur un autre stream, il lirait des
-    entrées non initialisées (zéros) et le résultat serait faux.
+    The stream is first blocked by a sleep kernel, then the inputs are written
+    to it: if the kernel were launched on another stream, it would read
+    uninitialized inputs (zeros) and the result would be wrong.
     """
     cr = backend.compile(make_plan(SQDIST, R.SUM, "float64"), DEV)
     xs = torch.randn(500, 3, dtype=torch.float64, device=DEV)
@@ -53,13 +53,13 @@ def test_non_default_stream_dependencies(backend):
         x.copy_(xs)
         y.copy_(ys)
         cr.launch({"x": x, "y": y}, {"value": out})
-        res = out * 2.0  # consommation de la sortie sur le même stream
+        res = out * 2.0  # the output is consumed on the same stream
     torch.cuda.current_stream().wait_stream(s)
     torch.testing.assert_close(res, 2.0 * ref, rtol=1e-12, atol=1e-12)
 
 
 def test_cross_stream_event(backend):
-    """Producteur sur s1, kernel sur s2 après attente d'événement."""
+    """Producer on s1, kernel on s2 after waiting on an event."""
     cr = backend.compile(make_plan(SQDIST, R.SUM, "float64"), DEV)
     s1, s2 = torch.cuda.Stream(), torch.cuda.Stream()
     with torch.cuda.stream(s1):
@@ -77,7 +77,7 @@ def test_cross_stream_event(backend):
 
 
 def test_launch_is_async_and_never_syncs(backend):
-    """Aucune synchronisation hôte ni copie D2H dans launch (mode debug Torch)."""
+    """No host synchronization or D2H copy in launch (Torch debug mode)."""
     cr = backend.compile(make_plan(SQDIST, R.KMIN_ARGKMIN, "float32", 4), DEV)
     x = torch.randn(1000, 3, device=DEV)
     y = torch.randn(1000, 3, device=DEV)
@@ -91,7 +91,7 @@ def test_launch_is_async_and_never_syncs(backend):
         cr.launch({"x": x, "y": y}, {"value": v, "index": i})
     finally:
         torch.cuda.set_sync_debug_mode(prev)
-    # le kernel est derrière le sommeil : le stream ne doit pas encore être vide
+    # the kernel is queued behind the sleep: the stream must not be empty yet
     assert not torch.cuda.current_stream().query()
     torch.cuda.synchronize()
     d = SQDIST.torch_f({"x": x, "y": y})[..., 0]
@@ -99,9 +99,9 @@ def test_launch_is_async_and_never_syncs(backend):
 
 
 def test_buffer_lifetime_caching_allocator(backend):
-    """Entrées libérées par Python juste après launch (kernel encore en file) :
-    l'allocateur de Torch ne réutilise ces blocs que dans l'ordre du stream, donc
-    l'écrasement des nouveaux tenseurs se produit après la lecture du kernel."""
+    """Inputs freed by Python right after launch (kernel still queued):
+    Torch's allocator reuses these blocks only in stream order, so the new
+    tensors overwrite them after the kernel has read them."""
     cr = backend.compile(make_plan(SQDIST, R.SUM, "float64"), DEV)
     xh = torch.randn(400, 3, dtype=torch.float64)
     yh = torch.randn(900, 3, dtype=torch.float64)
@@ -117,7 +117,7 @@ def test_buffer_lifetime_caching_allocator(backend):
     reused = {junk[0].data_ptr(), junk[1].data_ptr()} & {px, py}
     torch.cuda.synchronize()
     torch.testing.assert_close(out.cpu(), ref, rtol=1e-12, atol=1e-12)
-    assert reused, "le test n'a pas provoqué de réutilisation mémoire (non discriminant)"
+    assert reused, "the test did not trigger any memory reuse (not discriminating)"
 
 
 def test_zero_elements_do_not_launch(backend):
@@ -137,7 +137,7 @@ def test_destruction_and_recompile_from_cache():
     del cr, b1
     gc.collect()
     b2 = HipBackend(pair_provider=pair_provider)
-    cr2 = b2.compile(plan, DEV)  # nouveau backend : cache disque (ou module déjà chargé)
+    cr2 = b2.compile(plan, DEV)  # new backend: disk cache (or module already loaded)
     assert cr2.cache_key == key and cr2.info.cache_hit
     x = torch.randn(50, 3, dtype=torch.float64, device=DEV)
     y = torch.randn(60, 3, dtype=torch.float64, device=DEV)
@@ -169,7 +169,7 @@ def test_corrupted_cache_entry_is_rebuilt(tmp_path, monkeypatch):
 
 
 def test_concurrent_compilation_processes(tmp_path):
-    """Deux processus compilent la même clé : un seul build, artefact complet."""
+    """Two processes compile the same key: a single build, complete artifact."""
     code = textwrap.dedent(f"""
         import os, sys, json
         sys.path.insert(0, {repr(str(__import__('pathlib').Path(__file__).parent))})
@@ -185,11 +185,11 @@ def test_concurrent_compilation_processes(tmp_path):
     res = [__import__("json").loads(p.communicate(timeout=300)[0].strip().splitlines()[-1]) for p in procs]
     assert all(p.returncode == 0 for p in procs)
     assert len({r[0] for r in res}) == 1
-    assert sum(1 for r in res if not r[1]) == 1  # une seule compilation effective
+    assert sum(1 for r in res if not r[1]) == 1  # a single actual compilation
     leftovers = [p for p in (tmp_path / "hip").iterdir() if p.suffix == ".tmp"]
     assert not leftovers
 
 
-@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="un seul GPU AMD : multi-GPU non testable")
+@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="single AMD GPU: multi-GPU cannot be tested")
 def test_multi_gpu():  # pragma: no cover
     pass

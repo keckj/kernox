@@ -1,25 +1,25 @@
-"""Schémas de sommation (avenant v0.7) : direct, block, kahan (Neumaier).
+"""Summation schemes (amendment v0.7): direct, block, kahan (Neumaier).
 
-Exécuté sur l'oracle (référence CPU qui simule réellement chaque schéma en
-``acc_dtype``) et sur chaque backend GPU présent. Un backend qui n'implémente
-pas un schéma (ou une option du cas : ``fp_contract=False``, LSE/SSMW) répond
-``Support(False)`` : le cas est **sauté explicitement** (motif affiché),
-jamais remplacé par ``direct``.
+Run on the oracle (CPU reference that actually simulates each scheme in
+``acc_dtype``) and on each available GPU backend. A backend that does not
+implement a scheme (or an option of the case: ``fp_contract=False``, LSE/SSMW)
+answers ``Support(False)``: the case is **explicitly skipped** (reason shown),
+never replaced by ``direct``.
 
-Données de Higham : termes ``±1e8`` qui s'annulent (positions 4k et 4k+2)
-entre des petits termes de [0, 1), en FP32 ; référence ``math.fsum`` en FP64
-des valeurs FP32. Exigences (``u = 2⁻²⁴``, ``L1 = Σ|terme|``) :
+Higham data: ``±1e8`` terms that cancel out (positions 4k and 4k+2) between
+small terms in [0, 1), in FP32; ``math.fsum`` reference in FP64 of the FP32
+values. Requirements (``u = 2⁻²⁴``, ``L1 = Σ|term|``):
 
-- ``kahan`` : erreur ≤ 4·u·L1 (marge : aucune) quel que soit N, avec
-  ``fp_contract`` vrai et faux ;
-- ``block`` : erreur ≤ (N/T + T + 2)·u·L1, ``T`` publié par le backend dans
-  ``CompileInfo.options`` (``sum_block=T``) ;
-- ``direct`` : erreur ≤ N·u·L1 ;
-- N ≥ 10⁵, FP32 : erreur(kahan) ≤ erreur(direct) / 10.
+- ``kahan``: error ≤ 4·u·L1 (margin: none) for any N, with ``fp_contract``
+  true and false;
+- ``block``: error ≤ (N/T + T + 2)·u·L1, ``T`` published by the backend in
+  ``CompileInfo.options`` (``sum_block=T``);
+- ``direct``: error ≤ N·u·L1;
+- N ≥ 10⁵, FP32: error(kahan) ≤ error(direct) / 10.
 
-Mêmes exigences pour la somme ``t`` de SUMSOFTMAXWEIGHT (poids uniformes,
-``g`` de Higham) ; pour LOGSUMEXP (termes positifs), kahan est au moins 10×
-plus précis que direct pour N ≥ 10⁵.
+Same requirements for the ``t`` sum of SUMSOFTMAXWEIGHT (uniform weights,
+Higham ``g``); for LOGSUMEXP (positive terms), kahan is at least 10× more
+accurate than direct for N ≥ 10⁵.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def target(request):
         return name, "cpu"
     dev, reason = backend_status(name)
     if dev is None:
-        pytest.skip(f"backend {name} absent : {reason}")
+        pytest.skip(f"backend {name} unavailable: {reason}")
     return name, dev
 
 
@@ -60,14 +60,14 @@ def higham(n, seed=0):
 
 
 def _run(red, name, dev, inputs, **opts):
-    """Résultat (première ligne, première composante) et objet compilé ; saute si non pris en charge."""
+    """Result (first row, first component) and compiled object; skips if unsupported."""
     run = kp.compile(red, dtype="float32", backend=name, **opts)
     try:
         out = run(**{k: v.to(dev) for k, v in inputs.items()})
     except UnsupportedError as exc:
-        # refus explicite (schéma, fp_contract=False, réduction pas encore
-        # implémentée...) : sauté avec son motif, jamais remplacé par direct
-        pytest.skip(f"{name} : {exc}")
+        # explicit refusal (scheme, fp_contract=False, reduction not yet
+        # implemented...): skipped with its reason, never replaced by direct
+        pytest.skip(f"{name}: {exc}")
     if dev != "cpu":
         synchronize(dev)
     m = next(iter(inputs.values())).shape[0]
@@ -77,7 +77,7 @@ def _run(red, name, dev, inputs, **opts):
 
 def _sum_block(info):
     opts = [o for o in info.options if o.startswith("sum_block=")]
-    assert opts, f"schéma block : taille de tuile non publiée dans CompileInfo.options {info.options}"
+    assert opts, f"block scheme: tile size not published in CompileInfo.options {info.options}"
     return int(opts[0].split("=")[1])
 
 
@@ -125,7 +125,7 @@ def test_sumsoftmaxweight_schemes_higham(target, n):
     for scheme in ("direct", "kahan"):
         out, info = _run(red, name, dev, inputs, sum_scheme=scheme)
         err[scheme] = abs(out[0, 0].item() - ref)
-        # t et s accumulés selon le schéma, puis t / s : une division arrondie en plus
+        # t and s accumulated with the scheme, then t / s: one extra rounded division
         assert err[scheme] <= _bound(scheme, n, l1, info) + 2 * U32 * abs(ref), (scheme, err[scheme])
     if n >= 10**5:
         assert err["kahan"] * 10 <= err["direct"], err
@@ -145,9 +145,9 @@ def test_logsumexp_kahan_more_accurate(target, n):
     for scheme in ("direct", "kahan"):
         out, _ = _run(red, name, dev, inputs, sum_scheme=scheme)
         err[scheme] = abs(out[0, 0].item() - ref)
-    # kahan : erreur de l'état (s, c) ~ u, plus log et exp FP32 arrondis
+    # kahan: error of the (s, c) state ~ u, plus rounded FP32 log and exp
     assert err["kahan"] <= 8 * U32 * max(1.0, abs(ref)), err
-    # Plancher : la sortie est FP32, l'arrondi de ref à FP32 est inévitable. Le gain
-    # x10 est exigé sur l'erreur au-dessus de ce plancher (direct peut déjà y être).
+    # Floor: the output is FP32, rounding ref to FP32 is unavoidable. The x10 gain
+    # is required on the error above this floor (direct may already be at it).
     floor = abs(float(np.float32(ref)) - ref)
     assert err["kahan"] - floor <= max(err["direct"] - floor, 0.0) / 10 + 1e-12, (err, floor)

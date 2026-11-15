@@ -1,9 +1,9 @@
-"""Ranges block-sparse natifs du backend sycl (avenant v0.6 §2), G31.
+"""Native block-sparse ranges of the sycl backend (v0.6 amendment §2), on the G31.
 
-Référence : l'oracle (CPU) avec les mêmes ranges ; égalité au bit près hors
-sommes flottantes. Cas : intervalles dans le désordre (règle du plus petit j
-à égalité), blocs plus hauts que ``tile_m``, lignes non couvertes (neutres),
-blocs sans intervalle, liste de travail vide, top-K coopératif, LSE/SSMW.
+Reference: the oracle (CPU) with the same ranges; bit-exact equality except for
+floating-point sums. Cases: intervals out of order (smallest-j rule on ties),
+blocks taller than ``tile_m``, uncovered rows (neutral elements),
+blocks without intervals, empty work list, cooperative top-K, LSE/SSMW.
 """
 
 import pytest
@@ -33,12 +33,12 @@ def _formulas():
 
 
 def _ranges(m, n, device):
-    """Blocs i : [0, 300) (plus haut que tile_m), [300, 301), [310, 600) ;
-    [301, 310) et [600, m) non couverts. Intervalles de j dans le désordre,
-    vides, adjacents ; le bloc [300, 301) n'a aucun intervalle."""
+    """i blocks: [0, 300) (taller than tile_m), [300, 301), [310, 600);
+    [301, 310) and [600, m) not covered. j intervals out of order,
+    empty, adjacent; block [300, 301) has no interval."""
     ranges_i = torch.tensor([[0, 300], [300, 301], [310, 600]], dtype=torch.int64)
-    red = torch.tensor([[700, n], [0, 50], [50, 51], [400, 400], [100, 300],    # bloc 0
-                        [900, 950], [10, 20], [0, 5]], dtype=torch.int64)       # bloc 2
+    red = torch.tensor([[700, n], [0, 50], [50, 51], [400, 400], [100, 300],    # block 0
+                        [900, 950], [10, 20], [0, 5]], dtype=torch.int64)       # block 2
     slices = torch.tensor([5, 5, 8], dtype=torch.int64)
     return Ranges(ranges_i.to(device), slices.to(device), red.to(device))
 
@@ -46,7 +46,7 @@ def _ranges(m, n, device):
 def _inputs(dtype, m, n, seed=0):
     g = torch.Generator().manual_seed(seed)
     T = getattr(torch, dtype)
-    x = torch.randint(-3, 4, (m, 3), generator=g).to(T)   # nombreuses égalités
+    x = torch.randint(-3, 4, (m, 3), generator=g).to(T)   # many ties
     y = torch.randint(-3, 4, (n, 3), generator=g).to(T)
     w = torch.randn(n, 2, generator=g, dtype=torch.float64).to(T)
     return {"x": x, "y": y, "w": w}
@@ -76,20 +76,20 @@ def test_ranges_match_oracle(name, dtype):
         g_ = g_.cpu()
         assert g_.shape == r_.shape and g_.dtype == r_.dtype
         if name in ("sum", "lse", "ssmw"):
-            # termes de signes mêlés (poids gaussiens), |J(i)| <= 450, Σ|terme| <= 450 :
-            # ordre de sommation différent de l'oracle -> écart absolu de quelques 1e-6 en FP32
+            # terms of mixed signs (Gaussian weights), |J(i)| <= 450, Σ|term| <= 450:
+            # summation order differs from the oracle -> absolute difference of a few 1e-6 in FP32
             torch.testing.assert_close(g_, r_, rtol=1e-5 if dtype == "float32" else 1e-12,
                                        atol=2e-5 if dtype == "float32" else 1e-12, equal_nan=True)
         else:
             assert torch.equal(g_, r_), (name, (g_ != r_).nonzero()[:5])
-    # lignes non couvertes : neutres
+    # uncovered rows: neutral elements
     if name == "argmin":
         assert (got[0].cpu()[301:310] == -1).all() and (got[0].cpu()[600:] == -1).all()
 
 
 @pytest.mark.parametrize("G", [0, 4, 8])
 def test_ranges_variants(G):
-    """Toutes les variantes (un work-item par ligne, coop G) : même résultat, tile_m publié."""
+    """All variants (one work-item per row, coop G): same result, tile_m exposed."""
     red = _formulas()["kmin_argkmin_coop"]
     m, n = 700, 1000
     t = _pick(red, _inputs("float32", m, n, seed=G))
@@ -123,7 +123,7 @@ def test_empty_work_and_bad_layout():
                    torch.zeros(0, 2, dtype=torch.int64, device=DEV))
     out = run.with_ranges(empty)(**t)
     assert torch.isinf(out.cpu()).all()
-    # bornes vérifiées sur l'hôte avant lancement (sûreté mémoire)
+    # bounds checked on the host before launch (memory safety)
     import dataclasses
 
     from kernox.backends.base import RangesLayout
@@ -135,9 +135,9 @@ def test_empty_work_and_bad_layout():
     work = torch.tensor([[0, 10, 0, 1]], dtype=torch.int64)
     for redr in (torch.tensor([[0, n + 1]]), torch.tensor([[-1, 3]])):
         lay = RangesLayout(work.to(DEV), redr.to(DEV), cr.ranges_tile_m, work, redr)
-        with pytest.raises(ValueError, match="hors"):
+        with pytest.raises(ValueError, match="outside"):
             cr.launch(t, outs, ranges=lay)
     bad = torch.tensor([[0, m + 1, 0, 1]], dtype=torch.int64)
     redr = torch.tensor([[0, 3]])
-    with pytest.raises(ValueError, match="hors bornes"):
+    with pytest.raises(ValueError, match="out of bounds"):
         cr.launch(t, outs, ranges=RangesLayout(bad.to(DEV), redr.to(DEV), cr.ranges_tile_m, bad, redr))

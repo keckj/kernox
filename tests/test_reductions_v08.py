@@ -1,4 +1,4 @@
-"""Avenant v0.8 : MIN_ARGMIN, MAX_ARGMAX, LOGSUMEXPWEIGHT (frontend, plan, oracles)."""
+"""v0.8 amendment: MIN_ARGMIN, MAX_ARGMAX, LOGSUMEXPWEIGHT (frontend, plan, oracles)."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def test_plans_and_shapes():
 def test_validation():
     x, y = kp.Vi("x", 2), kp.Vj("y", 2)
     with pytest.raises(ValidationError):
-        (x * y).logsumexp(over="j", weight=y)  # score non scalaire
+        (x * y).logsumexp(over="j", weight=y)  # non-scalar score
     with pytest.raises(TypeError):
         (x * y).sum().logsumexp(over="j", weight=y[0] > 0)
     with pytest.raises(ValidationError):
@@ -55,7 +55,7 @@ def test_validation():
 
 # ---------------------------------------------------- MIN_ARGMIN / MAX
 def _data(rng, m, n, d):
-    X = rng.integers(-3, 4, size=(m, d)).astype(np.float64)  # égalités fréquentes
+    X = rng.integers(-3, 4, size=(m, d)).astype(np.float64)  # frequent ties
     Y = rng.integers(-3, 4, size=(n, d)).astype(np.float64)
     return X, Y
 
@@ -66,7 +66,7 @@ def test_min_argmin_equals_separate_reductions(over, is_min):
     rng = np.random.default_rng(0)
     X, Y = _data(rng, 37, 1500, 3)
     Y[5, 1] = np.nan
-    Y[:, 2] = np.nan  # composante sans candidat : (±inf, −1)
+    Y[:, 2] = np.nan  # component without candidates: (±inf, −1)
     x, y = kp.Vi("x", 3), kp.Vj("y", 3)
     f = x * y
     both = (f.min_argmin if is_min else f.max_argmax)(over=over).compile("float64", backend="oracle")
@@ -81,7 +81,7 @@ def test_min_argmin_equals_separate_reductions(over, is_min):
                               {"x": X, "y": Y})
         np.testing.assert_array_equal(v.numpy(), ref["value"])
         np.testing.assert_array_equal(i.numpy(), ref["index"])
-        # cohérence : la valeur est celle de l'indice retenu
+        # consistency: the value is the one at the selected index
         sel = np.take_along_axis((X[:, None, :] * Y[None]), np.maximum(i.numpy(), 0)[:, None, :], 1)[:, 0]
         ok = i.numpy() >= 0
         np.testing.assert_array_equal(v.numpy()[ok], sel[ok])
@@ -98,7 +98,7 @@ def test_min_argmin_batch_and_ranges():
     D = (X[..., :, None, 0] - Y[..., None, :, 0]) ** 2
     np.testing.assert_array_equal(i.numpy()[..., 0], D.argmin(-1))
     np.testing.assert_array_equal(v.numpy()[..., 0], D.min(-1))
-    # ranges : deux groupes diagonaux
+    # ranges: two diagonal groups
     lx, ly = np.repeat([0, 1], 10), np.repeat([0, 1], 15)
     r = kp.ranges_from_labels(torch.as_tensor(lx), torch.as_tensor(ly), torch.eye(2, dtype=torch.bool))
     v, i = run.with_ranges(r)(x=_t(X[0, 0]), y=_t(Y[0, 0]))
@@ -107,7 +107,7 @@ def test_min_argmin_batch_and_ranges():
 
 
 def test_min_argmin_indices_not_differentiable_values_are():
-    """Indices non différentiables ; valeurs : gradient au terme retenu
+    """Indices are not differentiable; values: gradient at the selected term
     (``tests/test_reduction_gradients.py``)."""
     x = torch.randn(5, 1, dtype=F64, requires_grad=True)
     y = torch.randn(4, 1, dtype=F64)
@@ -119,7 +119,7 @@ def test_min_argmin_indices_not_differentiable_values_are():
 
 # ---------------------------------------------------- LOGSUMEXPWEIGHT
 def _lsew_dense(F, G):
-    """log Σ_j exp(F_ij) G_je en FP64 dense, poids positifs."""
+    """log Σ_j exp(F_ij) G_je in dense FP64, positive weights."""
     return torch.logsumexp(F[..., None] + torch.log(G)[None], dim=1)
 
 
@@ -128,7 +128,7 @@ def test_lsew_against_dense(scheme):
     rng = np.random.default_rng(2)
     X, Y, G = rng.standard_normal((40, 3)), rng.standard_normal((700, 3)), rng.random((700, 4)) + 0.1
     x, y, g = kp.Vi("x", 3), kp.Vj("y", 3), kp.Vj("g", 4)
-    f = -(x - y).sqnorm2() * 30  # grands écarts : le décalage est nécessaire
+    f = -(x - y).sqnorm2() * 30  # large spreads: the shift is required
     out = kp.compile(f.logsumexp(over="j", weight=g), dtype="float64", backend="oracle",
                      sum_scheme=scheme)(x=_t(X), y=_t(Y), g=_t(G))
     F = -((_t(X)[:, None] - _t(Y)[None]) ** 2).sum(-1) * 30
@@ -143,8 +143,8 @@ def test_lsew_numpy_reference_and_over_i():
     got = e.compile("float64", backend="oracle")(x=_t(X), y=_t(Y), g=_t(G)).numpy()
     ref = reference_numpy(e.to_plan("float64"), {"x": X, "y": Y, "g": G})["value"]
     np.testing.assert_allclose(got, ref, rtol=1e-13, atol=1e-13, equal_nan=True)
-    assert np.isnan(got).any()  # poids négatifs : t_e < 0 → NaN
-    # over="i" : poids côté i
+    assert np.isnan(got).any()  # negative weights: t_e < 0 → NaN
+    # over="i": weights on the i side
     gi = kp.Vi("h", 2)
     e = (x * y).sum().logsumexp(over="i", weight=gi)
     H = rng.random((9, 2))
@@ -154,15 +154,15 @@ def test_lsew_numpy_reference_and_over_i():
 
 
 def test_lsew_special_values():
-    """Valeurs spéciales de l'avenant v0.8 (oracle Torch et référence NumPy)."""
+    """Special values of the v0.8 amendment (Torch oracle and NumPy reference)."""
     inf, nan = math.inf, math.nan
-    # une ligne i par cas ; f(i, j) = a_i · b_j choisi par les données, poids g_j
+    # one row i per case; f(i, j) = a_i · b_j chosen by the data, weights g_j
     rows = {
-        "vide (-inf)": ([-inf], [[1.0, 2.0]], [-inf, -inf]),
-        "+inf, poids > 0 et nul": ([inf], [[2.0, 0.0]], [inf, nan]),
-        "+inf, poids < 0": ([inf], [[-1.0, 3.0]], [nan, inf]),
+        "empty (-inf)": ([-inf], [[1.0, 2.0]], [-inf, -inf]),
+        "+inf, weights > 0 and zero": ([inf], [[2.0, 0.0]], [inf, nan]),
+        "+inf, weight < 0": ([inf], [[-1.0, 3.0]], [nan, inf]),
         "f NaN": ([nan], [[1.0, 1.0]], [nan, nan]),
-        "g NaN de poids nul": ([-inf, 0.0], [[nan, nan], [1.0, 2.0]], [0.0, math.log(2.0)]),
+        "NaN g with zero weight": ([-inf, 0.0], [[nan, nan], [1.0, 2.0]], [0.0, math.log(2.0)]),
     }
     x, y, g = kp.Vi("x", 1), kp.Vj("y", 1), kp.Vj("g", 2)
     e = (x + y).logsumexp(over="j", weight=g)

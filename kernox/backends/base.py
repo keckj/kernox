@@ -26,49 +26,49 @@ class Support:
 
 @dataclass(frozen=True)
 class CompileInfo:
-    """Publié pour diagnostics et benchmarks."""
+    """Published for diagnostics and benchmarks."""
 
     backend: str              # "cuda" | "hip" | "sycl"
     device_name: str
     arch: str                 # sm_75, gfx1201, intel_gpu_bmg_g31...
-    compiler: str             # nom + version exacte
+    compiler: str             # name + exact version
     options: tuple[str, ...]
     cache_hit: bool
     compile_seconds: float
-    temp_bytes_per_launch: int  # buffers temporaires bornés, publiés
+    temp_bytes_per_launch: int  # bounded temporary buffers, published
     source_sha256: str
-    variant: "Variant | None" = None  # variante effective (contrat v0.2)
+    variant: "Variant | None" = None  # effective variant (contract v0.2)
 
 
 class CompiledReduction(Protocol):
     info: CompileInfo
 
     def launch(self, inputs: dict, outputs: dict) -> None:
-        """Lance la réduction de façon asynchrone sur le stream/queue Torch courant
-        du device des tenseurs.
+        """Launches the reduction asynchronously on the current Torch
+        stream/queue of the tensors' device.
 
-        ``inputs`` : nom d'argument -> torch.Tensor (i: (M,d), j: (N,d),
-        param: (d,)), tous sur le même device, dtype ``plan.dtype``, contigus.
-        ``outputs`` : clés de ``plan.output_shapes`` -> tenseurs préalloués par le
-        noyau. Aucune synchronisation hôte, aucune copie CPU. Les temporaires
-        sont alloués via l'allocateur Torch du même device et stream.
-        Cas M == 0 : retour immédiat. Cas N == 0 : sorties = éléments neutres.
+        ``inputs``: argument name -> torch.Tensor (i: (M,d), j: (N,d),
+        param: (d,)), all on the same device, dtype ``plan.dtype``, contiguous.
+        ``outputs``: keys of ``plan.output_shapes`` -> tensors preallocated by
+        the core. No host synchronization, no CPU copy. Temporaries are
+        allocated through the Torch allocator of the same device and stream.
+        M == 0: return immediately. N == 0: outputs = neutral elements.
 
-        Avenant v0.6 (plans ``batch_rank > 0``, backends déclarant ``batch``) :
-        appel ``launch(inputs, outputs, batch=BatchLayout)``. Les entrées gardent
-        leur forme ``(*Ba, L, d)`` / ``(*Bp, d)`` et leurs strides de batch
-        (quelconques, 0 compris) ; leurs deux dernières dimensions sont
-        contiguës. L'élément ``b`` d'un argument commence à
-        ``data_ptr + batch.offsets[nom][b] * itemsize``. Les sorties sont
-        contiguës ``(nb, M, …)``. Sans batch, ``batch`` n'est pas passé.
+        Amendment v0.6 (plans with ``batch_rank > 0``, backends declaring
+        ``batch``): call ``launch(inputs, outputs, batch=BatchLayout)``. Inputs
+        keep their shape ``(*Ba, L, d)`` / ``(*Bp, d)`` and their batch strides
+        (arbitrary, 0 included); their last two dimensions are contiguous.
+        Element ``b`` of an argument starts at
+        ``data_ptr + batch.offsets[name][b] * itemsize``. Outputs are
+        contiguous ``(nb, M, …)``. Without batching, ``batch`` is not passed.
         """
 
 
 @dataclass(frozen=True)
 class Sizes:
-    """Tailles d'un appel, utilisées pour choisir une variante (contrat v0.2).
+    """Sizes of a call, used to choose a variant (contract v0.2).
 
-    ``nb`` : nombre d'éléments de batch (avenant v0.6), 1 sans batch.
+    ``nb``: number of batch elements (amendment v0.6), 1 without batching.
     """
 
     m: int
@@ -78,14 +78,14 @@ class Sizes:
 
 @dataclass(frozen=True, eq=False)
 class BatchLayout:
-    """Batch aplati d'un appel (avenant v0.6), construit et mis en cache par le runtime.
+    """Flattened batch of a call (amendment v0.6), built and cached by the runtime.
 
-    ``shape`` : forme de batch diffusée ``B`` ; ``nb = prod(B)``.
-    ``offsets`` : nom d'argument -> tenseur int64 ``(nb,)`` sur le device des
-    entrées, offset en éléments du début de l'élément ``b`` relativement à
-    ``data_ptr`` (diffusion = offsets répétés, param sans batch = zéros).
-    ``host_offsets`` : les mêmes tables sur l'hôte (CPU), pour les backends de
-    référence ; un backend natif ne les lit pas pendant ``launch``.
+    ``shape``: broadcast batch shape ``B``; ``nb = prod(B)``.
+    ``offsets``: argument name -> int64 tensor ``(nb,)`` on the inputs'
+    device, offset in elements of the start of element ``b`` relative to
+    ``data_ptr`` (broadcasting = repeated offsets, unbatched param = zeros).
+    ``host_offsets``: the same tables on the host (CPU), for the reference
+    backends; a native backend does not read them during ``launch``.
     """
 
     shape: tuple[int, ...]
@@ -95,18 +95,18 @@ class BatchLayout:
 
 
 class RangesLayout:
-    """Ranges block-sparse d'un appel (avenant v0.6 §2), normalisés par le runtime.
+    """Block-sparse ranges of a call (amendment v0.6 §2), normalized by the runtime.
 
-    Orientation du plan (réduction sur j). ``work`` : int64 ``(W, 4)`` sur le
-    device, tuiles ``(i0, i1, k0, k1)`` de hauteur ``i1 − i0 ≤ tile_m`` ;
-    ``redranges`` : int64 ``(R, 2)`` sur le device, intervalles ``[c, d)`` de j ;
-    la tuile réduit ses lignes sur ``∪ redranges[k0:k1]``. Les lignes
-    couvertes par aucune tuile reçoivent le neutre (à la charge de ``launch``).
-    ``host_work`` / ``host_redranges`` : copies hôte pour les backends de
-    référence, faites à la première lecture si elles ne sont pas fournies
-    (les backends GPU n'en ont pas besoin : une copie de R × 2 entiers coûte
-    plusieurs ms à R ~ 10⁶). ``tile_m`` : valeur publiée par l'objet compilé
-    (``ranges_tile_m``). Égalité et hachage par identité.
+    Plan orientation (reduction over j). ``work``: int64 ``(W, 4)`` on the
+    device, tiles ``(i0, i1, k0, k1)`` of height ``i1 − i0 ≤ tile_m``;
+    ``redranges``: int64 ``(R, 2)`` on the device, j intervals ``[c, d)``;
+    a tile reduces its rows over ``∪ redranges[k0:k1]``. Rows covered by no
+    tile receive the neutral value (``launch`` is responsible for this).
+    ``host_work`` / ``host_redranges``: host copies for the reference
+    backends, made on first access if they are not provided (GPU backends do
+    not need them: copying R × 2 integers costs several ms at R ~ 10⁶).
+    ``tile_m``: value published by the compiled object (``ranges_tile_m``).
+    Equality and hashing by identity.
     """
 
     def __init__(self, work, redranges, tile_m, host_work=None, host_redranges=None):
@@ -127,9 +127,9 @@ class RangesLayout:
 
     @cached_property
     def summary(self) -> "RangesSummary":
-        """Résumé des bornes, calculé une fois par layout (sur le device, un seul
-        transfert de 15 entiers ; sur l'hôte pour XPU) : les contrôles de sûreté
-        mémoire des backends et du runtime sont en O(1) par appel."""
+        """Summary of the bounds, computed once per layout (on the device, with a
+        single transfer of 15 integers; on the host for XPU): the memory-safety
+        checks of the backends and of the runtime are O(1) per call."""
         import torch
 
         if self._host_work is not None or torch.device(self.work.device).type in ("cpu", "xpu"):
@@ -139,12 +139,12 @@ class RangesLayout:
 
 @dataclass(frozen=True)
 class RangesSummary:
-    """Bornes d'un :class:`RangesLayout` (toutes les entrées, puis entrées non vides).
+    """Bounds of a :class:`RangesLayout` (all entries, then non-empty entries).
 
-    ``i0_min``, ``i1_max``, ``h_min``/``h_max`` (hauteur ``i1 − i0``), ``k0_min``,
-    ``k1_max``, ``dk_min`` (``k1 − k0``), ``c_min``, ``d_max`` : sur toutes les
-    entrées ; ``live_*`` : tuiles ``i1 > i0`` et intervalles ``d > c`` seulement
-    (ceux que parcourt un noyau). ``covered`` : Σ (i1 − i0).
+    ``i0_min``, ``i1_max``, ``h_min``/``h_max`` (height ``i1 − i0``), ``k0_min``,
+    ``k1_max``, ``dk_min`` (``k1 − k0``), ``c_min``, ``d_max``: over all
+    entries; ``live_*``: tiles with ``i1 > i0`` and intervals with ``d > c`` only
+    (those a kernel actually visits). ``covered``: Σ (i1 − i0).
     """
 
     nw: int
@@ -185,20 +185,20 @@ class RangesSummary:
             z = torch.zeros_like(c)
             names += ["c_min", "d_max", "live_c_min", "live_d_max"]
             vals += [c.min(), d.max(), torch.where(live, c, z).min(), torch.where(live, d, z).max()]
-        kw = dict(zip(names, torch.stack(vals).tolist())) if vals else {}  # un seul transfert
+        kw = dict(zip(names, torch.stack(vals).tolist())) if vals else {}  # a single transfer
         return RangesSummary(nw, nr, **kw)
 
 
 @dataclass(frozen=True)
 class Variant:
-    """Variante de kernel d'un backend (stratégie + paramètres), contrat v0.2.
+    """Kernel variant of a backend (strategy + parameters), contract v0.2.
 
-    ``name`` : stratégie (ex. ``"row"``, ``"jsplit"``, ``"coop_topk"``).
-    ``params`` : paires (clé, valeur int|str) triées, sérialisables en JSON.
-    Toutes les variantes d'un plan respectent la même sémantique ; seules les
-    sommes flottantes peuvent différer par l'ordre de sommation (dans la
-    tolérance des tests). Une variante ne change jamais dtype, accumulateur,
-    fast-math ni contraction FMA.
+    ``name``: strategy (e.g. ``"row"``, ``"jsplit"``, ``"coop_topk"``).
+    ``params``: sorted (key, int|str value) pairs, JSON-serializable.
+    All variants of a plan follow the same semantics; only floating-point
+    sums may differ, through the summation order (within the test
+    tolerances). A variant never changes the dtype, the accumulator,
+    fast-math or FMA contraction.
     """
 
     name: str
@@ -210,43 +210,43 @@ class Variant:
 
 class Backend(Protocol):
     name: str
-    #: contrat v0.3 : True si le backend sait compiler sans aucune contraction
-    #: FMA (``plan.fp_contract == False``). Attribut optionnel, absent = False :
-    #: le runtime refuse alors un plan ``fp_contract=False`` (UnsupportedError).
+    #: contract v0.3: True if the backend can compile without any FMA
+    #: contraction (``plan.fp_contract == False``). Optional attribute, missing =
+    #: False: the runtime then rejects a ``fp_contract=False`` plan (UnsupportedError).
     fp_contract_off: bool
-    #: avenant v0.7 : schémas de sommation implémentés (``"direct"``, ``"block"``,
-    #: ``"kahan"``). Attribut optionnel, absent = ``("direct",)`` : le runtime
-    #: refuse alors tout autre schéma pour SUM/LOGSUMEXP/SUMSOFTMAXWEIGHT
-    #: (UnsupportedError), en plus de ``supports``. Un backend qui implémente
-    #: ``block`` publie sa taille de tuile ``T`` dans ``CompileInfo.options``
-    #: sous la forme ``"sum_block=T"``.
+    #: amendment v0.7: implemented summation schemes (``"direct"``, ``"block"``,
+    #: ``"kahan"``). Optional attribute, missing = ``("direct",)``: the runtime
+    #: then rejects any other scheme for SUM/LOGSUMEXP/SUMSOFTMAXWEIGHT
+    #: (UnsupportedError), on top of ``supports``. A backend implementing
+    #: ``block`` publishes its tile size ``T`` in ``CompileInfo.options``
+    #: as ``"sum_block=T"``.
     sum_schemes: tuple
-    #: avenant v0.6 : True si ``launch`` accepte ``batch=BatchLayout`` pour les
-    #: plans ``batch_rank > 0``. Attribut optionnel, absent = False : le runtime
-    #: refuse alors tout appel batché (UnsupportedError), en plus de ``supports``.
+    #: amendment v0.6: True if ``launch`` accepts ``batch=BatchLayout`` for
+    #: plans with ``batch_rank > 0``. Optional attribute, missing = False: the
+    #: runtime then rejects any batched call (UnsupportedError), on top of ``supports``.
     batch: bool
-    #: avenant v0.6 §2 : True si ``launch`` accepte ``ranges=RangesLayout`` pour
-    #: les plans ``ranges=True`` ; l'objet compilé publie alors ``ranges_tile_m``.
-    #: Absent = False : le runtime refuse tout appel avec ranges.
+    #: amendment v0.6 §2: True if ``launch`` accepts ``ranges=RangesLayout`` for
+    #: plans with ``ranges=True``; the compiled object then publishes ``ranges_tile_m``.
+    #: Missing = False: the runtime rejects any call with ranges.
     ranges: bool
 
     def supports(self, plan: Plan, device) -> Support: ...
 
     def default_variant(self, plan: Plan, device, sizes: Sizes) -> Variant:
-        """Choix heuristique sans mesure (effort ESTIMATE). Déterministe."""
+        """Heuristic choice without measurement (ESTIMATE effort). Deterministic."""
 
     def variants(self, plan: Plan, device, sizes: Sizes, effort: str) -> list[Variant]:
-        """Candidats valides pour l'autotuning, ``default_variant`` en tête.
+        """Valid candidates for autotuning, ``default_variant`` first.
 
-        ``effort == "measure"`` : petit ensemble ciblé (≤ 4) ;
-        ``effort == "patient"`` : espace plus large (≤ 32). Les candidats
-        invalides pour le device (mémoire partagée, registres...) sont exclus.
+        ``effort == "measure"``: small targeted set (≤ 4);
+        ``effort == "patient"``: wider space (≤ 32). Candidates that are
+        invalid for the device (shared memory, registers...) are excluded.
         """
 
     def compile(self, plan: Plan, device, variant: Variant | None = None) -> CompiledReduction:
-        """Compile (ou charge depuis le cache atomique) le kernel du plan.
+        """Compiles (or loads from the atomic cache) the plan's kernel.
 
-        ``variant=None`` équivaut à la variante par défaut du backend ; la
-        variante fait partie de la clé de cache. ``CompiledReduction.info``
-        expose la variante effective (attribut ``variant``).
+        ``variant=None`` is equivalent to the backend's default variant; the
+        variant is part of the cache key. ``CompiledReduction.info`` exposes
+        the effective variant (``variant`` attribute).
         """

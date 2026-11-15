@@ -43,8 +43,8 @@ def test_key_independent_of_hash_seed():
 
 
 def test_deep_shared_outputs_get_a_graph_key():
-    """Arbre déplié énorme (DAG partagé) : clé sérialisée comme graphe, rapide,
-    stable et distincte d'un graphe voisin ; les petits plans gardent ``srepr``."""
+    """Huge unfolded tree (shared DAG): the key is serialized as a graph, fast,
+    stable and distinct from a neighboring graph; small plans keep ``srepr``."""
     import time
 
     import kernox as kp

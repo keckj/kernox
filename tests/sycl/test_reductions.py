@@ -1,4 +1,4 @@
-"""Correction du backend sycl sur le GPU réel contre la référence FP64 CPU."""
+"""Correctness of the sycl backend on the real GPU against the FP64 CPU reference."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def test_sum_float32_with_float64_accumulator():
 
 
 def test_sum_conditional_preserves_domain():
-    """Branche inactive avec racine d'un négatif : aucune NaN ne doit fuir."""
+    """Inactive branch with the square root of a negative number: no NaN may leak."""
     x, y = arg("x", "i", 1), arg("y", "j", 1)
     d = x.symbols[0] - y.symbols[0]
     expr = symox.Piecewise((symox.sqrt(d), d > 0), (0, True))
@@ -93,14 +93,14 @@ def test_sum_nan_propagates():
 
 
 def test_no_flush_to_zero_fp32():
-    """icpx compile en -fp-model=fast par défaut (FTZ mesuré) : le backend doit l'éviter."""
+    """icpx compiles with -fp-model=fast by default (FTZ observed): the backend must avoid it."""
     x, y = arg("x", "i", 1), arg("y", "j", 1)
     p = plan([x, y], [x.symbols[0] * y.symbols[0]], "sum", "float32")
     X = torch.full((3, 1), 1e-30)
     Y = torch.full((1, 1), 1e-10)
     out, _ = run(p, {"x": X.to(DEV), "y": Y.to(DEV)})
     expected = float(torch.tensor(1e-30, dtype=torch.float32) * torch.tensor(1e-10, dtype=torch.float32))
-    assert expected != 0.0  # dénormal FP32
+    assert expected != 0.0  # FP32 denormal
     assert (out["value"] == expected).all()
 
 
@@ -114,7 +114,7 @@ def test_count_radius_integer_data(dtype):
     td = getattr(torch, dtype)
     X = torch.randint(-5, 6, (777, 2), generator=gen).to(td)
     Y = torch.randint(-5, 6, (1531, 2), generator=gen).to(td)
-    Y[5] = float("nan")  # comparaison avec NaN fausse
+    Y[5] = float("nan")  # comparison with NaN is false
     out, _ = run(p, {"x": X.to(DEV), "y": Y.to(DEV)})
     D2 = _pairwise_sq(X, Y)
     ref = reduce_ref("count", torch.stack([D2 <= 4, D2 < 1], -1))["value"]
@@ -139,7 +139,7 @@ def _minmax_data(dtype, M=301, N=1029, seed=3):
 @pytest.mark.parametrize("kind", ["min", "max", "argmin", "argmax"])
 def test_minmax_vector_ties_nan_inf(dtype, kind):
     x, y = arg("x", "i", 2), arg("y", "j", 2)
-    # deux composantes : produit (±inf, NaN possibles) et distance (beaucoup d'égalités)
+    # two components: product (±inf, NaN possible) and distance (many ties)
     outs = [x.symbols[0] * y.symbols[1] - y.symbols[0], _sq(x, y)]
     p = plan([x, y], outs, kind, dtype)
     X, Y = _minmax_data(dtype)
@@ -161,7 +161,7 @@ def test_minmax_all_nan_and_inf_candidates(kind):
     X = torch.tensor([[float("nan")], [1.0], [0.0]])
     Y = torch.tensor([[float("inf")], [float("inf")]])
     out, _ = run(p, {"x": X.to(DEV), "y": Y.to(DEV)})
-    # ligne 0 : que des NaN ; ligne 1 : +inf, +inf (valides) ; ligne 2 : 0*inf = NaN
+    # row 0: NaNs only; row 1: +inf, +inf (valid); row 2: 0*inf = NaN
     if kind == "min":
         assert out["value"].flatten().tolist() == [math.inf, math.inf, math.inf]
     elif kind == "max":
@@ -204,7 +204,7 @@ def test_kmin_random_values(dtype):
     ref = reduce_ref("kmin", D2[:, :, None], k=16)
     tol = 16 * EPS[dtype] * (D2.max())
     assert ((out["value"].double() - ref["value"]).abs() <= tol).all()
-    # indices : la valeur exacte au point retourné doit égaler la valeur retournée à tol près
+    # indices: the exact value at the returned point must equal the returned value up to tol
     picked = torch.gather(D2, 1, out["index"])
     assert ((picked - out["value"].double()).abs() <= tol).all()
     assert (out["index"] >= 0).all()
@@ -245,7 +245,7 @@ def test_kmin_vector_formula_refused():
     assert not backend().supports(p, DEV).ok
 
 
-# ---------------------------------------------------------- tailles vides
+# ---------------------------------------------------------- empty sizes
 
 NEUTRAL = {
     "sum": ("value", 0.0), "count": ("value", 0), "min": ("value", math.inf),
@@ -273,11 +273,11 @@ def test_m_zero(kind):
     assert all(v.shape[0] == 0 for v in out.values())
 
 
-# ----------------------------------------------------- grandes dimensions
+# ----------------------------------------------------- large dimensions
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_large_dim_tile_shrinks(dtype):
-    """D=64 en FP64 : la tuile j est réduite pour tenir dans le budget local."""
+    """D=64 in FP64: the j tile is shrunk to fit in the local memory budget."""
     x, y = arg("x", "i", 64), arg("y", "j", 64)
     p = plan([x, y], [_sq(x, y)], "argmin", dtype)
     gen = _gen(5)
@@ -289,15 +289,15 @@ def test_large_dim_tile_shrinks(dtype):
     assert torch.equal(out["index"], ref["index"])
 
 
-# ------------------------------------------------- partition de l'axe j
+# ------------------------------------------------- partition of the j axis
 
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("kind,k", [("sum", None), ("count", None), ("min", None), ("max", None),
                                     ("argmin", None), ("argmax", None), ("kmin_argkmin", 7),
                                     ("argkmin", 40)])
 def test_split_j_small_m_large_n(dtype, kind, k):
-    """Petit M, grand N : plusieurs tranches j + fusion. Données entières (égalités
-    nombreuses entre tranches), NaN injectés : résultats exacts attendus."""
+    """Small M, large N: several j slices + merge. Integer data (many ties
+    across slices), injected NaNs: exact results expected."""
     x, y = arg("x", "i", 2), arg("y", "j", 2)
     d2 = _sq(x, y)
     outs = [d2 <= 5] if kind == "count" else ([d2] if k else [d2, x.symbols[0] * y.symbols[1]])
@@ -319,7 +319,7 @@ def test_split_j_small_m_large_n(dtype, kind, k):
     else:
         F = torch.stack([D2, Xd[:, None, 0] * Yd[None, :, 1]], -1)
     ref = reduce_ref("kmin" if k else kind, F, k=k)
-    if kind == "sum":  # termes entiers : exact en FP64, à quelques ulps en FP32 (> 2^24)
+    if kind == "sum":  # integer terms: exact in FP64, within a few ulps in FP32 (> 2^24)
         tol = 0 if dtype == "float64" else 1e-6 * ref["value"].abs()
         assert ((out["value"].double() - ref["value"]).abs() <= tol).all()
         return
@@ -330,8 +330,8 @@ def test_split_j_small_m_large_n(dtype, kind, k):
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("kind", ["min", "argmin"])
 def test_huge_dim_rows_from_global(dtype, kind):
-    """D = 990 (conformance test_min_argmin_chunked) : ligne i lue en mémoire
-    globale au lieu de registres ; auparavant, refus natif du pilote (scratch)."""
+    """D = 990 (conformance test_min_argmin_chunked): row i is read from global
+    memory instead of registers; previously, a native driver refusal (scratch)."""
     x, y = arg("x", "i", 990), arg("y", "j", 990)
     f = symox.exp(-sum((a + b) ** 2 for a, b in zip(x.symbols, y.symbols)) / 990)
     p = plan([x, y], [f], kind, dtype)
@@ -350,7 +350,7 @@ def test_huge_dim_rows_from_global(dtype, kind):
 
 
 def test_driver_refusal_is_unsupported_error():
-    """Le refus du pilote est remonté par compile() (kp_probe), jamais au lancement."""
+    """The driver refusal is reported by compile() (kp_probe), never at launch."""
     import ctypes
 
     from kernox.backends.base import UnsupportedError

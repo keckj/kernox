@@ -1,4 +1,4 @@
-"""Opérateur linéaire et ``solve`` sur chaque backend, contre l'oracle (FP64)."""
+"""Linear operator and ``solve`` on each backend, against the oracle (FP64)."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def test_operator_and_solve_match_oracle(backend):
             a, info = op.solve(rl, alpha=0.05, eps=1e-12, return_info=True)
             grads = torch.autograd.grad((a * w.to(device)).sum(), [xl, sl, rl])
         except UnsupportedError as e:
-            pytest.skip(f"{target} : {e}")
+            pytest.skip(f"{target}: {e}")
         synchronize(device)
         assert info["converged"]
         results.append([t.detach().cpu() for t in (mv, rv, a, *grads)])
@@ -60,7 +60,7 @@ def test_batched_solve_matches_oracle(backend):
             a = run.solve("b", rl, alpha=0.05, eps=1e-12, x=xl, y=xl, s=0.6)
             grads = torch.autograd.grad((a * w.to(device)).sum(), [xl, rl])
         except UnsupportedError as e:
-            pytest.skip(f"{target} : {e}")
+            pytest.skip(f"{target}: {e}")
         synchronize(device)
         results.append([t.detach().cpu() for t in (a, *grads)])
     for got, want in zip(*results):

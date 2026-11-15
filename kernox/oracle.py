@@ -1,19 +1,19 @@
-"""Oracles de référence (noyau), **pas** un chemin d'exécution GPU optimisé.
+"""Reference oracles (core), **not** an optimized GPU execution path.
 
-1. :class:`OracleBackend` (nom ``"oracle"``) : référence Torch par blocs
-   bornés, sur le device des tenseurs (CPU ou GPU). Elle n'est jamais choisie
-   par ``backend="auto"`` ; il faut la demander explicitement.
-2. :func:`reference_numpy` : petit oracle NumPy FP64 (grille M×N complète,
-   boucles Python), implémentation indépendante de la sémantique du contrat,
-   réservée aux petits cas de test.
+1. :class:`OracleBackend` (name ``"oracle"``): blockwise Torch reference with
+   bounded blocks, on the tensors' device (CPU or GPU). It is never selected
+   by ``backend="auto"``; it must be requested explicitly.
+2. :func:`reference_numpy`: small FP64 NumPy oracle (full M×N grid, Python
+   loops), an independent implementation of the contract semantics, meant
+   for small test cases only.
 
-Sémantique (``docs/kernel-backend-contract.md``) : SUM propage les NaN ;
-COUNT int64 ; MIN/MAX ignorent les candidats NaN (neutres ±inf) ; ARG* :
-plus petit indice à égalité, −1 sans candidat ; KMIN/ARGKMIN : ordre
-lexicographique (valeur, j), NaN ignorés, complétion (+inf, −1) ;
-LOGSUMEXP / SUMSOFTMAXWEIGHT (avenant v0.5) : état (m, s[, t]) décalé par le
-maximum courant, termes ``f = −inf`` de poids nul, NaN propagés, ``+inf`` →
-``+inf`` / NaN, vide → ``−inf`` / NaN.
+Semantics (``docs/kernel-backend-contract.md``): SUM propagates NaN;
+COUNT is int64; MIN/MAX ignore NaN candidates (neutral ±inf); ARG*: smallest
+index on ties, −1 when there is no candidate; KMIN/ARGKMIN: lexicographic
+order (value, j), NaN ignored, padded with (+inf, −1);
+LOGSUMEXP / SUMSOFTMAXWEIGHT (amendment v0.5): state (m, s[, t]) shifted by
+the running maximum, terms with ``f = −inf`` have zero weight, NaN propagated,
+``+inf`` → ``+inf`` / NaN, empty → ``−inf`` / NaN.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from .plan import Plan, ReductionKind, output_shapes
 
 _K_KINDS = (ReductionKind.KMIN, ReductionKind.ARGKMIN, ReductionKind.KMIN_ARGKMIN)
 _SOFT_KINDS = (ReductionKind.LOGSUMEXP, ReductionKind.SUMSOFTMAXWEIGHT, ReductionKind.LOGSUMEXPWEIGHT)
-_WEIGHTED_KINDS = (ReductionKind.SUMSOFTMAXWEIGHT, ReductionKind.LOGSUMEXPWEIGHT)  # sorties (f, g_1..g_E)
+_WEIGHTED_KINDS = (ReductionKind.SUMSOFTMAXWEIGHT, ReductionKind.LOGSUMEXPWEIGHT)  # outputs (f, g_1..g_E)
 _MIN_KINDS = (ReductionKind.MIN, ReductionKind.ARGMIN, ReductionKind.MIN_ARGMIN)
 _MAX_KINDS = (ReductionKind.MAX, ReductionKind.ARGMAX, ReductionKind.MAX_ARGMAX)
 
@@ -41,31 +41,31 @@ def _soft_finish(kind, m, s, t):
         r = torch.where(m == inf, torch.full_like(r, inf), r)
         return torch.where(torch.isnan(s), torch.full_like(r, float("nan")), r)
     if kind is ReductionKind.LOGSUMEXPWEIGHT:
-        # m + log t_e sans cas particulier : vide → −inf ; f = +inf → +inf si t_e > 0, NaN sinon
+        # m + log t_e with no special case: empty → −inf; f = +inf → +inf if t_e > 0, NaN otherwise
         return m.unsqueeze(-1) + torch.log(t)
     r = t / s.unsqueeze(-1)
     return torch.where((m == inf).unsqueeze(-1), torch.full_like(r, float("nan")), r)
 DEFAULT_BLOCK_PAIRS = 1 << 20
-#: avenant v0.7 : taille T des tuiles du schéma ``block`` de l'oracle (publiée
-#: dans ``CompileInfo.options``) et des segments de la sommation ``kahan``.
+#: amendment v0.7: tile size T of the oracle's ``block`` scheme (published in
+#: ``CompileInfo.options``) and segment size of the ``kahan`` summation.
 SUM_BLOCK = 256
 
 
 class _Accumulator:
-    """Sommes par ligne et composante selon ``sum_scheme`` (avenant v0.7).
+    """Per-row, per-component sums following ``sum_scheme`` (amendment v0.7).
 
-    Simulation réelle en ``acc_dtype`` (NumPy, additions arrondies une à une) :
+    Faithful simulation in ``acc_dtype`` (NumPy, additions rounded one by one):
 
-    - ``direct`` : un accumulateur séquentiel sur j (``np.add.accumulate`` ne
-      réassocie pas, contrairement à ``sum`` ou à ``torch.cumsum`` sur CPU) ;
-    - ``block`` : chaque tuile de ``SUM_BLOCK`` termes consécutifs (alignées
-      sur j depuis 0) est sommée dans un accumulateur neuf, puis ajoutée au total ;
-    - ``kahan`` : Kahan–Babuška (Neumaier), état ``(s, c)`` ; segments de
-      ``SUM_BLOCK`` termes sommés en parallèle puis fusionnés dans l'ordre de j
-      par ``TwoSum(s1, s2)`` et ``c1 + c2`` (règle de fusion du contrat).
+    - ``direct``: one sequential accumulator over j (``np.add.accumulate`` does
+      not reassociate, unlike ``sum`` or ``torch.cumsum`` on CPU);
+    - ``block``: each tile of ``SUM_BLOCK`` consecutive terms (aligned on j
+      from 0) is summed into a fresh accumulator, then added to the total;
+    - ``kahan``: Kahan-Babuška (Neumaier), state ``(s, c)``; segments of
+      ``SUM_BLOCK`` terms summed in parallel, then merged in j order with
+      ``TwoSum(s1, s2)`` and ``c1 + c2`` (the contract's merge rule).
 
-    Résultat ``s + c`` (``s`` seul si ``s`` n'est pas fini : un ``±inf`` ou un
-    NaN n'est pas dégradé par une compensation ``inf − inf``).
+    Result ``s + c`` (``s`` alone if ``s`` is not finite: a ``±inf`` or a NaN
+    is not spoiled by an ``inf − inf`` compensation).
     """
 
     def __init__(self, scheme: str, shape, dtype):
@@ -91,7 +91,7 @@ class _Accumulator:
         return np.concatenate([v, pad], axis=1)
 
     def add(self, v):
-        """Ajoute les termes ``v`` (rows, cols, …), dans l'ordre croissant de j."""
+        """Adds the terms ``v`` (rows, cols, …), in increasing j order."""
         import numpy as np
 
         v = np.asarray(v, dtype=self.dtype)
@@ -130,7 +130,7 @@ class _Accumulator:
 
 
 def _two_sum_merge(s1, c1, s2, c2):
-    """Fusion de deux états de Neumaier : ``TwoSum(s1, s2)`` puis ``c1 + c2 + erreur``."""
+    """Merges two Neumaier states: ``TwoSum(s1, s2)``, then ``c1 + c2 + error``."""
     t = s1 + s2
     bp = t - s1
     err = (s1 - (t - bp)) + (s2 - bp)
@@ -142,17 +142,17 @@ def _flat_symbols(plan: Plan):
 
 
 def _torch_function(symbols, outputs):
-    """Fonction Torch des ``outputs`` (même appel que ``torch_lambdify``).
+    """Torch function of ``outputs`` (same call as ``torch_lambdify``).
 
-    Sans ``Piecewise``, ``torch_lambdify`` fait lui-même la CSE. Avec un
-    ``Piecewise`` (``where``, gradients de ``min``/``max``), symox la désactive
-    (un temporaire partagé pourrait évaluer une branche inactive avant son
-    masque) : un DAG profond serait alors imprimé comme un arbre déplié,
-    exponentiel. On applique la CSE par régions des backends GPU
-    (``codegen.pair._region_cse``, même politique de hissage), puis les
-    temporaires sont évalués par niveaux de dépendance, une fonction
-    ``torch_lambdify`` par niveau (valeurs petites, entrées : arguments et
-    temporaires des niveaux précédents).
+    Without ``Piecewise``, ``torch_lambdify`` performs the CSE itself. With a
+    ``Piecewise`` (``where``, gradients of ``min``/``max``), symox disables it
+    (a shared temporary could evaluate an inactive branch before its mask):
+    a deep DAG would then be printed as an unfolded tree, of exponential size.
+    We apply the region-based CSE of the GPU backends
+    (``codegen.pair._region_cse``, same hoisting policy), then the temporaries
+    are evaluated by dependency level, one ``torch_lambdify`` function per
+    level (small values; inputs: arguments and temporaries of the previous
+    levels).
     """
     from symox.extra import torch_lambdify
     from symox.extra.codegen.pytorch import _contains_conditionals
@@ -197,12 +197,12 @@ def _torch_dtype(name):
 
 
 # --------------------------------------------------------------------------
-# Oracle Torch par blocs
+# Blockwise Torch oracle
 # --------------------------------------------------------------------------
 
 
 class OracleReduction:
-    """Réduction de référence compilée (fonction Torch générée par symox)."""
+    """Compiled reference reduction (Torch function generated by symox)."""
 
     def __init__(self, plan: Plan, device, block_pairs: int = DEFAULT_BLOCK_PAIRS):
         import torch
@@ -223,13 +223,13 @@ class OracleReduction:
             + ((f"sum_block={SUM_BLOCK}",) if plan.sum_scheme == "block" else ()),
             cache_hit=False,
             compile_seconds=time.perf_counter() - t0,
-            # estimation : valeurs du bloc + entrées diffusées, hors temporaires Torch
+            # estimate: block values + broadcast inputs, excluding Torch temporaries
             temp_bytes_per_launch=self.block_pairs * (plan.out_dim + nsym) * itemsize,
             source_sha256="",
         )
 
     def _evaluate(self, inputs, i0, i1, j0, j1):
-        """Valeurs (bi, bj, D) de la formule sur le bloc, dtype du plan (ou bool)."""
+        """Formula values (bi, bj, D) on the block, in the plan dtype (or bool)."""
         import torch
 
         plan, values = self.plan, []
@@ -253,19 +253,19 @@ class OracleReduction:
             cols.append(o.expand(shape))
         return torch.stack(cols, dim=-1)
 
-    #: hauteur maximale des tuiles de la liste de travail des ranges (avenant v0.6 §2)
+    #: maximum tile height of the ranges work list (amendment v0.6 §2)
     ranges_tile_m = 1024
 
     def launch(self, inputs: dict, outputs: dict, batch=None, ranges=None) -> None:
-        """Réduction de référence ; ``batch`` (avenant v0.6) : boucle sur les éléments.
+        """Reference reduction; ``batch`` (amendment v0.6): loop over the elements.
 
-        Chaque élément ``b`` est une vue ``as_strided`` de l'entrée à l'offset
-        publié par le runtime (``BatchLayout.host_offsets``) ; la sortie
-        ``(nb, M, …)`` est écrite élément par élément.
+        Each element ``b`` is an ``as_strided`` view of the input at the offset
+        published by the runtime (``BatchLayout.host_offsets``); the output
+        ``(nb, M, …)`` is written element by element.
         """
         if ranges is not None:
             if batch is not None:
-                raise UnsupportedError("ranges et batch combinés : refusé (avenant v0.6)")
+                raise UnsupportedError("ranges combined with batch: rejected (amendment v0.6)")
             self._launch_ranged(inputs, outputs, ranges)
             return
         if batch is None:
@@ -285,16 +285,16 @@ class OracleReduction:
             self._launch_one(sub, {key: out[b] for key, out in outputs.items()})
 
     def _launch_ranged(self, inputs: dict, outputs: dict, ranges) -> None:
-        """Référence des ranges : neutres partout, puis chaque tuile réduite sur ``J`` trié.
+        """Ranges reference: neutral values everywhere, then each tile reduced over sorted ``J``.
 
-        ``J`` est l'union des intervalles de la tuile, triée : les égalités vont
-        au plus petit j de ``J(i)`` quel que soit l'ordre des intervalles, et
-        les indices renvoyés sont globaux.
+        ``J`` is the sorted union of the tile's intervals: ties go to the
+        smallest j of ``J(i)`` whatever the order of the intervals, and the
+        returned indices are global.
         """
         import torch
 
         plan = self.plan
-        # N = 0 sur toutes les lignes : neutres du contrat (lignes non couvertes)
+        # N = 0 on every row: contract neutral values (rows not covered)
         self._launch_one({a.name: (inputs[a.name][:0] if a.role == "j" else inputs[a.name]) for a in plan.args},
                          outputs)
         device = next(iter(inputs.values())).device
@@ -331,7 +331,7 @@ class OracleReduction:
         bi = max(1, min(m, 1024))
         bj = max(1, min(max(n, 1), self.block_pairs // bi))
         if bj >= SUM_BLOCK:
-            bj -= bj % SUM_BLOCK  # tuiles du schéma block / segments kahan alignés sur j
+            bj -= bj % SUM_BLOCK  # block-scheme tiles / kahan segments aligned on j
         np_adt = _numpy_dtype(plan.acc_dtype)
         d = plan.out_dim
         dt = _torch_dtype(plan.dtype)
@@ -339,7 +339,7 @@ class OracleReduction:
         for i0 in range(0, m, bi):
             i1 = min(m, i0 + bi)
             rows = i1 - i0
-            # accumulateurs initialisés aux neutres
+            # accumulators initialized to the neutral values
             if kind is ReductionKind.SUM:
                 adt = _torch_dtype(plan.acc_dtype)
                 acc = _Accumulator(plan.sum_scheme, (rows, d), np_adt)
@@ -361,18 +361,18 @@ class OracleReduction:
             else:
                 kval = torch.full((rows, k), inf, dtype=dt, device=device)
                 kidx = torch.full((rows, k), -1, dtype=torch.int64, device=device)
-                kabs = torch.ones((rows, k), dtype=torch.bool, device=device)  # candidat absent
+                kabs = torch.ones((rows, k), dtype=torch.bool, device=device)  # missing candidate
             for j0 in range(0, n, bj):
                 j1 = min(n, j0 + bj)
                 v = self._evaluate(inputs, i0, i1, j0, j1)  # (rows, cols, d)
                 if kind is ReductionKind.SUM:
                     acc.add(v.to(adt).cpu().numpy())
                 elif kind in _SOFT_KINDS:
-                    # maximum courant ; l'état (s, c) et (t, c_t) est redimensionné par
-                    # exp(m_ancien − m_nouveau) avant d'ajouter les termes du bloc (avenant v0.7)
+                    # running maximum; the states (s, c) and (t, c_t) are rescaled by
+                    # exp(m_old − m_new) before adding the block's terms (amendment v0.7)
                     va = v.to(adt)
                     f, g = (va, None) if kind is ReductionKind.LOGSUMEXP else (va[..., :1], va[..., 1:])
-                    live = f != -inf  # NaN compris : propagé
+                    live = f != -inf  # NaN included: propagated
                     bm = torch.where(live & ~torch.isnan(f), f, torch.full_like(f, -inf)).amax(dim=1)
                     mn = torch.maximum(sm, bm)
                     rescale = torch.where(sm == mn, torch.ones_like(mn), torch.exp(sm - mn)).cpu().numpy()
@@ -394,7 +394,7 @@ class OracleReduction:
                     bv = masked.amin(dim=1) if is_min else masked.amax(dim=1)  # (rows, d)
                     cand = valid & (v == bv.unsqueeze(1))
                     has = cand.any(dim=1)
-                    first = cand.to(torch.int8).argmax(dim=1) + j0  # premier True
+                    first = cand.to(torch.int8).argmax(dim=1) + j0  # first True
                     better = bv < best if is_min else bv > best
                     take = has & ((bidx < 0) | better)
                     best = torch.where(take, bv, best)
@@ -408,17 +408,17 @@ class OracleReduction:
                     allv = torch.cat([kval, vals], dim=1)
                     alli = torch.cat([kidx, idx], dim=1)
                     alla = torch.cat([kabs, absent], dim=1)
-                    # tri lexicographique (absent, valeur, indice) par tris stables successifs
+                    # lexicographic sort (missing, value, index) via successive stable sorts
                     order = torch.sort(alli, dim=1, stable=True).indices
                     allv, alli, alla = (t.gather(1, order) for t in (allv, alli, alla))
-                    # clé normalisée : -0.0 + 0.0 = +0.0, pour que les zéros signés soient
-                    # ex aequo (les tris GPU par radix les distingueraient sinon)
+                    # normalized key: -0.0 + 0.0 = +0.0, so that signed zeros tie
+                    # (GPU radix sorts would tell them apart otherwise)
                     order = torch.sort(allv + 0.0, dim=1, stable=True).indices
                     allv, alli, alla = (t.gather(1, order) for t in (allv, alli, alla))
                     order = torch.sort(alla.to(torch.int8), dim=1, stable=True).indices
                     allv, alli, alla = (t.gather(1, order) for t in (allv, alli, alla))
                     kval, kidx, kabs = allv[:, :k], alli[:, :k], alla[:, :k]
-            # écriture des sorties
+            # write the outputs
             if kind is ReductionKind.SUM:
                 outputs["value"][i0:i1] = torch.from_numpy(acc.result()).to(device)
             elif kind is ReductionKind.COUNT:
@@ -446,16 +446,16 @@ class OracleReduction:
 
 
 class OracleBackend:
-    """Backend de référence explicite : ``backend="oracle"`` uniquement."""
+    """Explicit reference backend: ``backend="oracle"`` only."""
 
     name = "oracle"
-    # Torch CPU arrondit chaque opération élémentaire : aucune contraction FMA.
+    # Torch CPU rounds every elementary operation: no FMA contraction.
     fp_contract_off = True
-    # avenant v0.7 : les trois schémas, simulés en acc_dtype (cf. _Accumulator)
+    # amendment v0.7: all three schemes, simulated in acc_dtype (see _Accumulator)
     sum_schemes = ("direct", "block", "kahan")
-    # avenant v0.6 : dimensions de batch (boucle de référence sur les éléments)
+    # amendment v0.6: batch dimensions (reference loop over the elements)
     batch = True
-    # avenant v0.6 §2 : ranges block-sparse (réduction masquée de référence)
+    # amendment v0.6 §2: block-sparse ranges (masked reference reduction)
     ranges = True
 
     def __init__(self, block_pairs: int = DEFAULT_BLOCK_PAIRS):
@@ -465,7 +465,7 @@ class OracleBackend:
         try:
             import torch  # noqa: F401
         except ImportError:  # pragma: no cover
-            return Support(False, "torch indisponible")
+            return Support(False, "torch unavailable")
         return Support(True)
 
     def compile(self, plan: Plan, device) -> OracleReduction:
@@ -473,19 +473,19 @@ class OracleBackend:
 
 
 # --------------------------------------------------------------------------
-# Oracle NumPy FP64 (petits cas)
+# FP64 NumPy oracle (small cases)
 # --------------------------------------------------------------------------
 
 
 def evaluate_numpy(plan: Plan, inputs: dict):
-    """Valeurs (M, N, D) de la formule en FP64 (booléens pour COUNT)."""
+    """Formula values (M, N, D) in FP64 (booleans for COUNT)."""
     import numpy as np
     import symox
 
     m = next(np.asarray(inputs[a.name]).shape[0] for a in plan.args if a.role == "i")
     n = next(np.asarray(inputs[a.name]).shape[0] for a in plan.args if a.role == "j")
-    # Les flottants sont passés en arguments : lambdify (comme SymPy) les imprime
-    # avec 15 chiffres significatifs, ce qui fausse le dernier ulp FP64.
+    # Floats are passed as arguments: lambdify (like SymPy) prints them with
+    # 15 significant digits, which corrupts the last FP64 ulp.
     floats = sorted({f for e in plan.outputs for f in e.atoms(symox.Float)}, key=float)
     holders = [symox.Dummy(f"c{i}", real=True) for i in range(len(floats))]
     outputs = [e.xreplace(dict(zip(floats, holders))) for e in plan.outputs]
@@ -503,7 +503,7 @@ def evaluate_numpy(plan: Plan, inputs: dict):
             if _symox_compat.lambdify_broadcasts():
                 values.append(col)
             else:
-                # lambdify natif du commit épinglé : pas de diffusion, grilles (M, N) explicites
+                # native lambdify of the pinned commit: no broadcasting, explicit (M, N) grids
                 values.append(np.ascontiguousarray(np.broadcast_to(col, (m, n))))
     values += [np.float64(float(f)) for f in floats]
     with np.errstate(all="ignore"):
@@ -520,7 +520,7 @@ def _to_numpy(t):
 
 
 def reduce_numpy(plan: Plan, vals):
-    """Applique la sémantique du contrat à des valeurs (M, N, D), en Python pur."""
+    """Applies the contract semantics to values (M, N, D), in pure Python."""
     import numpy as np
 
     kind, k = plan.reduction.kind, plan.reduction.k
@@ -557,7 +557,7 @@ def reduce_numpy(plan: Plan, vals):
 
 
 def _soft_numpy(kind, vals):
-    """LOGSUMEXP / SUMSOFTMAXWEIGHT en Python pur (``math.fsum``), indépendant de l'oracle Torch."""
+    """LOGSUMEXP / SUMSOFTMAXWEIGHT in pure Python (``math.fsum``), independent of the Torch oracle."""
     import numpy as np
 
     m, n, d = vals.shape
@@ -590,10 +590,10 @@ def _soft_numpy(kind, vals):
 
 
 def _lsew_numpy(vals):
-    """LOGSUMEXPWEIGHT : ``m + log Σ_j exp(f_j − m) g_je`` (``math.fsum``), m = max f.
+    """LOGSUMEXPWEIGHT: ``m + log Σ_j exp(f_j − m) g_je`` (``math.fsum``), m = max f.
 
-    Sans cas particulier après le décalage : f NaN → NaN ; f = +inf →
-    ``+inf + log Σ_{f=+inf} g`` (+inf si > 0, NaN sinon) ; vide → −inf.
+    No special case after the shift: f NaN → NaN; f = +inf →
+    ``+inf + log Σ_{f=+inf} g`` (+inf if > 0, NaN otherwise); empty → −inf.
     """
     import numpy as np
 
@@ -619,7 +619,7 @@ def _lsew_numpy(vals):
 
 
 def reference_numpy(plan: Plan, inputs: dict) -> dict:
-    """Oracle FP64 complet (petits M, N) : dict des sorties du contrat (NumPy)."""
+    """Full FP64 oracle (small M, N): dict of the contract outputs (NumPy)."""
     return reduce_numpy(plan, evaluate_numpy(plan, inputs))
 
 

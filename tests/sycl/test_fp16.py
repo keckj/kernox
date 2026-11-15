@@ -1,11 +1,11 @@
-"""FP16 natif (avenant v0.9) sur le backend sycl, G31.
+"""Native FP16 (v0.9 amendment) on the sycl backend, on the G31.
 
-La formule est évaluée en ``sycl::half`` (chaque opération arrondie en binary16,
-printer half de symox) ; accumulateur FP32 par défaut pour SUM et la famille
-LOGSUMEXP, ``acc_dtype="float16"`` avec ``sum_scheme="block"`` par défaut ;
-sorties FP16 (``plan.accumulated_output_dtype``), ±inf au-delà de 65504.
-Référence : oracle Torch FP16 du noyau (mêmes règles) et oracle FP64 sur les
-entrées arrondies en FP16.
+The formula is evaluated in ``sycl::half`` (each operation rounded to binary16,
+symox half printer); FP32 accumulator by default for SUM and the LOGSUMEXP
+family, ``acc_dtype="float16"`` with ``sum_scheme="block"`` by default;
+FP16 outputs (``plan.accumulated_output_dtype``), ±inf beyond 65504.
+Reference: the core FP16 Torch oracle (same rules) and the FP64 oracle on the
+inputs rounded to FP16.
 """
 
 import pytest
@@ -48,9 +48,9 @@ def _data(seed=0, m=300, n=2000):
 
 
 def _assert_sum_close(got, ref, ins):
-    """SUM gaussienne pondérée : termes FP16 identiques à 1 ulp près (exp de la
-    libm), sommes FP32 dans un autre ordre puis arrondi FP16 :
-    |écart| <= ulp16(|ref|) + 2 u16 Σ|terme| (petits cas : référence dense)."""
+    """Weighted Gaussian SUM: FP16 terms identical up to 1 ulp (libm exp),
+    FP32 sums in a different order, then rounding to FP16:
+    |difference| <= ulp16(|ref|) + 2 u16 Σ|term| (small cases: dense reference)."""
     d = ins["x"].double().unsqueeze(-2) - ins["y"].double().unsqueeze(-3)
     l1 = (torch.exp(-(d * d).sum(-1)).unsqueeze(-1) * ins["b"].double().unsqueeze(-3)).abs().sum(-2)
     tol = 2.0 ** -10 * ref.double().abs() + 2 * 2.0 ** -11 * l1 + 1e-6
@@ -74,15 +74,15 @@ def test_fp16_matches_oracle(name):
     if isinstance(out, tuple):
         for a, b in zip(out, ref):
             assert a.dtype == b.dtype
-        # valeurs : égales à l'oracle (même formule FP16, pas d'accumulation)
+        # values: equal to the oracle (same FP16 formula, no accumulation)
         torch.testing.assert_close(out[0].cpu(), ref[0], rtol=0, atol=0)
-        assert (out[1].cpu() != ref[1]).float().mean() < 0.02  # ex aequo FP16
+        assert (out[1].cpu() != ref[1]).float().mean() < 0.02  # FP16 ties
         return
     assert out.dtype == ref.dtype
     if name == "sum":
         _assert_sum_close(out.cpu(), ref, ins)
     elif out.is_floating_point():
-        exact = name in ("min", "kmin", "kmin32")  # sélection : valeurs FP16 identiques
+        exact = name in ("min", "kmin", "kmin32")  # selection: identical FP16 values
         torch.testing.assert_close(out.cpu(), ref, rtol=0 if exact else 4e-3, atol=0 if exact else 4e-3)
     else:
         assert (out.cpu() != ref).float().mean() < 0.02
@@ -101,8 +101,8 @@ def test_defaults_and_output_dtype():
 
 
 def test_formula_is_evaluated_in_fp16():
-    """300·300 déborde en FP16 (max 65504) malgré l'accumulateur FP32 ; la somme
-    FP32 1000·60 = 60000 tient ; 2000·60 = 120000 déborde à la conversion finale."""
+    """300·300 overflows in FP16 (max 65504) despite the FP32 accumulator; the FP32
+    sum 1000·60 = 60000 fits; 2000·60 = 120000 overflows at the final conversion."""
     x, y = kp.Vi("x"), kp.Vj("y")
     run = kp.compile((x * y).sum_over("j"), dtype="float16", backend="sycl")
     out = run(x=torch.tensor([[300.0], [2.0]], dtype=H, device=DEV),
@@ -115,8 +115,8 @@ def test_formula_is_evaluated_in_fp16():
 
 @pytest.mark.parametrize("scheme", ["direct", "block", "kahan"])
 def test_acc_float16_schemes_against_oracle(scheme):
-    """acc_dtype float16 : accumulateur FP16 arrondi à chaque addition. Les schémas
-    restent dans la borne de leur erreur par rapport à la référence FP64."""
+    """acc_dtype float16: FP16 accumulator rounded at each addition. The schemes
+    stay within their error bound with respect to the FP64 reference."""
     x, y = kp.Vi("x"), kp.Vj("y")
     expr = (x * y).sum_over("j")
     g = torch.Generator().manual_seed(3)
@@ -124,7 +124,7 @@ def test_acc_float16_schemes_against_oracle(scheme):
     Y = torch.rand(4000, 1, generator=g).to(H) * 0.01
     run = kp.compile(expr, dtype="float16", backend="sycl", acc_dtype="float16", sum_scheme=scheme)
     out = run(x=X.to(DEV), y=Y.to(DEV)).cpu().double()
-    exact = (X.double() * Y.double().T).to(H).double().sum(1, keepdim=True)  # termes FP16, somme exacte
+    exact = (X.double() * Y.double().T).to(H).double().sum(1, keepdim=True)  # FP16 terms, exact sum
     err = (out - exact).abs().max().item()
     u = 2.0 ** -11
     l1 = exact.abs().max().item()

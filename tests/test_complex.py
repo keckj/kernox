@@ -1,5 +1,5 @@
-"""Formules complexes (parité PyKeOps ``ComplexLazyTensor`` / keopscore ``formulas/complex``),
-oracle contre l'arithmétique complexe dense de Torch."""
+"""Complex formulas (parity with PyKeOps ``ComplexLazyTensor`` / keopscore ``formulas/complex``),
+oracle checked against Torch dense complex arithmetic."""
 
 from __future__ import annotations
 
@@ -29,12 +29,12 @@ def _sym():
 
 
 def _dense(t):
-    """Vues (M, N, D) des entrées pour la référence dense."""
+    """(M, N, D) views of the inputs for the dense reference."""
     return dict(z=t["z"][:, None, :], w=t["w"][None, :, :], u=t["u"][None, :, :], x=t["x"][:, None, :],
                 r=t["r"][None, :, :])
 
 
-# (formule kernox, référence Torch) ; sortie complexe si la formule l'est
+# (kernox formula, Torch reference); complex output if the formula is complex
 CASES = {
     "mult": (lambda s: s["z"] * s["w"], lambda t: t["z"] * t["w"]),
     "add_sub": (lambda s: s["z"] + s["w"] - s["z"] * 0.5, lambda t: t["z"] + t["w"] - t["z"] * 0.5),
@@ -53,7 +53,7 @@ CASES = {
     "component_index": (lambda s: s["z"][1] * s["w"][-1], lambda t: t["z"][..., 1:2] * t["w"][..., 1:2]),
     "complex_formula": (lambda s: kp.complex_formula(s["x"], s["x"] * s["r"]),
                         lambda t: torch.complex(t["x"], t["x"] * t["r"]).expand(-1, t["r"].shape[1], -1)),
-    # sorties réelles
+    # real outputs
     "real": (lambda s: (s["z"] * s["w"]).real, lambda t: (t["z"] * t["w"]).real),
     "imag": (lambda s: kp.imag(s["z"] / s["w"]), lambda t: (t["z"] / t["w"]).imag),
     "abs": (lambda s: abs(s["z"] - s["w"]), lambda t: (t["z"] - t["w"]).abs()),
@@ -85,7 +85,7 @@ def test_interleaved_real_inputs_are_equivalent():
     b = run(z=torch.view_as_real(t["z"]).reshape(7, 4), w=torch.view_as_real(t["w"]).reshape(9, 4))
     torch.testing.assert_close(a, b, rtol=0, atol=0)
     assert run.plan.meta["complex_args"] == ("w", "z") and [a.dim for a in run.plan.args] == [4, 4]
-    # vue conjuguée paresseuse de Torch : résolue
+    # Torch lazy conjugate view: resolved
     torch.testing.assert_close(run(z=t["z"].conj(), w=t["w"]), run(z=t["z"].conj().resolve_conj(), w=t["w"]))
 
 
@@ -100,7 +100,7 @@ def test_complex_float32_and_params():
     pt = torch.tensor([0.5 - 2j], dtype=torch.complex64)
     torch.testing.assert_close(run(z=t["z"].to(torch.complex64), w=t["w"].to(torch.complex64), p=pt), out)
     with pytest.raises(ValidationError, match="dtype"):
-        run(z=t["z"], w=t["w"], p=0.5)  # complex128 pour un plan FP32
+        run(z=t["z"], w=t["w"], p=0.5)  # complex128 for an FP32 plan
 
 
 def test_complex_gradients_match_torch():
@@ -131,14 +131,14 @@ def test_complex_refusals():
         z.real2complex()
     with pytest.raises(ValidationError, match="exp1j"):
         kp.exp1j(z)
-    with pytest.raises(TypeError, match="complexe"):
+    with pytest.raises(TypeError, match="complex"):
         kp.sin(z)
-    with pytest.raises(TypeError, match="puissance"):
+    with pytest.raises(TypeError, match="power"):
         z ** 2
-    with pytest.raises(ValidationError, match="incompatibles"):
-        (z * kp.Vj("w", 4)).sum_over("j")  # même nom, réel et complexe
-    with pytest.raises(ValidationError, match="dimensions complexes"):
+    with pytest.raises(ValidationError, match="incompatible"):
+        (z * kp.Vj("w", 4)).sum_over("j")  # same name, real and complex
+    with pytest.raises(ValidationError, match="incompatible complex dimensions"):
         z * kp.Vj("v", 3, complex=True)
-    with pytest.raises(ValidationError, match="dimension complexe"):
+    with pytest.raises(ValidationError, match="last complex dimension"):
         kp.compile((z * w).sum_over("j"), dtype="float64", backend="oracle")(
             z=torch.zeros(3, 3, dtype=C128), w=torch.zeros(4, 2, dtype=C128))

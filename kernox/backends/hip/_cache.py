@@ -1,13 +1,13 @@
-"""Cache disque des code objects HIP : écriture atomique + verrou de fichier.
+"""On-disk cache of HIP code objects: atomic writes + file lock.
 
-- Répertoire : ``$KERNOX_CACHE_DIR/hip`` ou ``~/.cache/kernox/hip``.
-- Fichier ``<clé>.co`` écrit dans un temporaire du même répertoire puis
-  ``os.replace`` (atomique sur un même système de fichiers) : un lecteur ne voit
-  jamais un artefact partiel.
-- Verrou ``fcntl.flock`` exclusif sur ``<clé>.lock`` autour de « relire puis
-  compiler » : deux processus qui compilent la même clé ne compilent qu'une
-  fois. Les verrous ne sont pas supprimés (supprimer un fichier de verrou
-  pendant qu'un autre processus l'attend casserait l'exclusion).
+- Directory: ``$KERNOX_CACHE_DIR/hip`` or ``~/.cache/kernox/hip``.
+- The ``<key>.co`` file is written to a temporary file in the same directory,
+  then moved with ``os.replace`` (atomic within a filesystem): a reader never
+  sees a partial artifact.
+- An exclusive ``fcntl.flock`` lock on ``<key>.lock`` wraps "re-read, then
+  compile": two processes compiling the same key only compile it once. Lock
+  files are never deleted (deleting a lock file while another process waits
+  on it would break mutual exclusion).
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def make_key(fields: dict) -> str:
 
 
 def get_or_build(key: str, build: Callable[[], bytes]) -> tuple[bytes, bool]:
-    """Retourne (code object, cache_hit)."""
+    """Return (code object, cache_hit)."""
     d = cache_dir()
     path = os.path.join(d, key + ".co")
     try:

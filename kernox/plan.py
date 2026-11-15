@@ -1,11 +1,11 @@
-"""Plan typé : contrat commun entre le frontend kernox et les backends.
+"""Typed plan: the shared contract between the kernox frontend and the backends.
 
-Statut : contrat v0 (implémenté comme structure de données, sémantique décrite
-dans ``docs/kernel-backend-contract.md``). Les backends ne consomment QUE ce
-module ; ils ne dépendent jamais des classes du frontend (``Vi``, ``Vj``...).
+Status: contract v0 (implemented as a data structure, semantics described
+in ``docs/kernel-backend-contract.md``). Backends consume ONLY this
+module; they never depend on frontend classes (``Vi``, ``Vj``...).
 
-Normalisation : un plan réduit toujours sur l'axe ``j``. Une réduction
-« over i » est convertie par le frontend en échangeant les rôles i/j.
+Normalization: a plan always reduces over the ``j`` axis. A reduction
+"over i" is converted by the frontend by swapping the i/j roles.
 """
 
 from __future__ import annotations
@@ -21,29 +21,29 @@ Role = Literal["i", "j", "param"]
 
 
 class ReductionKind(str, Enum):
-    SUM = "sum"          # somme sur j de chaque composante de la formule
-    COUNT = "count"      # somme sur j d'une formule booléenne, accumulateur int64
-    MIN = "min"          # minimum par composante
+    SUM = "sum"          # sum over j of each formula component
+    COUNT = "count"      # sum over j of a boolean formula, int64 accumulator
+    MIN = "min"          # per-component minimum
     MAX = "max"
-    ARGMIN = "argmin"    # indice j (int64) du minimum, par composante
+    ARGMIN = "argmin"    # j index (int64) of the minimum, per component
     ARGMAX = "argmax"
-    KMIN = "kmin"        # K plus petites valeurs (formule scalaire uniquement)
-    ARGKMIN = "argkmin"  # indices int64 des K plus petites valeurs
-    KMIN_ARGKMIN = "kmin_argkmin"  # les deux sorties, un seul passage
-    LOGSUMEXP = "logsumexp"  # log Σ_j exp f_d, par composante (contrat v0.5)
-    SUMSOFTMAXWEIGHT = "sumsoftmaxweight"  # Σ_j softmax_j(f) g_e ; outputs = (f, g_1..g_E)
-    # avenant v0.8 (parité PyKeOps) :
-    MIN_ARGMIN = "min_argmin"  # MIN et ARGMIN, un seul passage, deux sorties
+    KMIN = "kmin"        # K smallest values (scalar formula only)
+    ARGKMIN = "argkmin"  # int64 indices of the K smallest values
+    KMIN_ARGKMIN = "kmin_argkmin"  # both outputs, single pass
+    LOGSUMEXP = "logsumexp"  # log Σ_j exp f_d, per component (contract v0.5)
+    SUMSOFTMAXWEIGHT = "sumsoftmaxweight"  # Σ_j softmax_j(f) g_e; outputs = (f, g_1..g_E)
+    # amendment v0.8 (PyKeOps parity):
+    MIN_ARGMIN = "min_argmin"  # MIN and ARGMIN, single pass, two outputs
     MAX_ARGMAX = "max_argmax"
-    LOGSUMEXPWEIGHT = "logsumexpweight"  # log Σ_j exp(f) g_e ; outputs = (f, g_1..g_E)
+    LOGSUMEXPWEIGHT = "logsumexpweight"  # log Σ_j exp(f) g_e; outputs = (f, g_1..g_E)
 
 
 @dataclass(frozen=True)
 class Arg:
-    """Argument déclaré, dans l'ordre stable de la signature du kernel.
+    """Declared argument, in the stable order of the kernel signature.
 
-    ``i`` : tenseur (M, dim) ; ``j`` : tenseur (N, dim) ; ``param`` : (dim,).
-    ``symbols`` : symboles symox scalaires des composantes, longueur ``dim``.
+    ``i``: tensor (M, dim); ``j``: tensor (N, dim); ``param``: (dim,).
+    ``symbols``: scalar symox symbols of the components, of length ``dim``.
     """
 
     name: str
@@ -55,22 +55,22 @@ class Arg:
 @dataclass(frozen=True)
 class Reduction:
     kind: ReductionKind
-    k: int | None = None  # requis pour KMIN / ARGKMIN / KMIN_ARGKMIN, k >= 0
+    k: int | None = None  # required for KMIN / ARGKMIN / KMIN_ARGKMIN, k >= 0
 
 
 @dataclass(frozen=True)
 class Plan:
-    """Description complète et immuable d'une réduction fusionnée.
+    """Complete, immutable description of a fused reduction.
 
-    ``outputs`` : expressions symox scalaires (composantes de la formule, ordre
-    row-major), fonctions des symboles de ``args`` uniquement. Pour COUNT, ce
-    sont des expressions booléennes. ``out_dim == len(outputs)``.
+    ``outputs``: scalar symox expressions (formula components, row-major
+    order), functions of the ``args`` symbols only. For COUNT, they are
+    boolean expressions. ``out_dim == len(outputs)``.
 
-    ``dtype`` : type des entrées flottantes et du calcul de la formule.
-    ``acc_dtype`` : type de l'accumulateur de SUM, LOGSUMEXP, SUMSOFTMAXWEIGHT et LOGSUMEXPWEIGHT
-    (état (m, s[, t]) des deux dernières ; par défaut ``dtype`` ;
-    ``float64`` possible en FP32 si le backend le déclare). Jamais inférieur à
-    ``dtype``. COUNT accumule toujours en int64.
+    ``dtype``: type of the floating-point inputs and of the formula evaluation.
+    ``acc_dtype``: accumulator type of SUM, LOGSUMEXP, SUMSOFTMAXWEIGHT and LOGSUMEXPWEIGHT
+    (the (m, s[, t]) state for the last two; defaults to ``dtype``;
+    ``float64`` is allowed in FP32 if the backend declares it). Never narrower
+    than ``dtype``. COUNT always accumulates in int64.
     """
 
     args: tuple[Arg, ...]
@@ -79,16 +79,16 @@ class Plan:
     dtype: DType
     acc_dtype: DType
     index_dtype: Literal["int64"] = "int64"
-    fast_math: bool = False  # interdit par défaut ; aucun backend ne l'active seul
-    fp_contract: bool = True  # contraction FMA intra-expression (contrat v0.3)
-    #: avenant v0.7 : schéma de sommation des accumulations flottantes (SUM, et
-    #: s, t_e de LOGSUMEXP/SUMSOFTMAXWEIGHT) ; sans effet sur les autres réductions.
+    fast_math: bool = False  # off by default; no backend enables it on its own
+    fp_contract: bool = True  # FMA contraction within expressions (contract v0.3)
+    #: amendment v0.7: summation scheme of floating-point accumulations (SUM, and
+    #: s, t_e of LOGSUMEXP/SUMSOFTMAXWEIGHT); no effect on other reductions.
     sum_scheme: SumScheme = "direct"
-    #: avenant v0.6 : nombre de dimensions de batch des entrées (0 = sans batch).
-    #: Les tailles de batch sont des données d'appel (``BatchLayout``), hors clé.
+    #: amendment v0.6: number of batch dimensions of the inputs (0 = no batch).
+    #: Batch sizes are call-time data (``BatchLayout``), not part of the key.
     batch_rank: int = 0
-    #: avenant v0.6 §2 : réduction restreinte par des ranges block-sparse
-    #: (``RangesLayout`` à l'appel) ; les tenseurs de ranges sont hors clé.
+    #: amendment v0.6 §2: reduction restricted by block-sparse ranges
+    #: (``RangesLayout`` at call time); range tensors are not part of the key.
     ranges: bool = False
     meta: dict = field(default_factory=dict, compare=False, hash=False)
 
@@ -100,32 +100,32 @@ class Plan:
         return tuple(a for a in self.args if a.role == role)
 
     def key(self) -> str:
-        """Hash stable (sha256 hex) : srepr des sorties, args, réduction, dtypes.
+        """Stable hash (hex sha256): srepr of outputs, args, reduction, dtypes.
 
-        Implémenté par le noyau ; sert de clé de cache de compilation, avec
-        en plus la version du générateur, le compilateur, les options et
-        l'architecture cible (responsabilité du backend).
+        Implemented by the core; used as the compilation cache key, together
+        with the generator version, compiler, options and target
+        architecture (the backend's responsibility).
         """
-        from ._plan_key import plan_key  # fourni par le noyau
+        from ._plan_key import plan_key  # provided by the core
 
         return plan_key(self)
 
 
 def output_shapes(plan: Plan, m: int, batch: tuple[int, ...] = ()) -> dict[str, tuple[tuple[int, ...], str]]:
-    """Formes et dtypes des sorties pour M lignes i (contrat, cf. doc).
+    """Output shapes and dtypes for M rows i (contract, see the docs).
 
-    ``batch`` (avenant v0.6) : dimensions de batch préfixées à chaque forme,
-    ``(*batch, M, …)`` ; le runtime passe ``(nb,)`` (batch aplati) au backend.
+    ``batch`` (amendment v0.6): batch dimensions prepended to each shape,
+    ``(*batch, M, …)``; the runtime passes ``(nb,)`` (flattened batch) to the backend.
     """
     batch = tuple(int(b) for b in batch)
     return {key: (batch + shape, dt) for key, (shape, dt) in _output_shapes(plan, m).items()}
 
 
 def accumulated_output_dtype(plan: Plan) -> str:
-    """dtype des sorties accumulées (SUM, familles LOGSUMEXP) : ``acc_dtype``, sauf en FP16.
+    """dtype of accumulated outputs (SUM, LOGSUMEXP families): ``acc_dtype``, except in FP16.
 
-    Avenant v0.9 (b) : un plan float16 rend du float16 (parité de type avec
-    PyKeOps), conversion finale de l'accumulateur (±inf au-delà de 65504).
+    Amendment v0.9 (b): a float16 plan returns float16 (type parity with
+    PyKeOps), with a final conversion of the accumulator (±inf beyond 65504).
     """
     return "float16" if plan.dtype == "float16" else plan.acc_dtype
 

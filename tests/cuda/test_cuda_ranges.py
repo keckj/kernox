@@ -1,10 +1,10 @@
-"""Ranges block-sparse natifs (avenant v0.6 §2) du backend CUDA.
+"""Native block-sparse ranges (amendment v0.6 §2) of the CUDA backend.
 
-Un bloc par tuile de travail ; intervalles dans le désordre et égalités au plus
-petit j de J(i) (liste par thread, ARGMIN, top-K coopératif), lignes non
-couvertes au neutre, blocs i plus hauts que ``ranges_tile_m``, NaN ignorés,
-schémas block/kahan ; référence : oracle masqué (plan ranges) sur l'hôte.
-Ranges denses : égalité au bit près avec le lancement sans ranges (S = 1).
+One block per work tile; unordered intervals and ties broken by the smallest
+j of J(i) (per-thread list, ARGMIN, cooperative top-K), uncovered rows set to
+the neutral value, i blocks taller than ``ranges_tile_m``, NaN ignored,
+block/kahan schemes; reference: masked oracle (ranges plan) on the host.
+Dense ranges: bitwise equality with the launch without ranges (S = 1).
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 if not torch.cuda.is_available() or torch.version.hip is not None:  # pragma: no cover
-    pytest.skip("GPU NVIDIA requis", allow_module_level=True)
+    pytest.skip("NVIDIA GPU required", allow_module_level=True)
 
 import kernox as kp  # noqa: E402
 from kernox.backends.base import RangesLayout, Variant  # noqa: E402
@@ -54,10 +54,10 @@ def _ranges_setup(dtype, m=300, n=700, density=0.5, seed=0, shuffle=False):
     li = torch.sort(torch.randint(0, 4, (m,), generator=g)).values
     lj = torch.sort(torch.randint(0, 9, (n,), generator=g)).values
     keep = torch.rand(4, 9, generator=g) < density
-    keep[3] = False                         # bloc i sans intervalle (lignes au neutre)
+    keep[3] = False                         # i block without intervals (rows at the neutral value)
     r = kp.ranges_from_labels(li.to(DEV), lj.to(DEV), keep.to(DEV))
     tr = Triplet(r.ranges_i, r.slices_i, r.redranges_j)
-    if shuffle:  # intervalles de chaque bloc dans l'ordre inverse
+    if shuffle:  # intervals of each block in reverse order
         red = r.redranges_j.clone()
         lo = 0
         for hi in r.slices_i.tolist():
@@ -65,7 +65,7 @@ def _ranges_setup(dtype, m=300, n=700, density=0.5, seed=0, shuffle=False):
             lo = hi
         tr = Triplet(r.ranges_i, r.slices_i, red)
     X = torch.randint(-2, 3, (m, 3), generator=g).double()
-    Y = torch.randint(-2, 3, (n, 3), generator=g).double()          # nombreuses égalités de d²
+    Y = torch.randint(-2, 3, (n, 3), generator=g).double()          # many d² ties
     Y[11, 0] = math.nan
     Bv = torch.randn(n, 2, generator=g, dtype=torch.float64)
     T = getattr(torch, dtype)
@@ -164,7 +164,7 @@ def test_ranges_sum_schemes(scheme, name):
 
 @pytest.mark.parametrize("name", ["sum", "argmin", "kmin_argkmin5", "kmin_argkmin40", "ssmw"])
 def test_dense_ranges_bitwise(monkeypatch, name):
-    """Ranges denses découpés en tuiles : même ordre de sommation que le lancement S = 1."""
+    """Dense ranges split into tiles: same summation order as the S = 1 launch."""
     from kernox.backends.cuda import backend as cb
 
     monkeypatch.setattr(cb.CudaCompiledReduction, "launch_config", lambda self, m, n, nb=1: (1, max(n, 1), self.tile))
@@ -192,14 +192,14 @@ def test_ranges_refusals():
     tr, t = _ranges_setup("float32")
     cr = _compiled(CudaBackend(), plan)
     outs = {"value": torch.empty(300, 2, device=DEV)}
-    with pytest.raises(ValueError):   # tile_m différent de ranges_tile_m
+    with pytest.raises(ValueError):   # tile_m different from ranges_tile_m
         cr.launch(t, outs, ranges=_layout(tr, cr.ranges_tile_m + 1))
-    with pytest.raises(UnsupportedError):   # plan sans ranges
+    with pytest.raises(UnsupportedError):   # plan without ranges
         CudaBackend().compile(plan, DEV).launch(t, outs, ranges=_layout(tr, cr.ranges_tile_m))
 
 
 def test_ranges_frontend():
-    """Chemin runtime : run.with_ranges contre l'oracle masqué dense."""
+    """Runtime path: run.with_ranges against the dense masked oracle."""
     x, y = kp.Vi("x", 3), kp.Vj("y", 3)
     run = kp.compile(((x - y) ** 2).sum().argmin(over="j"), dtype="float32", backend="cuda")
     g = torch.Generator().manual_seed(4)
@@ -218,8 +218,8 @@ def test_ranges_frontend():
 
 @pytest.mark.parametrize("name", ["argmin", "kmin_argkmin5", "min"])
 def test_ranges_mono_variant(name):
-    """Intervalles triés et disjoints : noyau sans départage (kp_reduce_ranges_mono) ;
-    dans le désordre : noyau à départage par j. Seuls ARG*/K* non coopératifs en ont deux."""
+    """Sorted, disjoint intervals: kernel without tie-breaking (kp_reduce_ranges_mono);
+    unordered: kernel with tie-breaking by j. Only non-cooperative ARG*/K* have both."""
     plan = _exprs()[name].to_plan("float32")
     cr = _compiled(CudaBackend(), plan)
     has = name != "min"
@@ -228,12 +228,12 @@ def test_ranges_mono_variant(name):
         tr, _ = _ranges_setup("float32", shuffle=shuffle, seed=_seed(name))
         lay = _layout(tr, cr.ranges_tile_m)
         assert cr._j_sorted(lay) is want
-        assert cr._j_sorted(lay) is want   # cache par identité
+        assert cr._j_sorted(lay) is want   # cache by identity
 
 
 @pytest.mark.parametrize("ci,cj,density", [(3, 4, 0.5), (300, 250, 0.2), (40, 40, 1.0), (5, 7, 0.0)])
 def test_ranges_from_labels_on_device_matches_host(ci, cj, density):
-    """Hors XPU, ranges_from_labels reste sur le device : mêmes six tenseurs que le chemin hôte."""
+    """Outside XPU, ranges_from_labels stays on the device: same six tensors as the host path."""
     g = torch.Generator().manual_seed(ci * 1000 + cj)
     li = torch.sort(torch.randint(0, ci, (5 * ci,), generator=g)).values
     lj = torch.sort(torch.randint(0, cj, (4 * cj,), generator=g)).values

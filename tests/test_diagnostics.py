@@ -1,7 +1,7 @@
 import json
 
 import kernox as kp
-import kernox.diagnostics as diag_mod  # noqa: F401  (paquet ; kp.diagnostics reste la fonction)
+import kernox.diagnostics as diag_mod  # noqa: F401  (package; kp.diagnostics stays the function)
 from kernox.diagnostics import _SYMOX_CORE_FINGERPRINTS, format_report, main
 
 

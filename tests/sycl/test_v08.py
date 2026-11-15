@@ -1,12 +1,12 @@
-"""MIN_ARGMIN, MAX_ARGMAX et LOGSUMEXPWEIGHT (avenant v0.8) sur le backend sycl, G31.
+"""MIN_ARGMIN, MAX_ARGMAX and LOGSUMEXPWEIGHT (v0.8 amendment) on the sycl backend, on the G31.
 
-- MIN_ARGMIN / MAX_ARGMAX : égalité bit à bit avec MIN + ARGMIN (resp. MAX +
-  ARGMAX) du même backend, eux-mêmes jugés par la conformance ; données entières
-  (nombreuses égalités), NaN, lignes entièrement NaN, N = 0, partition de j
-  forcée, variantes, batch et ranges ;
-- LOGSUMEXPWEIGHT : oracle Torch FP64 du noyau sur les entrées arrondies au
-  dtype ; lignes spéciales (±1e4, ±inf, NaN), poids nuls et négatifs, partition
-  de j avec tranches vides, schémas de sommation, acc_dtype FP64.
+- MIN_ARGMIN / MAX_ARGMAX: bit-exact equality with MIN + ARGMIN (resp. MAX +
+  ARGMAX) of the same backend, themselves checked by the conformance suite;
+  integer data (many ties), NaN, rows entirely NaN, N = 0, forced j partition,
+  variants, batch and ranges;
+- LOGSUMEXPWEIGHT: the core FP64 Torch oracle on the inputs rounded to the
+  dtype; special rows (±1e4, ±inf, NaN), zero and negative weights, j partition
+  with empty slices, summation schemes, FP64 acc_dtype.
 """
 
 import math
@@ -49,7 +49,7 @@ def _int_inputs(M, N, D, seed):
     y = torch.randint(-3, 4, (N, D), generator=g).double()
     if N > 7:
         y[7, 0] = NAN
-    x[2, :] = NAN  # ligne entièrement NaN : (±inf, −1)
+    x[2, :] = NAN  # row entirely NaN: (±inf, −1)
     return {"x": x, "y": y}
 
 
@@ -106,7 +106,7 @@ def test_min_argmin_batch_and_ranges_runtime():
     v, i = run(x=X.to(DEV), y=Y.to(DEV))
     rv, ri = ref(x=X, y=Y)
     assert torch.equal(v.cpu(), rv) and torch.equal(i.cpu(), ri)
-    # ranges : étiquettes (3 classes), blocs gardés diagonaux
+    # ranges: labels (3 classes), kept blocks are diagonal
     x2, y2 = X[0, 0], Y[0, 0]
     li = torch.arange(130) * 3 // 130
     lj = torch.arange(900) * 3 // 900
@@ -130,11 +130,11 @@ def _lsew_inputs(M, N, seed=0, negative=False):
     x = torch.randn(M, 1, generator=g, dtype=torch.float64)
     x[1], x[2], x[3], x[4], x[5] = 1e4, -1e4, INF, -INF, NAN
     y = 3 * torch.randn(N, 1, generator=g, dtype=torch.float64)
-    y[: N // 2] = INF                     # première moitié de j : f = −inf (tranches vides)
+    y[: N // 2] = INF                     # first half of j: f = −inf (empty slices)
     w = torch.rand(N, 3, generator=g, dtype=torch.float64) + 0.1
-    w[: N // 2, 0] = NAN                  # g NaN de poids nul : ignoré
+    w[: N // 2, 0] = NAN                  # NaN g with zero weight: ignored
     if negative:
-        w[:, 2] -= 0.8                    # Σ g < 0 possible : NaN (log)
+        w[:, 2] -= 0.8                    # Σ g < 0 possible: NaN (log)
     return {"x": x, "y": y, "w": w}
 
 
@@ -170,7 +170,7 @@ def test_lsew_split_special_rows(dtype, tj, groups, scheme):
         assert cr.last_split[0] > 1
     ref = _ref(plan, host)
     _close(got, ref, dtype, 1500)
-    # x = +inf : inf − inf = NaN sur la moitié y = +inf ; x = −inf : −inf ; NaN : NaN
+    # x = +inf: inf − inf = NaN on the half where y = +inf; x = −inf: −inf; NaN: NaN
     assert torch.isnan(ref[3]).all() and (ref[4] == -INF).all() and torch.isnan(ref[5]).all()
     assert torch.isfinite(ref[1]).all() and torch.isfinite(ref[2]).all()
 
@@ -184,14 +184,14 @@ def test_lsew_negative_weights_and_empty(dtype):
         ref = _ref(plan, host)
         assert torch.isnan(ref[:, 2]).any()
         _close(got["value"], ref, dtype, 2000)
-    # f = +inf sans NaN : +inf si t_e > 0, NaN si t_e <= 0 (poids négatifs)
+    # f = +inf without NaN: +inf if t_e > 0, NaN if t_e <= 0 (negative weights)
     hp = {"x": torch.tensor([[INF], [0.0]], dtype=torch.float64), "y": torch.tensor([[0.0], [1.0]], dtype=torch.float64),
           "w": torch.tensor([[1.0, -1.0, 0.5], [2.0, 0.5, -0.5]], dtype=torch.float64)}
     got, _ = _launch(plan, hp)
     v = got["value"]
-    assert v[0, 0] == INF and torch.isnan(v[0, 1]) and torch.isnan(v[0, 2])  # t = 3, −0,5, 0
+    assert v[0, 0] == INF and torch.isnan(v[0, 1]) and torch.isnan(v[0, 2])  # t = 3, −0.5, 0
     _close(v, _ref(plan, hp), dtype, 2)
-    # N = 0 : −inf partout
+    # N = 0: −inf everywhere
     host0 = {"x": host["x"], "y": host["y"][:0], "w": host["w"][:0]}
     got, _ = _launch(plan, host0)
     assert (got["value"] == -INF).all()
@@ -225,7 +225,7 @@ def test_lsew_batch_and_ranges_runtime():
     torch.testing.assert_close(got, ref(x=X, y=Y, w=Wt), rtol=1e-12, atol=1e-12)
     li = torch.arange(90) * 3 // 90
     lj = torch.arange(700) * 3 // 700
-    keep = torch.tensor([[1, 0, 0], [0, 1, 1], [0, 0, 0]], dtype=torch.bool)  # classe 2 : aucune paire
+    keep = torch.tensor([[1, 0, 0], [0, 1, 1], [0, 0, 0]], dtype=torch.bool)  # class 2: no pair
     got = run.with_ranges(kp.ranges_from_labels(li.to(DEV), lj.to(DEV), keep.to(DEV)))(
         x=X[0, 0].to(DEV), y=Y[0, 0].to(DEV), w=Wt[0, 0].to(DEV)).cpu()
     exp = ref.with_ranges(kp.ranges_from_labels(li, lj, keep))(x=X[0, 0], y=Y[0, 0], w=Wt[0, 0])

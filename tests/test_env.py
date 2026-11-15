@@ -1,4 +1,4 @@
-"""Variables d'environnement KERNOX_*."""
+"""KERNOX_* environment variables."""
 
 import pytest
 
@@ -13,7 +13,7 @@ def _clean(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-def test_absent_et_vide(monkeypatch):
+def test_absent_and_empty(monkeypatch):
     assert getenv("KERNOX_SYCL_TARGET") is None
     assert getenv("KERNOX_ONEAPI_ROOT", "/opt") == "/opt"
     monkeypatch.setenv("KERNOX_SYCL_TARGET", "")
@@ -22,10 +22,10 @@ def test_absent_et_vide(monkeypatch):
     assert getenv("KERNOX_SYCL_TARGET", "x") == "spir64"
 
 
-def test_cache_cuda_priorites(monkeypatch, tmp_path):
+def test_cuda_cache_priorities(monkeypatch, tmp_path):
     from kernox.backends.cuda.backend import _cache_dir
 
-    monkeypatch.setenv("KERNOX_CACHE_DIR", str(tmp_path / "commun"))
-    assert _cache_dir() == tmp_path / "commun" / "cuda"
+    monkeypatch.setenv("KERNOX_CACHE_DIR", str(tmp_path / "shared"))
+    assert _cache_dir() == tmp_path / "shared" / "cuda"
     monkeypatch.setenv("KERNOX_CUDA_CACHE_DIR", str(tmp_path / "cuda"))
     assert _cache_dir() == tmp_path / "cuda" / "cuda"

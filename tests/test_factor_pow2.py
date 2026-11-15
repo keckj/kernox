@@ -1,4 +1,4 @@
-"""Mise en facteur exacte des coefficients 2^k dans les dérivées (``autograd._factor_pow2``)."""
+"""Exact factoring of 2^k coefficients in derivatives (``autograd._factor_pow2``)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ a, b, c, d, s = symox.symbols("a b c d s")
 
 
 def test_square_difference_keeps_shared_difference():
-    # ∂(a − b)²/∂a : 2·(a − b), et non 2a − 2b
+    # ∂(a − b)²/∂a: 2·(a − b), not 2a − 2b
     out = derivative((a - b) ** 2, a)
     assert (a - b) in out.args
     assert symox.expand(out - 2 * (a - b)) == 0

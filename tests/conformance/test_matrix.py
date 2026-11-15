@@ -1,10 +1,10 @@
-"""Matrice systématique : réductions × dtypes × dimensions × K × tailles.
+"""Systematic matrix: reductions × dtypes × dimensions × K × sizes.
 
-Données sur grille entière : l'évaluation est exacte en FP32 comme en FP64
-(sommes bornées par 2**23), donc la comparaison est **exacte**, égalités
-massives comprises (plus petit j, ordre lexicographique (valeur, j)).
-Profil rapide : un sous-ensemble couvrant (chaque dimension, chaque K et
-chaque famille de tailles apparaît) ; profil long (``slow``) : produit complet.
+Data on an integer grid: the evaluation is exact in FP32 as in FP64 (sums
+bounded by 2**23), so the comparison is **exact**, massive ties included
+(smallest j, lexicographic order (value, j)).
+Quick profile: a covering subset (every dimension, every K and every size
+family appears); long profile (``slow``): full product.
 """
 
 from __future__ import annotations
@@ -22,13 +22,13 @@ import kernox as kp
 
 DIMS = (1, 2, 3, 7, 16, 64, 65)
 K_SPECS = (0, 1, 2, 31, 32, 33, 64, 128, 256, "N-1", "N", "N+1")
-# bords de tuile/bloc (31, 32, 33, 255, 256, 257), multiples, premiers, M << N, M >> N, vides
+# tile/block edges (31, 32, 33, 255, 256, 257), multiples, primes, M << N, M >> N, empty
 SIZES_QUICK = ((1, 1), (31, 33), (256, 255), (257, 32), (3, 1031), (1031, 3), (0, 7), (7, 0))
 SIZES_SLOW = SIZES_QUICK + ((32, 32), (33, 257), (255, 256), (512, 1024), (97, 4099), (4099, 97),
                             (1, 8191), (8191, 1), (2, 65537), (12289, 2))
 NONK = (R.SUM, R.MIN, R.MAX, R.ARGMIN, R.ARGMAX, R.COUNT)
 DTYPES = ("float32", "float64")
-MAX_TERMS = 8_000_000  # M*N*D de la référence FP64 (mémoire hôte)
+MAX_TERMS = 8_000_000  # M*N*D of the FP64 reference (host memory)
 
 
 def _sizes(slow, d):
@@ -36,7 +36,7 @@ def _sizes(slow, d):
 
 
 def _amplitude(d, n):
-    # |x - y| <= 2a : somme sur j de d termes (2a)^2 < 2**23 (exacte en FP32)
+    # |x - y| <= 2a: sum over j of d terms (2a)^2 < 2**23 (exact in FP32)
     return max(1, int(math.sqrt(2.0**23 / (4 * d * max(n, 1)))))
 
 
@@ -45,19 +45,19 @@ def _grid(rng, rows, d, a):
 
 
 def _formula(name, d):
-    """(expression réduite par l'appelant, générateur d'entrées)."""
+    """(expression reduced by the caller, input generator)."""
     x, y = kp.Vi("x", d), kp.Vj("y", d)
     if name == "sqdist":
         return ((x - y) ** 2).sum(), lambda rng, m, n, a: {"x": _grid(rng, m, d, a), "y": _grid(rng, n, d, a)}
     if name == "multi":
-        # plusieurs arguments i et j, paramètre scalaire (puissance de 2 : exact)
+        # several i and j arguments, scalar parameter (power of 2: exact)
         ai, bj, s = kp.Vi("ai", 1), kp.Vj("bj", 1), kp.Param("s", 1)
         f = ((x - y) ** 2).sum() * ai + bj * s
         return f, lambda rng, m, n, a: {"x": _grid(rng, m, d, a), "y": _grid(rng, n, d, a),
                                         "ai": _grid(rng, m, 1, 2), "bj": _grid(rng, n, 1, 8),
                                         "s": np.array([0.5])}
     if name == "vecout":
-        # sortie vectorielle (D composantes), paramètre vectoriel
+        # vector output (D components), vector parameter
         v, w = kp.Param("v", d), kp.Vj("w", d)
         f = (x - y) * v + w
         return f, lambda rng, m, n, a: {"x": _grid(rng, m, d, a), "y": _grid(rng, n, d, a),
@@ -86,8 +86,8 @@ def _reduce(f, kind, k, over="j"):
     raise ValueError(kind)
 
 
-# K au-delà de cette borne : un backend peut refuser explicitement (UnsupportedError
-# avant lancement, contrat v0) ; le refus est accepté et signalé, jamais un résultat faux.
+# K beyond this bound: a backend may refuse explicitly (UnsupportedError before
+# launch, v0 contract); the refusal is accepted and reported, never a wrong result.
 K_GUARANTEED = 256
 
 
@@ -103,7 +103,7 @@ def _run_sizes(backend, expr, gen, dtype, sizes, d, *, seed, over="j", acc_dtype
             k = expr.to_plan(dtype).reduction.k
             if k is None or k <= K_GUARANTEED:
                 raise
-            warnings.warn(f"[{name}] K={k} non pris en charge : {exc}", stacklevel=2)
+            warnings.warn(f"[{name}] K={k} not supported: {exc}", stacklevel=2)
         except AssertionError as exc:
             raise AssertionError(f"[{name} {dtype} d={d} M={m} N={n} over={over} seed={seed}] {exc}") from exc
 
@@ -201,12 +201,12 @@ def test_over_i(backend, kind, dtype):
     else:
         f, gen = _formula("vecout" if kind is not R.KMIN_ARGKMIN else "sqdist", d)
         expr = _reduce(f, kind, 5, over="i")
-    # over="i" : M (lignes de sortie) est le nombre de lignes de y ; gen reçoit (lignes x, lignes y)
+    # over="i": M (output rows) is the number of rows of y; gen receives (x rows, y rows)
     _run_sizes(backend, expr, gen, dtype, [(1, 1), (33, 257), (1031, 3), (5, 0), (0, 5)], d, seed=3, over="i")
 
 
 def test_acc_dtype_float64(backend):
-    # SUM FP32 accumulée en FP64 : sortie float64, données non entières
+    # FP32 SUM accumulated in FP64: float64 output, non-integer data
     name, dev = backend
     x, y, b = kp.Vi("x", 3), kp.Vj("y", 3), kp.Vj("b", 1)
     expr = (kp.exp(-((x - y) ** 2).sum()) * b).sum_over("j")

@@ -64,7 +64,7 @@ def _from_pairs(pairs, variables) -> "ComplexFormula":
 
 
 def _lift(value) -> "ComplexFormula":
-    """Opérande vers ComplexFormula : complexe, réel (Real2Complex), constante Python."""
+    """Operand to ComplexFormula: complex, real (Real2Complex), Python constant."""
     import symox
 
     if isinstance(value, ComplexFormula):
@@ -72,13 +72,13 @@ def _lift(value) -> "ComplexFormula":
     if isinstance(value, Formula):
         return value.real2complex()
     if isinstance(value, ReductionExpr):
-        raise TypeError("une réduction ne peut pas être utilisée dans une formule (v0)")
+        raise TypeError("a reduction cannot be used inside a formula (v0)")
     if isinstance(value, numbers.Complex) and not isinstance(value, numbers.Real):
         re, im = Formula._lift(float(value.real)), Formula._lift(float(value.imag))
         return ComplexFormula(Formula(re.components + im.components, {}))
     if isinstance(value, (numbers.Real, symox.Basic)):
         return Formula._lift(value).real2complex()
-    raise TypeError(f"opérande complexe non pris en charge : {value!r}")
+    raise TypeError(f"unsupported complex operand: {value!r}")
 
 
 def _broadcast(a: "ComplexFormula", b: "ComplexFormula"):
@@ -89,7 +89,7 @@ def _broadcast(a: "ComplexFormula", b: "ComplexFormula"):
         elif len(pb) == 1:
             pb = pb * len(pa)
         else:
-            raise ValidationError(f"dimensions complexes incompatibles : {a.dim} et {b.dim}")
+            raise ValidationError(f"incompatible complex dimensions: {a.dim} and {b.dim}")
     return pa, pb, _merge_vars(a._f._vars, b._f._vars)
 
 
@@ -107,7 +107,7 @@ class ComplexFormula:
 
     def __init__(self, formula: Formula):
         if not isinstance(formula, Formula) or formula.is_boolean or formula.dim % 2:
-            raise ValidationError("formule complexe : Formula réelle de dimension paire attendue")
+            raise ValidationError("complex formula: expected a real Formula of even dimension")
         self._f = formula
 
     # ---- introspection
@@ -131,11 +131,11 @@ class ComplexFormula:
         return f"ComplexFormula(dim={self.dim}, {list(self._f.components)})"
 
     def __bool__(self):
-        raise TypeError("une ComplexFormula n'a pas de valeur de vérité")
+        raise TypeError("a ComplexFormula has no truth value")
 
     __hash__ = None
 
-    # ---- parties
+    # ---- parts
     @property
     def real(self) -> Formula:
         return self._f[0::2]
@@ -178,7 +178,7 @@ class ComplexFormula:
     def sum(self, *args, **kwargs) -> "ComplexFormula":
         """Sum of the complex components (keopscore ``ComplexSum``), dimension 1."""
         if args or kwargs:
-            raise TypeError("ComplexFormula.sum() somme les composantes ; réduire un axe : .sum_over('j')")
+            raise TypeError("ComplexFormula.sum() sums the components; to reduce an axis: .sum_over('j')")
         import symox
 
         ps = _pairs(self._f)
@@ -187,10 +187,10 @@ class ComplexFormula:
     def __getitem__(self, index):
         d = self.dim
         if isinstance(index, bool) or not isinstance(index, numbers.Integral):
-            raise TypeError("ComplexFormula : seul un indice entier de composante est pris en charge")
+            raise TypeError("ComplexFormula: only an integer component index is supported")
         i = int(index)
         if not -d <= i < d:
-            raise IndexError(f"composante {i} hors de [0, {d})")
+            raise IndexError(f"component {i} out of [0, {d})")
         i %= d
         return ComplexFormula(self._f[2 * i:2 * i + 2])
 
@@ -204,17 +204,17 @@ class ComplexFormula:
     def auto_factorize(self):
         return self
 
-    # ---- refus explicites (comme PyKeOps)
+    # ---- explicit refusals (like PyKeOps)
     def real2complex(self):
-        raise ValidationError("real2complex ne s'applique pas à une formule complexe")
+        raise ValidationError("real2complex does not apply to a complex formula")
 
     def imag2complex(self):
-        raise ValidationError("imag2complex ne s'applique pas à une formule complexe")
+        raise ValidationError("imag2complex does not apply to a complex formula")
 
     def exp1j(self):
-        raise ValidationError("exp1j ne s'applique pas à une formule complexe")
+        raise ValidationError("exp1j does not apply to a complex formula")
 
-    # ---- arithmétique
+    # ---- arithmetic
     def _binary(self, other, op, reverse=False):
         a, b = (_lift(other), self) if reverse else (self, _lift(other))
         pa, pb, variables = _broadcast(a, b)
@@ -244,7 +244,7 @@ class ComplexFormula:
 
     @staticmethod
     def _real_scal_or_mult(o, s: Formula):
-        """``s · o`` pour ``s`` réelle et ``o`` complexe (formule ou scalaire Python)."""
+        """``s · o`` for real ``s`` and complex ``o`` (formula or Python scalar)."""
         o = _lift(o)
         return o._real_scal(s) if s.dim == 1 else s.real2complex() * o
 
@@ -269,22 +269,22 @@ class ComplexFormula:
         return self
 
     def __pow__(self, o):
-        raise TypeError("puissance d'une formule complexe non définie (comme PyKeOps)")
+        raise TypeError("power of a complex formula is not defined (like PyKeOps)")
 
-    # ---- réduction
+    # ---- reduction
     def sum_over(self, axis: str) -> "ComplexReductionExpr":
         return ComplexReductionExpr(self, axis)
 
     def _no_reduction(self, *args, **kwargs):
-        raise TypeError("réduction non définie sur une formule complexe : seule sum_over (SUM) l'est ; "
-                        "réduire .real, .imag ou .abs() pour les autres")
+        raise TypeError("reduction not defined on a complex formula: only sum_over (SUM) is; "
+                        "reduce .real, .imag or .abs() for the others")
 
     min = max = argmin = argmax = kmin = argkmin = kmin_argkmin = min_argmin = max_argmax = _no_reduction
     logsumexp = sumsoftmaxweight = _no_reduction
 
 
 def _divide(f: ComplexFormula, g: ComplexFormula) -> ComplexFormula:
-    """keopscore : ``ComplexMult(Real2Complex(Inv(ComplexSquareAbs(g))), ComplexMult(f, Conj(g)))``."""
+    """keopscore: ``ComplexMult(Real2Complex(Inv(ComplexSquareAbs(g))), ComplexMult(f, Conj(g)))``."""
     pf, pg, variables = _broadcast(f, g)
     out = []
     for p, q in zip(pf, pg):
@@ -314,7 +314,7 @@ class ComplexReductionExpr(ReductionExpr):
 
 
 # --------------------------------------------------------------------------
-# constructeurs depuis des formules réelles (méthodes de Formula, fonctions kp.*)
+# constructors from real formulas (Formula methods, kp.* functions)
 # --------------------------------------------------------------------------
 
 
@@ -374,7 +374,7 @@ for _name, _fn in (("real2complex", real2complex), ("imag2complex", imag2complex
 
 
 # --------------------------------------------------------------------------
-# runtime : conversion des tenseurs
+# runtime: tensor conversion
 # --------------------------------------------------------------------------
 
 
@@ -389,7 +389,7 @@ def complex_input(name: str, value, dim2: int):
         return [p for v in value for p in (complex(v).real, complex(v).imag)]
     if isinstance(value, torch.Tensor) and value.is_complex():
         if value.shape[-1] * 2 != dim2:
-            raise ValidationError(f"{name!r} : dernière dimension complexe {value.shape[-1]} au lieu de {dim2 // 2}")
+            raise ValidationError(f"{name!r}: last complex dimension is {value.shape[-1]} instead of {dim2 // 2}")
         if value.dim() > 1 and value.stride(-1) != 1:
             value = value.contiguous()
         return torch.view_as_real(value.resolve_conj()).reshape(*value.shape[:-1], dim2)

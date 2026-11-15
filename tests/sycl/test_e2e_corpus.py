@@ -1,5 +1,5 @@
-"""Bout en bout : frontend -> runtime -> backend sycl (fonction de paire du noyau)
-sur le G31, comparé à l'oracle NumPy FP64 du noyau (corpus partagé)."""
+"""End to end: frontend -> runtime -> sycl backend (core pair function)
+on the G31, compared with the core FP64 NumPy oracle (shared corpus)."""
 
 from __future__ import annotations
 
@@ -26,9 +26,9 @@ def test_corpus_sycl_vs_oracle(name, dtype, m, n):
     expr = reductions()[name]
     red = expr.compile(dtype, backend="sycl")
     plan = red.plan
-    # graine stable : hash() de str dépend de PYTHONHASHSEED (données différentes à chaque
-    # processus ; where_sqrt FP32 sort alors de la tolérance pour certaines graines, par
-    # mauvais conditionnement de 1/sqrt(d2 - 1) près de d2 = 1, erreur identique en FP32 CPU)
+    # stable seed: hash() of a str depends on PYTHONHASHSEED (different data in each
+    # process; FP32 where_sqrt then exceeds the tolerance for some seeds, because
+    # 1/sqrt(d2 - 1) is ill-conditioned near d2 = 1, with the same error in FP32 on CPU)
     inputs = make_inputs(plan, m, n, seed=zlib.crc32(name.encode()) % 1000, dtype=dtype)
     kwargs = {k: v.to("xpu") for k, v in inputs.items()}
     out = red(**kwargs)
@@ -58,7 +58,7 @@ def test_corpus_sycl_vs_oracle(name, dtype, m, n):
     if "index" in got:
         gi, ri = got["index"], ref["index"]
         np.testing.assert_array_equal(gi < 0, ri < 0)
-        # égalités quasi exactes : la valeur au point retourné doit valoir l'optimum
+        # near-exact ties: the value at the returned point must equal the optimum
         f = vals[..., 0] if kind in (ReductionKind.ARGKMIN, ReductionKind.KMIN_ARGKMIN) else None
         for i in range(m):
             for c in range(gi.shape[1]):

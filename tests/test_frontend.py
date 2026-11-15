@@ -14,7 +14,7 @@ def floats(expr):
     return sorted(float(a) for a in expr.atoms(symox.Float))
 
 
-# ---------------------------------------------------------------- constantes
+# ---------------------------------------------------------------- constants
 def test_python_constants_without_intcst():
     x, y = Vi("x", 2), Vj("y", 2)
     f = 0 + 2.0 * x - y * 0.25 + 1 + True + Fraction(1, 3) + symox.Rational(2, 7)
@@ -70,7 +70,7 @@ def test_bad_constant_type():
         Vi("x") + symox.Symbol("z")
 
 
-# ---------------------------------------------------------------- formules
+# ---------------------------------------------------------------- formulas
 def test_broadcast_and_dims():
     x, y = Vi("x", 3), Vj("y", 3)
     assert (x - y).dim == 3 and (x * Param("s")).dim == 3
@@ -183,7 +183,7 @@ def test_acc_dtype_rules():
         (x * y).min(over="j").to_plan("float32", acc_dtype="float64")
     with pytest.raises(ValidationError):
         r.to_plan("bfloat16")
-    assert r.to_plan("float16").acc_dtype == "float32"  # avenant v0.9
+    assert r.to_plan("float16").acc_dtype == "float32"  # v0.9 amendment
 
 
 def test_builder_minimal():

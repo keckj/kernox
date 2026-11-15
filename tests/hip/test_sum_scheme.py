@@ -1,10 +1,10 @@
-"""Schémas de sommation (avenant v0.7) sur le backend hip : block et kahan.
+"""Summation schemes (amendment v0.7) on the hip backend: block and kahan.
 
-Complète ``tests/conformance/test_sum_scheme.py`` (données de Higham sans
-partition) : partition de j forcée (tranches vides comprises), petites tuiles,
-lignes spéciales (±inf, NaN) dont le motif doit être exactement celui de la
-référence (``kahan`` rend ``s`` si ``s`` n'est pas fini), acc FP64,
-fp_contract off, publication ``sum_block=T`` et niveaux imposés pour LSE/SSMW.
+Complements ``tests/conformance/test_sum_scheme.py`` (Higham data without
+partition): forced j partition (empty slices included), small tiles,
+special rows (±inf, NaN) whose pattern must match the reference exactly
+(``kahan`` returns ``s`` if ``s`` is not finite), FP64 acc,
+fp_contract off, ``sum_block=T`` publication and imposed levels for LSE/SSMW.
 """
 
 import math
@@ -126,7 +126,7 @@ def test_scheme_acc64(scheme):
     host = _inputs(40, 3000, seed=6)
     got, cr = _run(HipBackend(HipOptions(split="force", tile_j=16)), plan, host)
     assert got.dtype == torch.float64
-    # référence : oracle du même plan (termes FP32 identiques, accumulation FP64 selon le schéma)
+    # reference: oracle of the same plan (identical FP32 terms, FP64 accumulation per the scheme)
     ref = torch.empty(output_shapes(plan, 40)["value"][0], dtype=torch.float64)
     OracleReduction(plan, "cpu", 4096).launch({a.name: host[a.name].float() for a in plan.args}, {"value": ref})
     fin = torch.isfinite(ref)

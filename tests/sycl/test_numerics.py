@@ -1,9 +1,9 @@
-"""Contrat v0.3 : contraction FMA (``Plan.fp_contract``) sur le backend sycl.
+"""v0.3 contract: FMA contraction (``Plan.fp_contract``) on the sycl backend.
 
-``a*b - c`` avec a = b = 1 + 2^-h et c = 1 + 2^(1-h) : le produit exact vaut
-c + 2^-2h ; arrondi seul (sans FMA), il donne c (égalité à mi-chemin, pair) et
-le résultat est 0 ; contracté en FMA, il vaut exactement 2^-2h.
-h = 12 en FP32, h = 27 en FP64.
+``a*b - c`` with a = b = 1 + 2^-h and c = 1 + 2^(1-h): the exact product is
+c + 2^-2h; rounded on its own (without FMA), it gives c (halfway tie, to even) and
+the result is 0; contracted into an FMA, it is exactly 2^-2h.
+h = 12 in FP32, h = 27 in FP64.
 """
 
 from __future__ import annotations
@@ -38,11 +38,11 @@ def test_fp_contract_false_forbids_fma(dtype):
 
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 def test_fp_contract_true_allows_fma(dtype):
-    """Défaut : contraction autorisée (et effectivement appliquée sur le G31)."""
+    """Default: contraction allowed (and actually applied on the G31)."""
     v, c, fma = _fma_case(dtype, True)
     assert v in (0.0, fma)
     assert "-ffp-contract=off" not in c.info.options
-    assert v == fma  # constaté sur le G31 (icpx 2026.2, IGC 2.28)
+    assert v == fma  # observed on the G31 (icpx 2026.2, IGC 2.28)
 
 
 def test_fp_contract_in_cache_key():

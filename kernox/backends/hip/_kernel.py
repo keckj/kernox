@@ -1,48 +1,48 @@
-"""Génération des kernels HIP de réduction fusionnée tuilée.
+"""Generation of the tiled fused-reduction HIP kernels.
 
-Un module contient deux kernels :
+A module contains two kernels:
 
-``kp_reduce`` : grille (gx, S). Le bloc (bx, s) traite des lignes ``i`` et la
-plage ``j ∈ [s·jchunk, min(N, (s+1)·jchunk))`` ; il charge coopérativement des
-tuiles de ``TJ`` lignes ``j`` en LDS et parcourt chaque tuile. Si ``S == 1``
-(``partial == 0``) il écrit directement les sorties ; sinon il écrit son état
-partiel dans un temporaire ``[S, M, W]`` (variante « partition de j »).
+``kp_reduce``: grid (gx, S). Block (bx, s) handles rows ``i`` over the range
+``j ∈ [s·jchunk, min(N, (s+1)·jchunk))``; it cooperatively loads tiles of
+``TJ`` rows ``j`` into LDS and walks through each tile. If ``S == 1``
+(``partial == 0``) it writes the outputs directly; otherwise it writes its
+partial state to a temporary ``[S, M, W]`` buffer (the "j partition" variant).
 
-``kp_merge`` : un thread par ligne ``i`` : fusionne les S partiels dans l'ordre
-croissant de ``s`` (donc de ``j``) et écrit les sorties.
+``kp_merge``: one thread per row ``i``; merges the S partials in increasing
+order of ``s`` (hence of ``j``) and writes the outputs.
 
-Stratégies de parcours (choix à la compilation, ``KernelConfig.strategy``) :
+Traversal strategies (chosen at compile time, ``KernelConfig.strategy``):
 
-- ``thread`` : un thread par ligne ``i`` ; accumulateurs en registres ; parcours
-  de ``j`` strictement croissant, d'où « plus petit indice à égalité » par
-  comparaisons strictes. KMIN : liste triée (valeur, indice) de K éléments par
-  thread, insertion par échanges déroulés (registres ; spills pour K grand).
-- ``coop`` (KMIN/ARGKMIN uniquement) : G lanes consécutives (G | taille de
-  wavefront, G <= 32) par ligne ``i``. La liste triée de ``G·L >= K`` éléments
-  est **répartie** : la lane ``t`` détient les rangs ``[t·L, (t+1)·L)`` en
-  registres (L ≈ 16 au lieu de K). Chaque lane évalue un ``j`` différent, puis
-  les G candidats sont diffusés (``__shfl``) et insérés tour à tour ; une
-  insertion décale la liste d'un rang, l'élément sortant d'une lane entre en
-  tête de la suivante (``__shfl_up``). Comparaison lexicographique complète
-  (valeur, j) : l'ordre d'insertion n'importe pas.
+- ``thread``: one thread per row ``i``; accumulators in registers; ``j`` is
+  traversed in strictly increasing order, so strict comparisons give "smallest
+  index on ties". KMIN: sorted list of K (value, index) pairs per thread,
+  insertion through unrolled swaps (registers; spills for large K).
+- ``coop`` (KMIN/ARGKMIN only): G consecutive lanes (G divides the wavefront
+  size, G <= 32) per row ``i``. The sorted list of ``G·L >= K`` elements is
+  **distributed**: lane ``t`` holds ranks ``[t·L, (t+1)·L)`` in registers
+  (L ≈ 16 instead of K). Each lane evaluates a different ``j``, then the G
+  candidates are broadcast (``__shfl``) and inserted one after the other; an
+  insertion shifts the list by one rank, and the element leaving one lane
+  enters at the head of the next one (``__shfl_up``). Full lexicographic
+  comparison (value, j): the insertion order does not matter.
 
-Aucune hypothèse sur la taille de wavefront (32 sur gfx12, 64 sur CDNA) :
-synchronisation par ``__syncthreads``, shuffles limités à des groupes de G <= 32
-lanes alignés. Blocs de 256 threads.
+No assumption on the wavefront size (32 on gfx12, 64 on CDNA):
+synchronization through ``__syncthreads``, shuffles restricted to aligned
+groups of G <= 32 lanes. Blocks of 256 threads.
 
-LOGSUMEXP / SUMSOFTMAXWEIGHT (contrat v0.5, stratégie ``thread``) : état
-``(m, s[, t_e])`` en ``kp_acc`` par composante, décalé par le maximum courant ;
-état de tuile fusionné dans l'état de ligne en fin de tuile (sommation à deux
-niveaux, comme SUM), puis états partiels fusionnés par ``kp_merge``. Un terme
-``f = −inf`` est ignoré (poids nul) ; ``m`` n'est jamais NaN (les NaN vivent
-dans ``s``/``t``) ; à égalité de maxima le facteur vaut exactement 1, d'où
-``exp(−inf − (−inf)) = 0`` pour un état vide et pas de NaN parasite à +inf.
-``exp``/``log`` exacts de la libm (``expf``/``exp``, ``logf``/``log``).
+LOGSUMEXP / SUMSOFTMAXWEIGHT (contract v0.5, ``thread`` strategy): state
+``(m, s[, t_e])`` in ``kp_acc`` per component, shifted by the running maximum;
+the tile state is merged into the row state at the end of each tile (two-level
+summation, as for SUM), then the partial states are merged by ``kp_merge``. A
+term ``f = −inf`` is ignored (zero weight); ``m`` is never NaN (NaNs live in
+``s``/``t``); when the maxima are equal the factor is exactly 1, which gives
+``exp(−inf − (−inf)) = 0`` for an empty state and no spurious NaN at +inf.
+Exact libm ``exp``/``log`` (``expf``/``exp``, ``logf``/``log``).
 
-Sémantique : NaN filtré (``v == v``) ou ignoré par comparaison stricte ; un
-emplacement absent (indice −1) est battu par tout candidat ; ±inf valides.
-Algorithme KMIN « liste triée » : même idée que KeOps
-(``KMin_ArgKMin_Reduction``), réécrite ; aucun code KeOps repris.
+Semantics: NaN is filtered out (``v == v``) or ignored through strict
+comparison; an empty slot (index −1) is beaten by any candidate; ±inf are valid.
+"Sorted list" KMIN algorithm: same idea as KeOps (``KMin_ArgKMin_Reduction``),
+rewritten; no KeOps code reused.
 """
 
 from __future__ import annotations
@@ -53,62 +53,62 @@ from ...plan import Plan, ReductionKind
 
 GENERATOR_VERSION = "hip-v7"
 
-_CTYPE = {"float16": "kp_h", "float32": "float", "float64": "double"}   # kp_h : avenant v0.9
+_CTYPE = {"float16": "kp_h", "float32": "float", "float64": "double"}   # kp_h: amendment v0.9
 _SIZEOF = {"float16": 2, "float32": 4, "float64": 8}
 
 KMIN_KINDS = (ReductionKind.KMIN, ReductionKind.ARGKMIN, ReductionKind.KMIN_ARGKMIN)
 SOFT_KINDS = (ReductionKind.LOGSUMEXP, ReductionKind.SUMSOFTMAXWEIGHT, ReductionKind.LOGSUMEXPWEIGHT)
-# LSE/SSMW : insertion directe (un niveau) en accumulation FP64 ou au-delà de cette taille
-# d'état par ligne i (l'état local de tuile double les registres). Mesures R9700 :
-# SSMW FP64 E64 2·10⁴² 189,7 → 100,9 ms (débordement 852 → 140 o), E16 57,4 → 47,9,
-# E1 36,8 → 31,8, LSE FP64 D16 73,5 → 69,0 ; FP32 neutre (±3 %) → deux niveaux conservés
-# sous le seuil (meilleure accumulation), un niveau au-delà (FP32 E64 : 212 → 146 VGPR).
+# LSE/SSMW: direct (one-level) insertion with FP64 accumulation or beyond this state size
+# per row i (the local tile state doubles the register count). R9700 measurements:
+# SSMW FP64 E64 2·10⁴² 189.7 → 100.9 ms (spills 852 → 140 B), E16 57.4 → 47.9,
+# E1 36.8 → 31.8, LSE FP64 D16 73.5 → 69.0; FP32 neutral (±3 %) → two levels kept
+# below the threshold (better accumulation), one level above it (FP32 E64: 212 → 146 VGPRs).
 SOFT_ONE_LEVEL_BYTES = 256
 ELEM_KINDS = (ReductionKind.SUM, ReductionKind.COUNT, ReductionKind.MIN, ReductionKind.MAX,
               ReductionKind.ARGMIN, ReductionKind.ARGMAX, ReductionKind.MIN_ARGMIN,
               ReductionKind.MAX_ARGMAX)
-# avenant v0.8 : MIN_ARGMIN / MAX_ARGMAX = ARGMIN / ARGMAX rendant aussi la valeur
+# amendment v0.8: MIN_ARGMIN / MAX_ARGMAX = ARGMIN / ARGMAX that also return the value
 ARGLIKE = (ReductionKind.ARGMIN, ReductionKind.MIN_ARGMIN)
 ARGLIKE_MAX = (ReductionKind.ARGMAX, ReductionKind.MAX_ARGMAX)
-S_MAX = 64  # partiels au plus (tableau de pointeurs de la fusion top-K)
+S_MAX = 64  # maximum number of partials (pointer array of the top-K merge)
 
-# Seuils mesurés sur GPU libre (R9700 seul),
-# provisoires, à confirmer sur d'autres cartes :
-COOP_K_MIN = 32      # KMIN : coop dès K = 32 (D <= 48 FP32, FP64 D3 : ×0,68 à ×0,95 face au thread)
-# Ligne j lourde (somme des dimensions des arguments j >= COOP_HEAVY_D) : le calcul de la paire
-# domine et la coop G=2 perd à K=32 (D64 : thread ×0,92) mais gagne dès K=48 (D64 : ×0,53).
+# Thresholds measured on an idle GPU (R9700 only),
+# provisional, to be confirmed on other cards:
+COOP_K_MIN = 32      # KMIN: coop from K = 32 (D <= 48 FP32, FP64 D3: ×0.68 to ×0.95 vs thread)
+# Heavy j row (sum of the dimensions of the j arguments >= COOP_HEAVY_D): the pair computation
+# dominates and coop G=2 loses at K=32 (D64: thread ×0.92) but wins from K=48 on (D64: ×0.53).
 COOP_HEAVY_D = 64
 COOP_K_MIN_HEAVY = 48
-COOP_SLOTS = 24      # rangs par lane visés : K=48 → G2 (24 rangs) bat G4 (D64 ×0,61, FP64 D3 ×0,85)
-# R9700 : K=128 → G16 (8 rangs/lane) bat G8 dans les 4 cas mesurés (×0,79 à ×0,84) ;
-# K=256 → G16 bat G8 et G32. Au-delà de K=64 on fixe donc G=16 (provisoire).
+COOP_SLOTS = 24      # target ranks per lane: K=48 → G2 (24 ranks) beats G4 (D64 ×0.61, FP64 D3 ×0.85)
+# R9700: K=128 → G16 (8 ranks/lane) beats G8 in all 4 measured cases (×0.79 to ×0.84);
+# K=256 → G16 beats G8 and G32. Above K=64 we therefore use G=16 (provisional).
 COOP_G_LARGE_K = 16
-COOP_UNROLL_MAX = 256  # G·rangs/lane au-delà duquel la boucle des candidats n'est pas déroulée
-COOP_MAX_SLOTS = 32   # rangs par lane au plus (registres) ; G <= 32 (wave32) → K <= 1024
-THREAD_K_MAX = 256    # stratégie thread : liste entière dans un thread
-# Partition de j des top-K à K >= COOP_K_MIN (coop ou thread) : la fusion coûte S·M·K, donc
-# partition seulement sous TOPK_SPLIT_BELOW_BLOCKS_PER_CU blocs/CU, S dimensionné pour
-# TOPK_SPLIT_BLOCKS_PER_CU blocs/CU. Mesures (G16, K=128, N=2·10⁵) : M=1024 (2 blocs/CU)
-# S=4 bat S=1 (×0,80/×0,89) et S=16 (×0,76) ; M=2048 (4 blocs/CU) S=2 ×0,97 seulement ;
-# dès 8 blocs/CU S=1 est le meilleur. Thread D64 K=32 (6 blocs/CU) : S=3 ×1,15, S=6 ×1,5.
-# G2/G4 à M=50 000 (12 à 24 blocs/CU) perdent ×1,1 à ×1,4 avec partition.
+COOP_UNROLL_MAX = 256  # G·ranks/lane above which the candidate loop is not unrolled
+COOP_MAX_SLOTS = 32   # maximum ranks per lane (registers); G <= 32 (wave32) → K <= 1024
+THREAD_K_MAX = 256    # thread strategy: whole list in a single thread
+# j partition of top-K reductions with K >= COOP_K_MIN (coop or thread): the merge costs S·M·K,
+# so only partition below TOPK_SPLIT_BELOW_BLOCKS_PER_CU blocks/CU, with S sized for
+# TOPK_SPLIT_BLOCKS_PER_CU blocks/CU. Measurements (G16, K=128, N=2·10⁵): M=1024 (2 blocks/CU)
+# S=4 beats S=1 (×0.80/×0.89) and S=16 (×0.76); M=2048 (4 blocks/CU) S=2 only ×0.97;
+# from 8 blocks/CU on, S=1 is best. Thread D64 K=32 (6 blocks/CU): S=3 ×1.15, S=6 ×1.5.
+# G2/G4 at M=50,000 (12 to 24 blocks/CU) lose ×1.1 to ×1.4 with a partition.
 TOPK_SPLIT_BELOW_BLOCKS_PER_CU = 4
 TOPK_SPLIT_BLOCKS_PER_CU = 8
 
 
 def coop_k_min(plan: Plan) -> int:
-    """K à partir duquel la coop est le défaut, selon la largeur de la ligne j."""
+    """K from which coop is the default, depending on the width of the j row."""
     d = sum(a.dim for a in plan.args_of("j"))
     return COOP_K_MIN_HEAVY if d >= COOP_HEAVY_D else COOP_K_MIN
 
 
 @dataclass(frozen=True)
 class KernelConfig:
-    block: int        # threads par bloc (multiple de 64)
-    tile_j: int       # lignes j par tuile LDS
+    block: int        # threads per block (multiple of 64)
+    tile_j: int       # j rows per LDS tile
     strategy: str = "thread"  # "thread" | "coop"
-    group: int = 1    # lanes par ligne i (coop)
-    levels: int = 0   # LSE/SSMW : 2 = état local par tuile puis fusion, 1 = insertion directe ; 0 sinon
+    group: int = 1    # lanes per row i (coop)
+    levels: int = 0   # LSE/SSMW: 2 = local state per tile then merge, 1 = direct insertion; 0 otherwise
 
     @property
     def rows_per_block(self) -> int:
@@ -124,9 +124,9 @@ class KernelConfig:
 
 def coop_group(k: int, dtype: str = "float32") -> int:
     if k > THREAD_K_MAX:
-        # Mesures (d² D3, 2·10⁴²) : K=512 FP32 G32 136,7 ms contre G16 217,7 ;
-        # FP64 G16 106,8 contre G32 252,7 (G32 : 249 VGPR, occupation 5). Au plus
-        # COOP_MAX_SLOTS rangs par lane, donc G=32 au-delà de K=512 (provisoire).
+        # Measurements (d² D3, 2·10⁴²): K=512 FP32 G32 136.7 ms vs G16 217.7;
+        # FP64 G16 106.8 vs G32 252.7 (G32: 249 VGPRs, occupancy 5). At most
+        # COOP_MAX_SLOTS ranks per lane, hence G=32 above K=512 (provisional).
         if dtype != "float64" or -(-k // COOP_G_LARGE_K) > COOP_MAX_SLOTS:
             return 32
         return COOP_G_LARGE_K
@@ -139,7 +139,7 @@ def coop_group(k: int, dtype: str = "float32") -> int:
 
 
 def soft_state_bytes(plan: Plan) -> int:
-    """Taille de l'état par ligne i des réductions LSE/SSMW (0 pour les autres)."""
+    """Size of the per-row-i state of LSE/SSMW reductions (0 for the others)."""
     kind, d = plan.reduction.kind, plan.out_dim
     if kind is ReductionKind.LOGSUMEXP:
         n = 2 * d
@@ -151,8 +151,8 @@ def soft_state_bytes(plan: Plan) -> int:
 
 
 def soft_levels_auto(plan: Plan) -> int:
-    """Insertion directe (un niveau) en accumulation FP64 ou quand l'état dépasse
-    ``SOFT_ONE_LEVEL_BYTES`` ; sinon état local de tuile puis fusion (deux niveaux)."""
+    """Direct insertion (one level) with FP64 accumulation or when the state exceeds
+    ``SOFT_ONE_LEVEL_BYTES``; otherwise a local tile state then a merge (two levels)."""
     if plan.acc_dtype == "float64" or soft_state_bytes(plan) > SOFT_ONE_LEVEL_BYTES:
         return 1
     return 2
@@ -161,30 +161,30 @@ def soft_levels_auto(plan: Plan) -> int:
 def choose_config(plan: Plan, lds_limit: int, block: int = 256, strategy: str = "auto",
                   group: int | None = None, tile_j: int | None = None,
                   levels: int | None = None) -> KernelConfig | None:
-    """Tuile bornée par la LDS ; ``None`` si une ligne j ne tient pas."""
+    """Tile bounded by the LDS; ``None`` if a single j row does not fit."""
     kind, k = plan.reduction.kind, plan.reduction.k
     if kind in SOFT_KINDS:
-        # sum_scheme (avenant v0.7) : block = état de tuile neuf fusionné (2 niveaux) ;
-        # kahan = état compensé unique (1 niveau) ; direct = règle de taille d'état.
+        # sum_scheme (amendment v0.7): block = fresh tile state, then merged (2 levels);
+        # kahan = single compensated state (1 level); direct = state size rule.
         forced = {"block": 2, "kahan": 1}.get(plan.sum_scheme)
         if levels is None:
             levels = forced or soft_levels_auto(plan)
         if levels not in (1, 2):
-            raise ValueError("niveaux LSE/SSMW : 1 ou 2")
+            raise ValueError("LSE/SSMW levels: 1 or 2")
         if forced is not None and levels != forced:
-            raise ValueError(f"sum_scheme={plan.sum_scheme} impose levels={forced}")
+            raise ValueError(f"sum_scheme={plan.sum_scheme} requires levels={forced}")
     else:
         levels = 0
     if strategy == "auto":
         strategy = "coop" if kind in KMIN_KINDS and k is not None and k >= coop_k_min(plan) else "thread"
     if strategy == "thread" and kind in KMIN_KINDS and (k or 0) > THREAD_K_MAX:
-        raise ValueError(f"stratégie thread : K <= {THREAD_K_MAX}")
+        raise ValueError(f"thread strategy: K <= {THREAD_K_MAX} required")
     if strategy == "coop":
         if kind not in KMIN_KINDS:
-            raise ValueError("stratégie coop réservée à KMIN/ARGKMIN")
+            raise ValueError("coop strategy is restricted to KMIN/ARGKMIN")
         g = group or coop_group(k or 1, plan.dtype)
         if g not in (2, 4, 8, 16, 32):
-            raise ValueError("groupe coop : 2, 4, 8, 16 ou 32")
+            raise ValueError("coop group: 2, 4, 8, 16 or 32")
     else:
         g = 1
     row = sum(a.dim for a in plan.args_of("j")) * _SIZEOF[plan.dtype]
@@ -199,26 +199,26 @@ def choose_config(plan: Plan, lds_limit: int, block: int = 256, strategy: str = 
             return None
     if tile_j is not None:
         if tile_j < 1 or tile_j * row > lds_limit:
-            raise ValueError("tile_j invalide")
+            raise ValueError("invalid tile_j")
         tj = tile_j
     return KernelConfig(block, tj, strategy, g, levels)
 
 
 def partial_layout(plan: Plan):
-    """(largeur W, type C des valeurs partielles ou None, indices partiels ?)."""
+    """(width W, C type of the partial values or None, partial indices?)."""
     kind, d = plan.reduction.kind, plan.out_dim
     kahan = plan.sum_scheme == "kahan"
     if kind is ReductionKind.SUM:
-        return (2 * d if kahan else d), "kp_acc", False   # kahan : (s_c..., c_c...)
+        return (2 * d if kahan else d), "kp_acc", False   # kahan: (s_c..., c_c...)
     if kind is ReductionKind.COUNT:
         return d, "kp_i64", False
     if kind in (ReductionKind.MIN, ReductionKind.MAX):
         return d, "kp_t", False
     if kind in ARGLIKE + ARGLIKE_MAX:
         return d, "kp_t", True
-    if kind is ReductionKind.LOGSUMEXP:      # (m_c, s_c) ; kahan (m_c, s_c, cs_c)
+    if kind is ReductionKind.LOGSUMEXP:      # (m_c, s_c); kahan (m_c, s_c, cs_c)
         return (3 if kahan else 2) * d, "kp_acc", False
-    if kind in (ReductionKind.SUMSOFTMAXWEIGHT, ReductionKind.LOGSUMEXPWEIGHT):  # (m, s, t_1..t_E) ; kahan (m, s, cs, t.., ct..)
+    if kind in (ReductionKind.SUMSOFTMAXWEIGHT, ReductionKind.LOGSUMEXPWEIGHT):  # (m, s, t_1..t_E); kahan (m, s, cs, t.., ct..)
         return (1 + 2 * d if kahan else 1 + d), "kp_acc", False
     return plan.reduction.k, "kp_t", True
 
@@ -243,15 +243,15 @@ __device__ __forceinline__ double kp_nan(double) { return __builtin_nan(""); }
 
 
 def _soft_names(kind, d):
-    """Composantes d'état : liste de (m, s, [t...], score, [poids]) en noms C."""
+    """State components: list of (m, s, [t...], score, [weights]) as C names."""
     if kind is ReductionKind.LOGSUMEXP:
         return [(f"m{c}", f"s{c}", [], f"r.o{c}", []) for c in range(d)]
     return [("m0", "s0", [f"t{e}" for e in range(d - 1)], "r.o0", [f"r.o{1 + e}" for e in range(d - 1)])]
 
 
 def _soft_insert(w, ind, m, s, ts, v, gs, kahan=False):
-    """Insertion d'un terme v (poids g) dans l'état (m, s, t) ; v == −inf ignoré.
-    ``kahan`` : compensations ``c<s>``, ``c<t>`` (Neumaier), redimensionnées avec s et t."""
+    """Insert a term v (weight g) into the state (m, s, t); v == −inf is ignored.
+    ``kahan``: compensations ``c<s>``, ``c<t>`` (Neumaier), rescaled along with s and t."""
     w(f"{ind}{{ const kp_acc v = (kp_acc)({v});")
     for e, g in enumerate(gs):
         w(f"{ind}  const kp_acc g{e} = (kp_acc)({g});")
@@ -273,8 +273,8 @@ def _soft_insert(w, ind, m, s, ts, v, gs, kahan=False):
 
 
 def _soft_merge(w, ind, m, s, ts, mb, sb, tbs, cb=None):
-    """Fusion de l'état b dans (m, s, t) ; facteur exactement 1 à égalité des maxima.
-    ``cb`` (kahan) : compensations de b, alignées sur [sb] + tbs ; fusion TwoSum."""
+    """Merge state b into (m, s, t); the factor is exactly 1 when the maxima are equal.
+    ``cb`` (kahan): compensations of b, aligned with [sb] + tbs; TwoSum merge."""
     if cb is None:
         w(f"{ind}if ({mb} > {m}) {{ const kp_acc c = kp_exp({m} - {mb}); {s} = {s} * c + {sb};"
           + "".join(f" {t} = {t} * c + {tb};" for t, tb in zip(ts, tbs)) + f" {m} = {mb}; }}")
@@ -290,9 +290,9 @@ def _soft_merge(w, ind, m, s, ts, mb, sb, tbs, cb=None):
 
 
 def _soft_finish(w, ind, kind, m, s, ts, dst, kahan=False):
-    """Écrit le résultat : LSE ``s NaN → NaN ; m = +inf → +inf ; sinon m + log s`` ;
-    SSMW ``m = +inf → NaN ; sinon t / s`` (0/0 = NaN si vide) ; LSEW (avenant v0.8)
-    ``m + log t`` sans cas particulier. ``kahan`` : s et t compensés (``kp_kfin``) avant."""
+    """Write the result: LSE ``s NaN → NaN; m = +inf → +inf; else m + log s``;
+    SSMW ``m = +inf → NaN; else t / s`` (0/0 = NaN if empty); LSEW (amendment v0.8)
+    ``m + log t`` with no special case. ``kahan``: s and t are compensated (``kp_kfin``) first."""
     if kahan:
         for x in [s] + ts:
             w(f"{ind}{x} = kp_kfin({x}, c{x});")
@@ -306,7 +306,7 @@ def _soft_finish(w, ind, kind, m, s, ts, dst, kahan=False):
             w(f"{ind}{dst(e)} = ({m} == KP_AINF) ? kp_nan((kp_acc)0) : {t} / {s};")
 
 
-_KAHAN_HELPERS = """// Kahan–Babuška (Neumaier), avenant v0.7 : additions/soustractions seulement
+_KAHAN_HELPERS = """// Kahan-Babuska (Neumaier), amendment v0.7: additions/subtractions only
 __device__ __forceinline__ kp_acc kp_kabs(kp_acc x) { return x < (kp_acc)0 ? -x : x; }
 __device__ __forceinline__ void kp_kadd(kp_acc& s, kp_acc& c, const kp_acc x) {
   const kp_acc t = s + x;
@@ -318,19 +318,19 @@ __device__ __forceinline__ void kp_kmerge(kp_acc& s, kp_acc& c, const kp_acc s2,
   const kp_acc e = (s - (t - bp)) + (s2 - bp);
   c = (c + c2) + e; s = t;
 }
-// somme non finie (±inf, NaN) : s tel quel (c = inf − inf serait NaN)
+// non-finite sum (±inf, NaN): s as is (c = inf − inf would be NaN)
 __device__ __forceinline__ kp_acc kp_kfin(kp_acc s, kp_acc c) { return (s - s == (kp_acc)0) ? s + c : s; }
 """
 
 
 _BETTER = """__device__ __forceinline__ bool kp_better(kp_t v, kp_i64 j, kp_t bv, kp_i64 bj) {
-  // ordre lexicographique (valeur, j) ; un emplacement absent (bj < 0) est battu par tout candidat
+  // lexicographic order (value, j); an empty slot (bj < 0) is beaten by any candidate
   return j >= 0 && (bj < 0 || v < bv || (v == bv && j < bj));
 }
 """
 
 
-_HALF_KERNEL = """// FP16 (avenant v0.9) : échanges de lanes par float (conversion exacte)
+_HALF_KERNEL = """// FP16 (amendment v0.9): lane exchanges through float (exact conversion)
 __device__ __forceinline__ kp_h __shfl(kp_h v, int src, int w) { return kp_h(__shfl((float)v, src, w)); }
 __device__ __forceinline__ kp_h __shfl_up(kp_h v, unsigned int d, int w) { return kp_h(__shfl_up((float)v, d, w)); }
 """
@@ -346,7 +346,7 @@ def kernel_source(plan: Plan, pair_source: str, pair_name: str, cfg: KernelConfi
 
     T = _CTYPE[plan.dtype]
     A = _CTYPE[plan.acc_dtype]
-    OA = _CTYPE[accumulated_output_dtype(plan)]   # FP16 : sorties accumulées en FP16 (v0.9 b)
+    OA = _CTYPE[accumulated_output_dtype(plan)]   # FP16: accumulated outputs in FP16 (v0.9 b)
     kind = plan.reduction.kind
     d = plan.out_dim
     K = plan.reduction.k
@@ -369,15 +369,15 @@ def kernel_source(plan: Plan, pair_source: str, pair_name: str, cfg: KernelConfi
     }[kind]
     soft = kind in SOFT_KINDS
     kahan = plan.sum_scheme == "kahan" and (soft or kind is ReductionKind.SUM)
-    lp = "l" if cfg.levels == 2 else ""  # préfixe de l'état local de tuile (deux niveaux)
+    lp = "l" if cfg.levels == 2 else ""  # prefix of the local tile state (two levels)
     if soft and coop:
-        raise ValueError("stratégie coop réservée à KMIN/ARGKMIN")
+        raise ValueError("coop strategy is restricted to KMIN/ARGKMIN")
     out_params = [f"{ct}* __restrict__ out_{n}" for n, ct in names_out]
     part_params = [f"{pvt}* __restrict__ pv", "kp_i64* __restrict__ pi"]
 
     L = []
     w = L.append
-    w("// Généré par kernox.backends.hip (" + GENERATOR_VERSION + f", strategy={cfg.strategy}, G={G})")
+    w("// Generated by kernox.backends.hip (" + GENERATOR_VERSION + f", strategy={cfg.strategy}, G={G})")
     if plan.dtype == "float16":
         w(HALF_PRELUDE)
         w(_HALF_KERNEL)
@@ -422,7 +422,7 @@ def kernel_source(plan: Plan, pair_source: str, pair_name: str, cfg: KernelConfi
             w("  #pragma unroll")
             w(f"  for (int c = 0; c < {a.dim}; ++c) x{n}[c] = active ? a{n}[i * {a.dim} + c] : (kp_t)0;")
 
-    # accumulateurs
+    # accumulators
     if kind is ReductionKind.SUM:
         for c in range(d):
             w(f"  kp_acc acc{c} = (kp_acc)0;" + (f" kp_acc cacc{c} = (kp_acc)0;" if kahan else ""))
@@ -500,8 +500,8 @@ def kernel_source(plan: Plan, pair_source: str, pair_name: str, cfg: KernelConfi
                 w(f"        {{ const kp_t v = r.o{c}; if (v > acc{c} || (v == acc{c} && (idx{c} < 0 || j < idx{c}))) {{ acc{c} = v; idx{c} = j; }} }}")
         else:
             w("        const kp_t v = r.o0;")
-            # (valeur, j) lexicographique : une égalité de plus petit j vue plus tard (ranges dans
-            # le désordre) doit aussi entrer
+            # lexicographic (value, j): a tie with a smaller j seen later (out-of-order ranges)
+            # must also be inserted
             w(f"        if (v == v && kp_better(v, j, kv[{K - 1}], ki[{K - 1}])) {{")
             w("          kp_t cv = v; kp_i64 cj = j;")
             w("          #pragma unroll")
@@ -525,14 +525,14 @@ def kernel_source(plan: Plan, pair_source: str, pair_name: str, cfg: KernelConfi
         w("        const int jj = base + lane;")
         w(f"        kp_t v = {inf}; kp_i64 jv = -1;")
         w(f"        if (jj < nt) {{ const auto r = {call('jj')}; v = r.o0; jv = (v == v) ? (j0 + jj) : -1; }}")
-        # Boucle sur les G candidats du groupe : déroulée seulement si G·L reste petit. FP32
-        # K=1024 (G32, L32) déroulé : 28 515 instructions, 542 branches (cache d'instructions
-        # débordé, ×2 plus lent que FP64, que le compilateur ne déroulait pas : 13 387).
+        # Loop over the G candidates of the group: unrolled only while G·L stays small. FP32
+        # K=1024 (G32, L32) unrolled: 28,515 instructions, 542 branches (instruction cache
+        # overflow, ×2 slower than FP64, which the compiler did not unroll: 13,387).
         w("        #pragma unroll" + ("" if G * Ls <= COOP_UNROLL_MAX else " 1"))
         w(f"        for (int q = 0; q < {G}; ++q) {{")
         w(f"          const kp_t cv = __shfl(v, q, {G}); const kp_i64 cj = __shfl(jv, q, {G});")
         w(f"          const kp_t lv = __shfl(kv[{Ls - 1}], {G - 1}, {G}); const kp_i64 lj = __shfl(ki[{Ls - 1}], {G - 1}, {G});")
-        w("          if (kp_better(cv, cj, lv, lj)) {  // uniforme dans le groupe")
+        w("          if (kp_better(cv, cj, lv, lj)) {  // uniform within the group")
         w(f"            const bool aff = kp_better(cv, cj, kv[{Ls - 1}], ki[{Ls - 1}]);")
         w(f"            const kp_t pv_ = __shfl_up(kv[{Ls - 1}], 1, {G}); const kp_i64 pj_ = __shfl_up(ki[{Ls - 1}], 1, {G});")
         w(f"            const int paff_ = __shfl_up((int)aff, 1, {G}); const int paff = lane > 0 ? paff_ : 0;")
@@ -550,7 +550,7 @@ def kernel_source(plan: Plan, pair_source: str, pair_name: str, cfg: KernelConfi
         w("    }")
     w("  }")
 
-    # écriture
+    # write-back
     w("  if (!active) return;")
     if soft:
         W_ = W
@@ -676,7 +676,7 @@ def kernel_source(plan: Plan, pair_source: str, pair_name: str, cfg: KernelConfi
             w("    for (int s = 0; s < S; ++s) {")
             w(f"      const kp_i64 o = ((kp_i64)s * M + i) * {d} + c;")
             w("      const kp_t v = pv[o]; const kp_i64 j = pi[o];")
-            w("      // s croissant = j croissant : à égalité, le partiel antérieur (plus petit j) reste")
+            w("      // increasing s = increasing j: on ties, the earlier partial (smaller j) is kept")
             w(f"      if (j >= 0 && (b < 0 || v {op} a)) {{ a = v; b = j; }}")
             w("    }")
             w(f"    out_index[i * {d} + c] = b;")
@@ -708,7 +708,7 @@ def kernel_source(plan: Plan, pair_source: str, pair_name: str, cfg: KernelConfi
 
 
 def _out_widths(plan: Plan) -> dict:
-    """Largeur (éléments par ligne i) de chaque sortie."""
+    """Width (elements per row i) of each output."""
     from ...plan import output_shapes
     import dataclasses
     p0 = dataclasses.replace(plan, batch_rank=0, ranges=False)
@@ -728,9 +728,9 @@ def _kernel_span(L, name):
 
 
 def _batched(L, plan: Plan, names_out, W):
-    """Avenant v0.6 §1 : élément de batch ``kp_bz = b0 + blockIdx.z`` ; entrées décalées par la
-    table d'offsets ``boff[arg * nbt + kp_bz]`` (éléments) ; sorties ``(nb, M, ·)`` contiguës ;
-    partiels ``(nb, S, M, W)``."""
+    """Addendum v0.6 §1: batch element ``kp_bz = b0 + blockIdx.z``; inputs shifted by the
+    offset table ``boff[arg * nbt + kp_bz]`` (in elements); contiguous ``(nb, M, ·)`` outputs;
+    partials ``(nb, S, M, W)``."""
     widths = _out_widths(plan)
     L = list(L)
     extra = ["const kp_i64* __restrict__ boff", "const kp_i64 nbt", "const kp_i64 b0"]
@@ -754,7 +754,7 @@ def _batched(L, plan: Plan, names_out, W):
             pro.append("  const kp_i64 kp_S = S;")
         for nm, ct in names_out:
             pro.append(f"  {ct}* __restrict__ out_{nm} = out_{nm}_ + kp_bz * M * {widths[nm]};")
-        # partiels : type d'origine conservé par la déclaration du paramètre
+        # partials: the original type is kept from the parameter declaration
         decl_pv = next(x for x in sig.split(",") if "pv_" in x).strip().replace("pv_", "pv")
         decl_pi = next(x for x in sig.split(",") if "pi_" in x).strip().rstrip(")").replace("pi_", "pi")
         pro.append(f"  {decl_pv} = pv_ + kp_bz * kp_S * M * {W};")
@@ -764,10 +764,10 @@ def _batched(L, plan: Plan, names_out, W):
 
 
 def _with_ranges_kernel(L, cfg: KernelConfig, pvt: str):
-    """Avenant v0.6 §2 : ajoute ``kp_reduce_ranges``, dérivé de ``kp_reduce`` : un bloc par
-    tuile de travail ``(i0, i1, k0, k1)`` (hauteur <= rows_per_block), réduction sur
-    ``∪ red[k0:k1]`` dans l'ordre des intervalles (égalités départagées par j), sans
-    partition de j ; les lignes non couvertes reçoivent le neutre par un lancement N = 0."""
+    """Addendum v0.6 §2: add ``kp_reduce_ranges``, derived from ``kp_reduce``: one block per
+    work tile ``(i0, i1, k0, k1)`` (height <= rows_per_block), reducing over
+    ``∪ red[k0:k1]`` in interval order (ties broken by j), without a j partition;
+    rows that are not covered receive the neutral element through an N = 0 launch."""
     st, en = _kernel_span(L, "kp_reduce")
     K_ = list(L[st:en + 1])
     R, G = cfg.rows_per_block, cfg.group
@@ -794,7 +794,7 @@ def _with_ranges_kernel(L, cfg: KernelConfig, pvt: str):
         elif x == "  if (!active) return;":
             out.append("  }")
         out.append(x)
-    # pv/pi ne sont plus des paramètres
+    # pv/pi are no longer parameters
     out[1] = out[1].replace(",\n    kp_t* __restrict__ pv", "").replace(",\n    kp_acc* __restrict__ pv", "")
     out[1] = out[1].replace(",\n    kp_i64* __restrict__ pv", "").replace(",\n    kp_i64* __restrict__ pi", "")
     assert "pv" not in out[1] and "pi" not in out[1].split("work")[1], out[1]

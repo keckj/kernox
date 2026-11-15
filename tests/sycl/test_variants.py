@@ -1,5 +1,5 @@
-"""Contrat v0.2 : variantes du backend sycl (taille de WG, tuile j, sous-groupe,
-répartition de j). Toutes doivent donner la même sémantique sur le G31."""
+"""v0.2 contract: sycl backend variants (WG size, j tile, sub-group,
+j split). They must all give the same semantics on the G31."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def test_info_variant_and_cache_key():
 def test_invalid_variant_refused():
     p = _p("sum")
     with pytest.raises(UnsupportedError):
-        backend().compile(p, DEV, Variant("autre"))
+        backend().compile(p, DEV, Variant("other"))
     with pytest.raises(UnsupportedError):
         backend().compile(p, DEV, Variant("tiled1d_jsplit", (("wg", 4096),)))
     with pytest.raises(UnsupportedError):

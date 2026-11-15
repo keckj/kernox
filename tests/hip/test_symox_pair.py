@@ -1,6 +1,6 @@
-"""M1/M3 avec de vraies expressions symox (fonction de paire générée).
+"""M1/M3 with real symox expressions (generated pair function).
 
-Utilise ``codegen/pair.py`` du noyau (dialecte ``hip``).
+Uses the core ``codegen/pair.py`` (``hip`` dialect).
 """
 
 import math
@@ -75,7 +75,7 @@ def test_count_rational_radius(dtype):
     out, _ = _run(plan, host, 300)
     T = getattr(torch, dtype)
     ref = (_torch_d2({k: v.to(T) for k, v in host.items()}) <= 0.75).sum(1, keepdim=True)
-    # frontière : tolérer les seuls couples à moins de 1e-5 du rayon en FP32
+    # boundary: tolerate only the pairs within 1e-5 of the radius in FP32
     diff = (out["value"] - ref).abs()
     near = ((_torch_d2(host) - 0.75).abs() < 1e-5).sum(1, keepdim=True)
     assert torch.all(diff <= near)
@@ -83,12 +83,12 @@ def test_count_rational_radius(dtype):
 
 @pytest.mark.parametrize("dtype", ["float64", "float32"])
 def test_piecewise_branch_preserved(dtype):
-    """Branche inactive sqrt(d2 - 1) jamais évaluée hors domaine : pas de NaN."""
+    """Inactive branch sqrt(d2 - 1) never evaluated outside its domain: no NaN."""
     pw = sx.Piecewise((sx.sqrt(D2 - 1), D2 > 1), (0, True))
     plan = _plan([pw], R.MAX, dtype)
     host = _data(200, 700, seed=4)
     out, cr = _run(plan, host, 200)
-    assert "?" in cr.source  # conditionnelle conservée
+    assert "?" in cr.source  # conditional preserved
     d2 = _torch_d2(host)
     ref = torch.where(d2 > 1, torch.sqrt((d2 - 1).clamp_min(0)), torch.zeros_like(d2)).amax(1, keepdim=True)
     assert not torch.isnan(out["value"]).any()
@@ -101,12 +101,12 @@ def test_knn_argkmin(dtype):
     host = _data(256, 3000, seed=5)
     out, _ = _run(plan, host, 256)
     T = getattr(torch, dtype)
-    # référence : d2 calculée comme le kernel (d0² + d1² + d2², même ordre), FP64 pour départager
+    # reference: d2 computed like the kernel (d0² + d1² + d2², same order), FP64 to break ties
     d2 = _torch_d2(host)
     vals, idx = torch.sort(d2, dim=1, stable=True)
     assert torch.equal(out["index"], idx[:, :8]) or dtype == "float32"
     if dtype == "float32":
-        # FP32 : quasi-égalités possibles ; on vérifie que les valeurs retournées sont exactes
+        # FP32: near-ties possible; we check that the returned values are exact
         rec = d2.gather(1, out["index"])
         torch.testing.assert_close(out["value"].double(), rec, rtol=1e-5, atol=1e-6)
         torch.testing.assert_close(out["value"].double(), vals[:, :8], rtol=1e-5, atol=1e-6)
@@ -115,7 +115,7 @@ def test_knn_argkmin(dtype):
 
 
 def test_python_constants_and_inf():
-    # constantes Python usuelles dans l'expression, +inf comme valeur valide
+    # common Python constants in the expression, +inf as a valid value
     e = sx.Piecewise((sx.oo, D2 > 4.5), (D2 * 0.25 + 2, True))
     plan = _plan([e], R.ARGMIN, "float64")
     host = _data(64, 200, seed=6)

@@ -1,1 +1,1 @@
-"""Backends natifs (cuda, hip, sycl)."""
+"""Native backends (cuda, hip, sycl)."""

@@ -1,1 +1,1 @@
-"""Tests du backend hip (GPU AMD réel)."""
+"""Tests of the hip backend (real AMD GPU)."""

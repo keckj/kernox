@@ -29,7 +29,7 @@ from .errors import BackendUnavailableError, UnsupportedError, ValidationError
 from .plan import Plan, ReductionKind, output_shapes
 
 NATIVE_BACKENDS = ("cuda", "hip", "sycl")
-# réductions à accumulation flottante, concernées par sum_scheme (avenant v0.7)
+# reductions with floating-point accumulation, affected by sum_scheme (amendment v0.7)
 _SUMMING_KINDS = (ReductionKind.SUM, ReductionKind.LOGSUMEXP, ReductionKind.SUMSOFTMAXWEIGHT,
                   ReductionKind.LOGSUMEXPWEIGHT)
 _K_KINDS = (ReductionKind.KMIN, ReductionKind.ARGKMIN, ReductionKind.KMIN_ARGKMIN)
@@ -41,10 +41,10 @@ _LOCK = threading.RLock()
 def register_backend(name: str, factory, *, replace: bool = False) -> None:
     """Registers ``factory() -> Backend`` under ``name``."""
     if not isinstance(name, str) or not name.isidentifier():
-        raise ValueError(f"nom de backend invalide {name!r}")
+        raise ValueError(f"invalid backend name {name!r}")
     with _LOCK:
         if name in _FACTORIES and not replace:
-            raise ValueError(f"backend {name!r} déjà enregistré")
+            raise ValueError(f"backend {name!r} is already registered")
         _FACTORIES[name] = factory
         _INSTANCES.pop(name, None)
 
@@ -69,22 +69,22 @@ def get_backend(name: str):
                 module = importlib.import_module(f"kernox.backends.{name}")
             except ImportError as exc:
                 raise BackendUnavailableError(
-                    f"backend {name!r} indisponible (module kernox.backends.{name} : {exc}) ; "
-                    "aucun repli n'est effectué"
+                    f"backend {name!r} unavailable (module kernox.backends.{name}: {exc}); "
+                    "no fallback is attempted"
                 ) from exc
             factory = getattr(module, "get_backend", None)
             if factory is None:
                 raise BackendUnavailableError(
-                    f"kernox.backends.{name} n'expose pas get_backend() ; aucun repli n'est effectué"
+                    f"kernox.backends.{name} does not expose get_backend(); no fallback is attempted"
                 )
         if factory is None:
             raise BackendUnavailableError(
-                f"backend inconnu {name!r} ; connus : {sorted(set(_FACTORIES) | set(NATIVE_BACKENDS))}"
+                f"unknown backend {name!r}; known: {sorted(set(_FACTORIES) | set(NATIVE_BACKENDS))}"
             )
         try:
             backend = factory()
         except Exception as exc:
-            raise BackendUnavailableError(f"initialisation du backend {name!r} impossible : {exc}") from exc
+            raise BackendUnavailableError(f"cannot initialize backend {name!r}: {exc}") from exc
         _INSTANCES[name] = backend
         return backend
 
@@ -98,14 +98,14 @@ def auto_backend_name(device) -> str:
     if device.type == "xpu":
         return "sycl"
     raise UnsupportedError(
-        f"aucun backend GPU pour le device {device} ; la référence CPU doit être demandée "
-        "explicitement avec backend='oracle'"
+        f"no GPU backend for device {device}; the CPU reference must be requested "
+        "explicitly with backend='oracle'"
     )
 
 
 
 def _device_fingerprint(device) -> dict:
-    """Identité matérielle et logicielle du device Torch (UUID si disponible)."""
+    """Hardware and software identity of the Torch device (UUID if available)."""
     import torch
 
     fp = {"type": device.type, "torch": torch.__version__}
@@ -125,11 +125,11 @@ def torch_dtype(name: str):
     return {"float16": torch.float16, "float32": torch.float32, "float64": torch.float64, "int64": torch.int64}[name]
 
 
-_BROADCASTS = {}  # formes de batch des entrées -> forme diffusée (bornée)
+_BROADCASTS = {}  # batch shapes of the inputs -> broadcast shape (bounded)
 
 
 def _broadcast_batch(shapes: tuple) -> tuple:
-    """``torch.broadcast_shapes`` en Python pur, mis en cache (coût hôte par appel batché)."""
+    """``torch.broadcast_shapes`` in pure Python, cached (host cost per batched call)."""
     hit = _BROADCASTS.get(shapes)
     if hit is not None:
         return hit
@@ -141,7 +141,7 @@ def _broadcast_batch(shapes: tuple) -> tuple:
             cur = out[lead + k]
             if size != 1:
                 if cur not in (1, size):
-                    raise ValidationError(f"dimensions de batch non diffusables : {list(shapes)}")
+                    raise ValidationError(f"batch dimensions cannot be broadcast: {list(shapes)}")
                 out[lead + k] = size
     res = tuple(out)
     if len(_BROADCASTS) >= 256:
@@ -160,31 +160,31 @@ class Reduction:
 
     def __init__(self, plan: Plan, backend: str, tuning: str = "estimate"):
         if backend != "auto" and not isinstance(backend, str):
-            raise ValidationError(f"backend invalide {backend!r}")
+            raise ValidationError(f"invalid backend {backend!r}")
         self.plan = plan
         self.backend = backend
         self.tuning = _tuning.check_level(tuning)
-        self._compiled = {}       # (backend, device, variant) -> objet compilé
-        self._decisions = {}      # (backend, device, classe de taille) -> (variante, décision)
-        self._identities = {}     # (backend, device) -> identité de wisdom
+        self._compiled = {}       # (backend, device, variant) -> compiled object
+        self._decisions = {}      # (backend, device, size class) -> (variant, decision)
+        self._identities = {}     # (backend, device) -> wisdom identity
         self._warned = set()
         self._lock = threading.RLock()
-        self.last_decision = None  # TuningDecision du dernier appel lancé
-        # Caches du chemin d'appel (coût hôte) ; aucune validation n'est sautée :
-        # seules des valeurs dérivées du plan, du device ou de la taille sont mémorisées.
+        self.last_decision = None  # TuningDecision of the last launched call
+        # Call-path caches (host cost); no validation is skipped: only values
+        # derived from the plan, the device or the size are memoized.
         self._names = frozenset(a.name for a in plan.args)
-        self._resolved = {}       # str(device) -> (nom, backend, a des variantes)
-        self._defaults = {}       # (nom, device, M, N) -> variante par défaut (bornée)
-        self._params = {}         # (arg, valeurs, device) -> tenseur paramètre (bornée)
-        self._shapes = {}         # M -> formes et dtypes Torch des sorties (bornée)
+        self._resolved = {}       # str(device) -> (name, backend, has variants)
+        self._defaults = {}       # (name, device, M, N) -> default variant (bounded)
+        self._params = {}         # (arg, values, device) -> parameter tensor (bounded)
+        self._shapes = {}         # M -> Torch output shapes and dtypes (bounded)
         self._grads = {}          # frozenset(args) -> (GradientPlans, Reduction i, Reduction j)
-        self._batched = {}        # rang de batch -> Reduction du plan batch_rank=r (avenant v0.6)
-        self._layouts = {}        # (device, B, formes, strides) -> BatchLayout (bornée)
-        self._ranged = None       # Reduction du plan ranges=True (avenant v0.6 §2)
-        self._range_layouts = {}  # identité des tenseurs de ranges, tile_m -> RangesLayout (bornée)
+        self._batched = {}        # batch rank -> Reduction of the batch_rank=r plan (amendment v0.6)
+        self._layouts = {}        # (device, B, shapes, strides) -> BatchLayout (bounded)
+        self._ranged = None       # Reduction of the ranges=True plan (amendment v0.6 §2)
+        self._range_layouts = {}  # identity of the range tensors, tile_m -> RangesLayout (bounded)
         self._dt = None
         if backend != "auto":
-            get_backend(backend)  # erreur explicite dès compile() si absent
+            get_backend(backend)  # explicit error at compile() time if missing
 
     @property
     def input_names(self) -> tuple[str, ...]:
@@ -203,23 +203,23 @@ class Reduction:
         backend = get_backend(name)
         if not self.plan.fp_contract and not getattr(backend, "fp_contract_off", False):
             raise UnsupportedError(
-                f"backend {name!r} : fp_contract=False (aucune contraction FMA) non pris en charge "
-                "par ce backend (contrat v0.3)")
+                f"backend {name!r}: fp_contract=False (no FMA contraction) is not supported "
+                "by this backend (contract v0.3)")
         support = backend.supports(self.plan, device)
         if not support.ok:
-            raise UnsupportedError(f"backend {name!r} : {support.reason}")
+            raise UnsupportedError(f"backend {name!r}: {support.reason}")
         scheme = self.plan.sum_scheme
         if (scheme != "direct" and self.plan.reduction.kind in _SUMMING_KINDS
                 and scheme not in getattr(backend, "sum_schemes", ("direct",))):
             raise UnsupportedError(
-                f"backend {name!r} : sum_scheme={scheme!r} non pris en charge (avenant v0.7, "
-                "aucun repli sur 'direct')")
+                f"backend {name!r}: sum_scheme={scheme!r} is not supported (amendment v0.7, "
+                "no fallback to 'direct')")
         if self.plan.ranges and not getattr(backend, "ranges", False):
             raise UnsupportedError(
-                f"backend {name!r} : ranges block-sparse (avenant v0.6) non pris en charge")
+                f"backend {name!r}: block-sparse ranges (amendment v0.6) are not supported")
         if self.plan.batch_rank and not getattr(backend, "batch", False):
             raise UnsupportedError(
-                f"backend {name!r} : dimensions de batch (avenant v0.6) non prises en charge")
+                f"backend {name!r}: batch dimensions (amendment v0.6) are not supported")
         return name, backend
 
     def _compile(self, name, backend, device, variant):
@@ -254,11 +254,11 @@ class Reduction:
         return self._identities[key]
 
     def _select(self, device, tensors, m, n, new_outputs, nb: int = 1, density=None, launch_kwargs=None):
-        """Variante et objet compilé pour cet appel, selon ``self.tuning``.
+        """Variant and compiled object for this call, according to ``self.tuning``.
 
-        Wisdom v3 : ``nb`` (batch) et ``density()`` (densité des ranges, calculée
-        seulement hors ``estimate`` : synchronisation hôte) entrent dans la classe
-        de taille ; ``launch_kwargs(compiled)`` complète les lancements mesurés.
+        Wisdom v3: ``nb`` (batch) and ``density()`` (range density, computed
+        only outside ``estimate``: host synchronization) are part of the size
+        class; ``launch_kwargs(compiled)`` completes the measured launches.
         """
         name, backend = self._resolve(device)
         has_variants = self._resolved[str(device)][2]
@@ -268,8 +268,8 @@ class Reduction:
         if not has_variants:
             if level != "estimate" and name not in self._warned:
                 self._warned.add(name)
-                _tuning.log.warning("backend %r sans variantes : tuning=%r retombe sur 'estimate'", name, level)
-            reason = "backend sans variantes" if level != "estimate" else ""
+                _tuning.log.warning("backend %r has no variants: tuning=%r falls back to 'estimate'", name, level)
+            reason = "backend without variants" if level != "estimate" else ""
             decision = _tuning.TuningDecision(level, "fallback" if reason else "estimate", None, sclass, reason=reason)
             return self._compile(name, backend, device, None), decision
         sizes = Sizes(m, n, nb)
@@ -295,7 +295,7 @@ class Reduction:
                 variant, decision = stored, _tuning.TuningDecision(level, "wisdom", stored.as_json(), sclass, persisted=True)
             elif level == "wisdom_only":
                 variant = default
-                decision = _tuning.TuningDecision(level, "estimate", default.as_json(), sclass, reason="pas de wisdom")
+                decision = _tuning.TuningDecision(level, "estimate", default.as_json(), sclass, reason="no wisdom")
             else:
                 cands, truncated = _tuning.candidates(backend, plan, device, sizes, level, default)
                 variant, results, stable, seconds = _tuning.measure(
@@ -305,14 +305,14 @@ class Reduction:
                     level, "measured", variant.as_json(), sclass, stable=stable, candidates=len(cands),
                     truncated_from=truncated, measurements=results, tuning_seconds=seconds,
                     budget_seconds=_tuning.BUDGET_SECONDS[level],
-                    reason="" if stable else "dispersion forte : non persistée")
+                    reason="" if stable else "high spread: not persisted")
                 if stable:
                     _tuning.store(plan.key(), name, identity, sclass, variant, {
                         "level": level, "median_ms": min(r["median_ms"] for r in results),
                         "candidates": len(results), "created": time.time()})
                     decision.persisted = True
                 else:
-                    _tuning.log.warning("tuning=%r : mesure instable, décision non persistée", level)
+                    _tuning.log.warning("tuning=%r: unstable measurement, decision not persisted", level)
             self._decisions[dkey] = (variant, decision)
         return self._compile(name, backend, device, variant), decision
 
@@ -334,7 +334,7 @@ class Reduction:
             names = self._names
             missing = sorted(names - set(kwargs))
             unexpected = sorted(set(kwargs) - names)
-            raise ValidationError(f"arguments manquants {missing}, inattendus {unexpected}")
+            raise ValidationError(f"missing arguments {missing}, unexpected {unexpected}")
         dt = self._dt
         if dt is None:
             dt = self._dt = torch_dtype(plan.dtype)
@@ -345,7 +345,7 @@ class Reduction:
             if a.role != "param":
                 v = kwargs[a.name]
                 if not isinstance(v, Tensor):
-                    raise ValidationError(f"{a.name!r} : torch.Tensor (L, {a.dim}) attendu, reçu {type(v).__name__}")
+                    raise ValidationError(f"{a.name!r}: expected torch.Tensor (L, {a.dim}), got {type(v).__name__}")
                 device = v.device
                 if v.dim() != 2 or plan.batch_rank:
                     return self._validate_batched(kwargs, device, v.dim() - 2)
@@ -358,48 +358,48 @@ class Reduction:
                 if not isinstance(v, Tensor):
                     v = self._param_from_python(a, v, dt, device)
             elif not isinstance(v, Tensor):
-                raise ValidationError(f"{a.name!r} : torch.Tensor (L, {a.dim}) attendu, reçu {type(v).__name__}")
+                raise ValidationError(f"{a.name!r}: expected torch.Tensor (L, {a.dim}), got {type(v).__name__}")
             if v.dtype != dt:
                 raise ValidationError(
-                    f"{a.name!r} : dtype {v.dtype} au lieu de {dt} (aucune conversion implicite)"
+                    f"{a.name!r}: dtype {v.dtype} instead of {dt} (no implicit conversion)"
                 )
             if v.device != device:
-                raise ValidationError(f"{a.name!r} : device {v.device} différent de {device}")
+                raise ValidationError(f"{a.name!r}: device {v.device} differs from {device}")
             shape = v.shape
             if role == "param":
                 if len(shape) == 0 and a.dim == 1:
                     v = v.reshape(1)
                     shape = v.shape
                 if len(shape) != 1 or shape[0] != a.dim:
-                    raise ValidationError(f"{a.name!r} : forme {tuple(shape)} au lieu de ({a.dim},)")
+                    raise ValidationError(f"{a.name!r}: shape {tuple(shape)} instead of ({a.dim},)")
             else:
                 if len(shape) != 2 or shape[1] != a.dim:
                     raise ValidationError(
-                        f"{a.name!r} : forme {tuple(shape)} au lieu de (L, {a.dim}) (rôle {role})"
+                        f"{a.name!r}: shape {tuple(shape)} instead of (L, {a.dim}) (role {role})"
                     )
                 length = shape[0]
                 if role == "i":
                     if m is not None and m != length:
-                        raise ValidationError(f"{a.name!r} : M={length} incohérent avec M={m}")
+                        raise ValidationError(f"{a.name!r}: M={length} inconsistent with M={m}")
                     m = length
                 else:
                     if n is not None and n != length:
-                        raise ValidationError(f"{a.name!r} : N={length} incohérent avec N={n}")
+                        raise ValidationError(f"{a.name!r}: N={length} inconsistent with N={n}")
                     n = length
             if not v.is_contiguous():
-                raise ValidationError(f"{a.name!r} : tenseur non contigu refusé (appeler .contiguous())")
+                raise ValidationError(f"{a.name!r}: non-contiguous tensor rejected (call .contiguous())")
             tensors[a.name] = v
         return tensors, device, m, n, None
 
     def _validate_batched(self, kwargs: dict, device, r: int):
-        """Validation des entrées avec dimensions de batch (avenant v0.6)."""
+        """Validation of inputs with batch dimensions (amendment v0.6)."""
         import torch
 
         plan = self.plan
         if r < 1 or (plan.batch_rank and r != plan.batch_rank):
             first = next(a for a in plan.args if a.role != "param")
-            want = f"(*B, L, {first.dim})" if plan.batch_rank else f"(L, {first.dim}) ou (*B, L, {first.dim})"
-            raise ValidationError(f"{first.name!r} : forme {tuple(kwargs[first.name].shape)} au lieu de {want}")
+            want = f"(*B, L, {first.dim})" if plan.batch_rank else f"(L, {first.dim}) or (*B, L, {first.dim})"
+            raise ValidationError(f"{first.name!r}: shape {tuple(kwargs[first.name].shape)} instead of {want}")
         dt = self._dt
         if dt is None:
             dt = self._dt = torch_dtype(plan.dtype)
@@ -412,11 +412,11 @@ class Reduction:
                 if not isinstance(v, Tensor):
                     v = self._param_from_python(a, v, dt, device)
             elif not isinstance(v, Tensor):
-                raise ValidationError(f"{a.name!r} : torch.Tensor (*B, L, {a.dim}) attendu, reçu {type(v).__name__}")
+                raise ValidationError(f"{a.name!r}: expected torch.Tensor (*B, L, {a.dim}), got {type(v).__name__}")
             if v.dtype != dt:
-                raise ValidationError(f"{a.name!r} : dtype {v.dtype} au lieu de {dt} (aucune conversion implicite)")
+                raise ValidationError(f"{a.name!r}: dtype {v.dtype} instead of {dt} (no implicit conversion)")
             if v.device != device:
-                raise ValidationError(f"{a.name!r} : device {v.device} différent de {device}")
+                raise ValidationError(f"{a.name!r}: device {v.device} differs from {device}")
             shape, st = tuple(v.shape), v.stride()
             if role == "param":
                 if len(shape) == 0 and a.dim == 1:
@@ -424,30 +424,30 @@ class Reduction:
                     shape, st = (1,), (1,)
                 if len(shape) not in (1, r + 1) or shape[-1] != a.dim:
                     raise ValidationError(
-                        f"{a.name!r} : forme {shape} au lieu de ({a.dim},) ou (*B, {a.dim}) "
-                        f"avec {r} dimension(s) de batch")
+                        f"{a.name!r}: shape {shape} instead of ({a.dim},) or (*B, {a.dim}) "
+                        f"with {r} batch dimension(s)")
                 if a.dim > 1 and st[-1] != 1:
-                    raise ValidationError(f"{a.name!r} : dernière dimension non contiguë refusée")
+                    raise ValidationError(f"{a.name!r}: non-contiguous last dimension rejected")
                 if len(shape) > 1:
                     batch_shapes.append(shape[:-1])
             else:
                 if len(shape) != r + 2 or shape[-1] != a.dim:
                     raise ValidationError(
-                        f"{a.name!r} : forme {shape} au lieu de (*B, L, {a.dim}) avec {r} dimension(s) de "
-                        f"batch (rang commun à toutes les entrées i et j, rôle {role})")
+                        f"{a.name!r}: shape {shape} instead of (*B, L, {a.dim}) with {r} batch "
+                        f"dimension(s) (rank shared by all i and j inputs, role {role})")
                 length = shape[-2]
                 if role == "i":
                     if m is not None and m != length:
-                        raise ValidationError(f"{a.name!r} : M={length} incohérent avec M={m}")
+                        raise ValidationError(f"{a.name!r}: M={length} inconsistent with M={m}")
                     m = length
                 else:
                     if n is not None and n != length:
-                        raise ValidationError(f"{a.name!r} : N={length} incohérent avec N={n}")
+                        raise ValidationError(f"{a.name!r}: N={length} inconsistent with N={n}")
                     n = length
                 if (a.dim > 1 and st[-1] != 1) or (length > 1 and st[-2] != a.dim):
                     raise ValidationError(
-                        f"{a.name!r} : deux dernières dimensions non contiguës refusées "
-                        "(les dimensions de batch peuvent avoir des strides quelconques)")
+                        f"{a.name!r}: non-contiguous last two dimensions rejected "
+                        "(batch dimensions may have arbitrary strides)")
                 batch_shapes.append(shape[:-2])
             tensors[a.name] = v
         return tensors, device, m, n, _broadcast_batch(tuple(batch_shapes))
@@ -457,25 +457,25 @@ class Reduction:
 
         values = tuple(v) if isinstance(v, (list, tuple)) else (v,)
         if len(values) != a.dim:
-            raise ValidationError(f"{a.name!r} : {a.dim} valeurs attendues, reçu {len(values)}")
+            raise ValidationError(f"{a.name!r}: expected {a.dim} values, got {len(values)}")
         for x in values:
             if isinstance(x, bool) or not isinstance(x, numbers.Real):
-                raise ValidationError(f"{a.name!r} : valeur réelle attendue, reçu {x!r}")
-        # Tenseur mis en cache par valeurs exactes (type compris) : évite une
-        # copie hôte -> device par appel. Les entrées sont en lecture seule
-        # pour les backends (contrat), le tenseur partagé n'est jamais modifié.
+                raise ValidationError(f"{a.name!r}: expected a real value, got {x!r}")
+        # Tensor cached by exact values (type included): avoids one host -> device
+        # copy per call. Inputs are read-only for the backends (contract), so
+        # the shared tensor is never modified.
         key = (a.name, tuple((type(x), x) for x in values), str(device))
         hit = self._params.get(key)
         if hit is not None:
             return hit
-        conv = [convert_float(float(x), str(dt).removeprefix("torch."), f"paramètre {a.name}") for x in values]
+        conv = [convert_float(float(x), str(dt).removeprefix("torch."), f"parameter {a.name}") for x in values]
         t = torch.tensor(conv, dtype=dt, device=device)
         if len(self._params) >= 64:
             self._params.clear()
         self._params[key] = t
         return t
 
-    # ---- exécution
+    # ---- execution
     def __call__(self, **kwargs):
         meta = self.plan.meta
         if meta.get("complex_args") or meta.get("complex_output"):
@@ -495,9 +495,9 @@ class Reduction:
             return self._run(tensors, device, m, n)
         return self._run_batched(tensors, device, m, n, batch)
 
-    # ---- autograd (cf. kernox.autograd)
+    # ---- autograd (see kernox.autograd)
     def _forward(self, tensors: dict):
-        """Passe avant sur des tenseurs déjà validés (détachés)."""
+        """Forward pass on already validated (detached) tensors."""
         import torch
 
         plan = self.plan
@@ -533,10 +533,10 @@ class Reduction:
         return hit
 
     def _backward(self, tensors: dict, grad_out, wrt, ranges=None):
-        """Gradients ``{nom: tenseur}`` des entrées ``wrt`` (réductions fusionnées).
+        """Gradients ``{name: tensor}`` of the ``wrt`` inputs (fused reductions).
 
-        ``ranges`` : ``(triplet avant, triplet transposé)`` dans l'orientation du
-        plan (avenant v0.6 §2) ; le côté j des gradients utilise le transposé.
+        ``ranges``: ``(forward triplet, transposed triplet)`` in the plan
+        orientation (amendment v0.6 §2); the j side of the gradients uses the transposed one.
         """
         if not wrt:
             return {}
@@ -554,8 +554,8 @@ class Reduction:
                 fwd, bwd = ranges if side == "i" else ranges[::-1]
                 if fwd is None:
                     raise UnsupportedError(
-                        "gradient par rapport à un argument réduit avec ranges : le triplet transposé "
-                        "(ranges_j, slices_j, redranges_i en orientation utilisateur) est requis")
+                        "gradient with respect to a reduced argument with ranges: the transposed triplet "
+                        "(ranges_j, slices_j, redranges_i in user orientation) is required")
                 out = RangedReduction(red, fwd, bwd)(**inputs)
             batched = out.dim() > 2
             off = 0
@@ -566,12 +566,12 @@ class Reduction:
                     g = g.sum(dim=-2)
                 g = g.to(tensors[name].dtype)
                 shape = tensors[name].shape
-                # batch : somme sur les dimensions diffusées de l'entrée (avenant v0.6)
+                # batch: sum over the broadcast dimensions of the input (amendment v0.6)
                 grads[name] = g.sum_to_size(shape) if batched else g.reshape(shape)
         return grads
 
     def _backward_surrogate(self, tensors: dict, out, grad_out, wrt, ranges=None):
-        """Gradients de LOGSUMEXP/LOGSUMEXPWEIGHT/SUMSOFTMAXWEIGHT (plan SUM substitut)."""
+        """Gradients of LOGSUMEXP/LOGSUMEXPWEIGHT/SUMSOFTMAXWEIGHT (surrogate SUM plan)."""
         if not wrt:
             return {}
         hit = self._grads.get("surrogate")
@@ -596,7 +596,7 @@ class Reduction:
         return sred._backward(inputs, grad_out, wrt, ranges=ranges)
 
     def _backward_select(self, tensors: dict, index, grad_value, wrt, ranges=None):
-        """Gradients de MIN/MAX/KMIN au terme retenu (indices de la passe avant ou recalculés)."""
+        """Gradients of MIN/MAX/KMIN at the selected term (indices from the forward pass, or recomputed)."""
         if not wrt:
             return {}
         from .autograd import SelectGradient, index_plan
@@ -634,16 +634,16 @@ class Reduction:
                 return {key: empty_(shape, dtype=dt, device=device) for key, shape, dt in shapes}
 
             compiled, decision = self._select(device, tensors, m, n, new_outputs)
-            compiled.launch(tensors, outputs)  # toujours la variante retenue
+            compiled.launch(tensors, outputs)  # always the selected variant
             self.last_decision = decision
         else:
-            # le backend doit exister et accepter le plan même sans lancement
+            # the backend must exist and accept the plan even without a launch
             self._resolve(device)
         if len(outputs) == 2:  # KMIN_ARGKMIN, MIN_ARGMIN, MAX_ARGMAX
             return outputs["value"], outputs["index"]
         return next(iter(outputs.values()))
 
-    # ---- batch (avenant v0.6)
+    # ---- batch (amendment v0.6)
     def _run_batched(self, tensors, device, m, n, B):
         r = len(B)
         if self.plan.batch_rank == r:
@@ -655,7 +655,7 @@ class Reduction:
         return child._launch_batched(tensors, device, m, n, B)
 
     def _layout(self, tensors, device, B, nb) -> BatchLayout:
-        """Tables d'offsets par argument (hôte et device), en cache par formes et strides."""
+        """Per-argument offset tables (host and device), cached by shapes and strides."""
         import torch
 
         key = (str(device), B, tuple((name, tuple(t.shape), t.stride()) for name, t in tensors.items()))
@@ -668,7 +668,7 @@ class Reduction:
             tail = 1 if a.role == "param" else 2
             bshape, bstride = tuple(t.shape[:-tail]), t.stride()[:-tail]
             off = torch.zeros(B, dtype=torch.int64)
-            lead = len(B) - len(bshape)  # param sans batch : bshape vide
+            lead = len(B) - len(bshape)  # param without batch: empty bshape
             for k, (size, stride) in enumerate(zip(bshape, bstride)):
                 if size != 1 and stride:
                     view = [1] * len(B)
@@ -708,14 +708,14 @@ class Reduction:
             compiled.launch(tensors, outputs, batch=layout)
             self.last_decision = decision
         else:
-            self._resolve(device)  # le backend doit exister et accepter le plan batché
+            self._resolve(device)  # the backend must exist and accept the batched plan
         outs = [o.view(*B, *o.shape[1:]) for o in outputs.values()]
-        if len(outs) == 2:  # (valeurs, indices)
+        if len(outs) == 2:  # (values, indices)
             return outs[0], outs[1]
         return outs[0]
 
-    # ---- ranges block-sparse (avenant v0.6 §2)
-    # ---- opérateur linéaire et solve (parité PyKeOps, cf. kernox.linalg)
+    # ---- block-sparse ranges (amendment v0.6 §2)
+    # ---- linear operator and solve (PyKeOps parity, see kernox.linalg)
     def linear_operator(self, var: str, /, **inputs):
         """:class:`~kernox.linalg.LinearOperator` ``v ↦ self(**inputs, var=v)`` (SUM linear in ``var``)."""
         from .linalg import LinearOperator
@@ -733,7 +733,7 @@ class Reduction:
         merged = dict(inputs or {})
         clash = merged.keys() & kwargs.keys()
         if clash:
-            raise ValidationError(f"solve : entrées données deux fois {sorted(clash)}")
+            raise ValidationError(f"solve: inputs given twice {sorted(clash)}")
         merged.update(kwargs)
         return self.linear_operator(var, **merged).solve(rhs, alpha=alpha, eps=eps, maxiter=maxiter, x0=x0)
 
@@ -746,7 +746,7 @@ class Reduction:
         from .ranges import Ranges
 
         if not isinstance(ranges, Ranges):
-            raise ValidationError(f"with_ranges attend un kernox.Ranges, reçu {type(ranges).__name__}")
+            raise ValidationError(f"with_ranges expects a kernox.Ranges, got {type(ranges).__name__}")
         fwd, bwd = ranges.oriented(bool(self.plan.meta.get("swapped_ij")))
         return RangedReduction(self, fwd, bwd, validate=validate)
 
@@ -757,21 +757,21 @@ class Reduction:
         return child._launch_ranged(tensors, device, m, n, triplet)
 
     def _ranges_layout(self, triplet, device, tile_m, m=None, n=None) -> RangesLayout:
-        """Layout des ranges (en cache par identité des tenseurs) ; avec ``m`` et ``n``,
-        contrôle des bornes **toujours actif** : une tuile ou un intervalle hors de
-        ``[0, m] × [0, n]`` (ou un indice d'intervalle hors de ``redranges``) ferait
-        lire ou écrire le noyau hors des tenseurs, ou boucler sur des milliards de j
-        (perte du device). Résumé calculé une fois sur les copies hôte du layout,
-        coût O(1) par appel ; ``validate=True`` ajoute les recouvrements."""
+        """Ranges layout (cached by tensor identity); with ``m`` and ``n``, the
+        bounds check is **always on**: a tile or an interval outside
+        ``[0, m] × [0, n]`` (or an interval index outside ``redranges``) would make
+        the kernel read or write outside the tensors, or loop over billions of j
+        (loss of the device). The summary is computed once on the host copies of the
+        layout, O(1) cost per call; ``validate=True`` adds the overlap checks."""
         layout = self._ranges_layout_cached(triplet, device, tile_m)
         if m is not None:
             s = layout.summary
             kok = s.nw == 0 or (s.k0_min >= 0 and s.dk_min >= 0 and s.k1_max <= s.nr)
             if not kok or s.live_i0_min < 0 or s.live_i1_max > m or s.live_c_min < 0 or s.live_d_max > n:
                 raise ValidationError(
-                    f"ranges hors bornes pour M={m}, N={n} : lignes [{s.live_i0_min}, {s.live_i1_max}), "
+                    f"ranges out of bounds for M={m}, N={n}: rows [{s.live_i0_min}, {s.live_i1_max}), "
                     f"j [{s.live_c_min}, {s.live_d_max})"
-                    + ("" if kok else ", slices hors de redranges ou décroissantes"))
+                    + ("" if kok else ", slices outside redranges or decreasing"))
         return layout
 
     def _ranges_layout_cached(self, triplet, device, tile_m) -> RangesLayout:
@@ -786,11 +786,11 @@ class Reduction:
 
         work = work_list(triplet, tile_m)
         red = triplet.red.to(torch.int64).contiguous()
-        layout = RangesLayout(work, red, tile_m)  # copies hôte à la demande (backends de référence)
+        layout = RangesLayout(work, red, tile_m)  # host copies on demand (reference backends)
         if len(self._range_layouts) >= 64:
             self._range_layouts.clear()
         self._range_layouts[key] = (triplet.rows, triplet.red, layout)
-        layout.summary  # noqa: B018 - calculé une fois, hors du chemin chaud
+        layout.summary  # noqa: B018 - computed once, off the hot path
         return layout
 
     def _launch_ranged(self, tensors, device, m, n, triplet):
@@ -824,7 +824,7 @@ class Reduction:
 
 
 def _ranges_density(triplet, m: int, n: int) -> float:
-    """Fraction ρ des paires (i, j) réduites par le triplet (wisdom v3 ; synchronisation hôte)."""
+    """Fraction ρ of the (i, j) pairs reduced by the triplet (wisdom v3; host synchronization)."""
     import torch
 
     rows, slices, red = (t.detach().to("cpu", torch.int64) for t in (triplet.rows, triplet.slices, triplet.red))
@@ -839,7 +839,7 @@ def _ranges_density(triplet, m: int, n: int) -> float:
 
 
 def _complex_call(red, call, kwargs):
-    """Entrées complexes vues en réel entrelacé, sortie SUM complexe rendue complexe."""
+    """Complex inputs viewed as interleaved reals; a complex SUM output is returned as complex."""
     from .complex import complex_input, complex_output
 
     plan = red.plan
@@ -864,11 +864,11 @@ class RangedReduction:
         self._fwd, self._bwd, self._validate = fwd, bwd, validate
 
     def _check(self, device, m, n):
-        for tr, rows, cols, side in ((self._fwd, m, n, "avant"), (self._bwd, n, m, "transposé")):
+        for tr, rows, cols, side in ((self._fwd, m, n, "forward"), (self._bwd, n, m, "transposed")):
             if tr is None:
                 continue
             if tr.rows.device != device:
-                raise ValidationError(f"ranges ({side}) : device {tr.rows.device} différent de {device}")
+                raise ValidationError(f"ranges ({side}): device {tr.rows.device} differs from {device}")
             if self._validate:
                 from .ranges import validate_triplet
 
@@ -885,7 +885,7 @@ class RangedReduction:
 
         tensors, device, m, n, batch = self.red.validate(kwargs)
         if batch is not None:
-            raise UnsupportedError("ranges et dimensions de batch combinés : refusé (avenant v0.6)")
+            raise UnsupportedError("ranges combined with batch dimensions: rejected (amendment v0.6)")
         self._check(device, m, n)
         if torch.is_grad_enabled() and any(t.requires_grad for t in tensors.values()):
             from . import autograd
@@ -950,26 +950,26 @@ def compile(expr, *, dtype, backend: str = "auto", acc_dtype=None, tuning: str =
     from .expr import ReductionExpr
 
     if fast_math is not None and not isinstance(fast_math, bool):
-        raise ValidationError(f"fast_math doit être un booléen, reçu {fast_math!r}")
+        raise ValidationError(f"fast_math must be a boolean, got {fast_math!r}")
     if fp_contract is not None and not isinstance(fp_contract, bool):
-        raise ValidationError(f"fp_contract doit être un booléen, reçu {fp_contract!r}")
+        raise ValidationError(f"fp_contract must be a boolean, got {fp_contract!r}")
     if isinstance(expr, ReductionExpr):
         plan = expr.to_plan(dtype, acc_dtype=acc_dtype, fp_contract=True if fp_contract is None else fp_contract,
                             sum_scheme=sum_scheme, fast_math=bool(fast_math))
     elif isinstance(expr, Plan):
         if dtype != expr.dtype or (acc_dtype is not None and acc_dtype != expr.acc_dtype):
-            raise ValidationError("dtype/acc_dtype incohérents avec le plan fourni")
+            raise ValidationError("dtype/acc_dtype inconsistent with the given plan")
         if fp_contract is not None and fp_contract != expr.fp_contract:
-            raise ValidationError("fp_contract incohérent avec le plan fourni")
+            raise ValidationError("fp_contract inconsistent with the given plan")
         if fast_math is not None and fast_math != expr.fast_math:
-            raise ValidationError("fast_math incohérent avec le plan fourni")
+            raise ValidationError("fast_math inconsistent with the given plan")
         if sum_scheme is not None and sum_scheme != expr.sum_scheme:
-            raise ValidationError("sum_scheme incohérent avec le plan fourni")
+            raise ValidationError("sum_scheme inconsistent with the given plan")
         plan = expr
     else:
         raise TypeError(
-            "compile attend une réduction (ex. formule.sum_over('j')) ou un Plan, "
-            f"reçu {type(expr).__name__}"
+            "compile expects a reduction (e.g. formula.sum_over('j')) or a Plan, "
+            f"got {type(expr).__name__}"
         )
     return Reduction(plan, backend, tuning)
 
