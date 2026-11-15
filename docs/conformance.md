@@ -1,8 +1,9 @@
-# Backend conformance suite
+# Conformance suite
 
-Status: **implemented** (`tests/conformance/`), shared by the `cuda`,
-`hip` and `sycl` backends. A backend without a Torch device or without a module is **skipped**,
-never simulated. Actual execution results are recorded below.
+The conformance suite (`tests/conformance/`) checks every GPU backend against
+the same FP64 reference, with the same rules. It is shared by the `cuda`,
+`hip` and `sycl` backends. A backend without a PyTorch device or without its
+module is **skipped**, never simulated.
 
 ## Running
 
@@ -31,6 +32,13 @@ its measurements).
 | `test_where_cse.py` | region-based CSE: NaN, ±inf, 1/0 in the inactive branch, against the FP64 reference |
 | `test_autograd.py` | gradients of SUMs: dense Torch (FP32/FP64), FP64 `gradcheck` and `gradgradcheck` |
 | `test_execution.py` | execution rules: non-default stream/queue, zero elements, destruction during execution, no host copy, multi-GPU |
+| `test_softmax.py`, `test_reductions_v08.py` | LOGSUMEXP family, MIN_ARGMIN, MAX_ARGMAX, special values |
+| `test_reduction_gradients.py` | gradients of the LOGSUMEXP family and of MIN, MAX, KMIN |
+| `test_sum_scheme.py` | `direct`, `block` and `kahan` on ill-conditioned sums |
+| `test_batch.py`, `test_ranges.py` | batch dimensions and block-sparse ranges |
+| `test_fp16.py` | FP16 against the oracle and the FP64 reference |
+| `test_fast_math.py` | approximate `exp`/`log` within their error bounds, and actually active |
+| `test_complex.py`, `test_ops.py`, `test_linalg.py` | complex formulas, PyKeOps formula operations, `solve` and linear operators |
 
 Matrix: dimensions 1, 2, 3, 7, 16, 64, 65; K = 0, 1, 2, 31, 32, 33, 64, 128,
 256, N−1, N, N+1; sizes at tile and block boundaries (1, 31, 32, 33, 255,
@@ -99,13 +107,12 @@ The dtypes, shapes and devices of the outputs are checked on every call.
   `XPU`) when it is available, without any `Memcpy HtoD/DtoH` event. A
   native copy outside Torch is only seen by the profiler. A **new** Python
   float for a parameter creates a device tensor (input H2D copy,
-  documented in `docs/api.md`); outside the scope of `launch`.
+  see [Concepts](concepts.md#variables)); outside the scope of `launch`.
 - **Multi-GPU**: run only if Torch sees at least two devices of the
   same backend (outputs on the right device, reference, rejection of inputs on two
-  devices). **Limitation**: no test host has two cards from the same
-  vendor (980 Ti + R9700 on one, 2080 Ti + G31 on another, 5090
-  alone on a third), and a Torch build sees only one vendor; the test is therefore skipped
-  everywhere, with this reason. Per-device placement (tensor's `device_index`,
+  devices). **Limitation**: the test machines have no two cards from the
+  same vendor, and a PyTorch build sees only one vendor, so this test is
+  currently skipped, with this reason. Per-device placement (tensor's `device_index`,
   current stream of that device) is only checked at index 0.
 
 ## Fuzzing
@@ -124,8 +131,9 @@ each file on all available backends.
 
 ## Known limitations
 
-- `UnsupportedError` is accepted for K > 256 (explicit rejection before launch,
-  contract v0) and reported as a warning; never for K ≤ 256.
+- The matrix accepts an explicit `UnsupportedError` for K > 256 and reports
+  it as a warning; for K ≤ 256 a refusal is a failure. The three backends
+  currently support K up to 1024.
 - The frontend brings the complex artifacts of the symbolic engine back to real
   arithmetic (`builder.realify`): `I`/`zoo` in a branch value of a
   `Piecewise` (e.g. `sqrt(where(c, a, -1.5))` distributed over the branches)

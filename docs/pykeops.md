@@ -1,0 +1,193 @@
+# Coming from PyKeOps
+
+kernox covers the reductions and formula operations of PyKeOps 2.4 for
+PyTorch on GPUs, and adds AMD and Intel GPUs. The main change is in how a
+computation is written: in PyKeOps, a `LazyTensor` wraps your data and the
+reduction runs immediately; in kernox, you write a formula on named variables,
+compile it once, and call it with tensors.
+
+## Side by side
+
+### Gaussian kernel sum
+
+PyKeOps:
+
+<!-- skip-test -->
+```python
+from pykeops.torch import LazyTensor
+
+x_i = LazyTensor(X[:, None, :])          # (M, 1, 3)
+y_j = LazyTensor(Y[None, :, :])          # (1, N, 3)
+b_j = LazyTensor(B[None, :, :])          # (1, N, 1)
+
+D_ij = ((x_i - y_j) ** 2).sum(-1)
+out = ((-D_ij / (2 * sigma**2)).exp() * b_j).sum(dim=1)
+```
+
+kernox:
+
+```python
+import torch
+import kernox as kp
+
+device = "cuda"
+X = torch.randn(1_000, 3, device=device)
+Y = torch.randn(2_000, 3, device=device)
+B = torch.randn(2_000, 1, device=device)
+sigma = 0.5
+
+x, y, b = kp.Vi("x", 3), kp.Vj("y", 3), kp.Vj("b", 1)
+
+d2 = ((x - y) ** 2).sum()
+run = kp.compile((kp.exp(-d2 / (2 * sigma**2)) * b).sum_over("j"), dtype="float32")
+out = run(x=X, y=Y, b=B)
+```
+
+What changed:
+
+- `LazyTensor(X[:, None, :])` becomes `Vi("x", 3)`, and `LazyTensor(Y[None, :, :])`
+  becomes `Vj("y", 3)`. The tensors are passed at call time, by name.
+- `.sum(-1)` (sum of the components) becomes `.sum()`.
+- `.sum(dim=1)` (reduction over `j`) becomes `.sum_over("j")`; `dim=0`
+  becomes `"i"`.
+- Methods such as `.exp()` become functions: `kp.exp(...)`.
+- The dtype is given to `compile`, not inferred from the tensors.
+
+### K nearest neighbours
+
+PyKeOps:
+
+<!-- skip-test -->
+```python
+idx = D_ij.argKmin(K=10, dim=1)
+vals, idx = D_ij.Kmin_argKmin(K=10, dim=1)
+```
+
+kernox:
+
+```python
+knn = kp.compile(d2.argkmin(10, over="j"), dtype="float32")
+idx = knn(x=X, y=Y)
+vals, idx = kp.compile(d2.kmin_argkmin(10, over="j"), dtype="float32")(x=X, y=Y)
+```
+
+### Log-sum-exp and softmax
+
+PyKeOps:
+
+<!-- skip-test -->
+```python
+lse = (-D_ij).logsumexp(dim=1)
+lse_w = (-D_ij).logsumexp(dim=1, weight=b_j)
+smw = (-D_ij).sumsoftmaxweight(y_j, axis=1)
+```
+
+kernox:
+
+```python
+lse = kp.compile((-d2).logsumexp(over="j"), dtype="float32")(x=X, y=Y)
+lse_w = kp.compile((-d2).logsumexp(over="j", weight=b), dtype="float32")(x=X, y=Y, b=B.abs())
+smw = kp.compile((-d2).sumsoftmaxweight(y, over="j"), dtype="float32")(x=X, y=Y)
+```
+
+### Block-sparse ranges
+
+PyKeOps attaches ranges to the `LazyTensor` (`K_ij.ranges = ranges_ij`, often
+built with `pykeops.torch.cluster.from_matrix`). In kernox, ranges are passed
+to the compiled reduction: `run.with_ranges(r)(x=..., y=...)`, and
+`kp.ranges_from_labels(labels_x, labels_y, keep)` builds them from sorted
+cluster labels. See [Block-sparse reductions](guides/block-sparse.md).
+
+### Solving a linear system
+
+PyKeOps:
+
+<!-- skip-test -->
+```python
+a = K_xx.solve(Vi(rhs), alpha=0.1)
+```
+
+kernox names the unknown, a `Vj` variable of a compiled sum:
+
+```python
+rhs = torch.randn(1_000, 1, device=device)
+K = kp.compile((kp.exp(-d2) * b).sum_over("j"), dtype="float32")
+a = K.solve("b", rhs, alpha=0.1, x=X, y=X)
+```
+
+See [Linear systems](guides/linear-systems.md).
+
+### Options
+
+| PyKeOps | kernox |
+| --- | --- |
+| `dtype_acc="float64"` | `acc_dtype="float64"` |
+| `sum_scheme="direct_sum"`, `"block_sum"`, `"kahan_scheme"` | `sum_scheme="direct"`, `"block"`, `"kahan"` |
+| `use_fast_math=True` (the PyKeOps default) | `fast_math=True` (off by default) |
+| `backend="GPU"`, `device_id=` | the device of the tensors |
+| `backend="CPU"` | not available; `backend="oracle"` is a slow reference for tests |
+| `IntCst(3)`, `Var(...)`, formula strings, `Genred` | Python constants and symbolic formulas |
+| `ComplexLazyTensor` | `Vi("z", D, complex=True)`, see [Complex formulas](guides/complex.md) |
+
+## Things to watch for
+
+- **Equality.** `x == y` is Python identity on formulas. Use `kp.eq(x, y)`.
+- **No truth value.** `if f:` and `and`/`or` on formulas raise `TypeError`; use
+  `kp.where`, `&` and `|`.
+- **Exact dtypes.** kernox does not convert inputs: a float64 tensor passed to a
+  float32 reduction raises `ValidationError`.
+- **Contiguous inputs.** Non-contiguous tensors are rejected; slicing columns
+  usually requires `.contiguous()`.
+- **IEEE by default.** PyKeOps uses approximate `exp` and `log` by default in
+  float32; kernox does not, unless `fast_math=True`. Results can therefore differ
+  slightly.
+- **FP16 sums** accumulate in float32 in kernox, in float16 in PyKeOps. Use
+  `acc_dtype="float16"` to reproduce PyKeOps.
+
+## Feature parity
+
+### Supported
+
+| PyKeOps feature | In kernox |
+| --- | --- |
+| `sum`, `min`, `max`, `argmin`, `argmax` | same names, with `over=` |
+| `min_argmin`, `max_argmax` | same names |
+| `Kmin`, `argKmin`, `Kmin_argKmin` | `kmin`, `argkmin`, `kmin_argkmin` |
+| `logsumexp` (with `weight=`), `sumsoftmaxweight` | same names |
+| counting with a boolean formula | `cond.sum_over("j")`, int64 result |
+| batch dimensions | yes, see [Batch dimensions](guides/batch.md) |
+| block-sparse `ranges` | `run.with_ranges(r)` |
+| `sum_scheme` | yes |
+| FP16, FP32, FP64 | yes |
+| complex formulas | yes, `complex=True` |
+| `solve`, linear-operator interface (`matvec`, `rmatvec`, `T`), SciPy compatibility | yes |
+| gradients through `torch.autograd` | yes, see the differences below |
+| `grad`, `diff`, `grad_matrix`, `divergence`, `laplacian`, `trace_operator` inside a formula | yes |
+| formula operations (`relu`, `step`, `round`, `mod`, `sinxdivx`, `normalize`, `weightedsqdist`, `one_hot`, `matvecmult`, `tensorprod`, `keops_tensordot`, `keops_kron`, `bspline`, `softdtw_sqdist`, ...) | yes, see [Formula operations](operations.md) |
+| `factorize`, `auto_factorize` | accepted, with no effect (repeated subexpressions are always shared) |
+
+### Differs
+
+| Topic | PyKeOps | kernox |
+| --- | --- | --- |
+| approximate `exp`/`log` | on by default | off by default (`fast_math=True` to enable) |
+| FP16 accumulator | float16 | float32 by default (`acc_dtype="float16"` to match) |
+| `"kahan"` scheme | Kahan summation | Kahan-Babuška (Neumaier), slightly more accurate |
+| linearity for `solve` | assumed | checked symbolically, `ValidationError` if not linear |
+| `solve` default `maxiter` with batched `rhs` | `10 ×` the size of the first dimension | `10·M` |
+| gradients of min, max, kmin, log-sum-exp family | supported | first order only (second order: sums only) |
+| `kmin`, `argkmin` | vector formulas allowed | scalar formulas, `K ≤ 1024` on GPUs |
+| `bspline`, `round`, `one_hot`, `mod` | not all differentiable | differentiable (zero derivative where piecewise constant) |
+| `softdtw_sqdist` | not differentiable in `gamma` | differentiable in `x`, `y` and `gamma` |
+| `round(x, d)` with `d ≠ 0` | divides by `10^d` | multiplies by `10^-d`: may differ by one unit in the last place |
+| `one_hot` near a half-integer, in float64 | rounds `x + 0.5` first | exact comparison: can differ just below a half-integer |
+| `clamp`, `clampint` with NaN input | NaN | depends on the GPU's min/max |
+| `rsqrt(0)` | 0 | `inf` (`kp.rsqrt` is exactly `1/sqrt`); `normalize` of the zero vector is 0 in both |
+
+### Not supported
+
+| PyKeOps feature | Status |
+| --- | --- |
+| NumPy interface (`pykeops.numpy`) | not supported, not planned: kernox works with PyTorch only. (The linear operator accepts NumPy arrays for SciPy interoperability.) |
+| CPU backend | not supported, not planned: the CPU oracle is only a test reference |
+| formula strings and the `Genred` interface | not supported: formulas are Python expressions |

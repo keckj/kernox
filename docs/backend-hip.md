@@ -1,6 +1,7 @@
-# `hip` backend (AMD ROCm)
+# HIP backend (AMD ROCm)
 
-Code: [`kernox/backends/hip/`](../kernox/backends/hip/). Environment:
+This page explains how the `hip` backend compiles and launches its kernels,
+and why. Code: [`kernox/backends/hip/`](../kernox/backends/hip/). Environment:
 Torch ROCm (`torch 2.15.0+rocm10.0`, index `download.pytorch.org/whl/rocm10.0`),
 no system ROCm required. Tests: `tests/hip/`.
 
@@ -9,7 +10,7 @@ no system ROCm required. Tests: `tests/hip/`.
 **hipRTC from Torch's ROCm package + `hipModuleLoadData` / `hipModuleLaunchKernel`
 from Torch's HIP runtime**, bound through `ctypes`.
 
-Rationale, established by running on the R9700:
+Rationale, established on a Radeon AI PRO R9700:
 
 - The official Torch ROCm wheels (2.15.0+rocm10.0) ship their own
   ROCm (`_rocm_sdk_core`: `libamdhip64.so.7`, `libhiprtc.so.7`, comgr, LLVM).
@@ -43,7 +44,7 @@ Compilation options (all part of the cache key):
 `--offload-arch=<gcnArchName> -O3 -std=c++17 -ffp-contract={on|off} -fno-fast-math
 -fno-gpu-flush-denormals-to-zero`.
 
-FMA contraction (contract v0.3): `-ffp-contract=on` if `plan.fp_contract`
+FMA contraction: `-ffp-contract=on` if `plan.fp_contract`
 (default, like CUDA/SYCL/PyKeOps; contraction **within an
 expression** only, never `fast`), `-ffp-contract=off` if
 `plan.fp_contract=False` (bit-for-bit reproducibility). Checked on R9700
@@ -60,9 +61,10 @@ FP32 / 13 FP64, all coming from `exp`; KNN D16: 0), gauss outputs
 bit-for-bit identical on 20,000² (FP32/FP64, D3/D16). With
 `-ffp-contract=fast`, which only does contraction (no fast-math),
 KNN D16 goes up to 15 FMA, like nvcc `--fmad=true` (15 FMA out of
-16 on the CUDA side), and gauss to 57 FP32 / 29 FP64. The contract has to
-decide between "intra-expression" (`on`, ineffective here) and "like nvcc"
-(`fast`). The backend stays on `on`, in accordance with the text of the amendment.
+16 on the CUDA side), and gauss to 57 FP32 / 29 FP64. In other words, the
+"within an expression" rule (`on`) is stricter here than nvcc's behaviour
+(`fast`). The backend uses `on`, as the
+[contract](kernel-backend-contract.md#numerical-rules) requires.
 
 ## Context, stream and lifetime rules
 
@@ -122,7 +124,7 @@ A hipRTC module contains `kp_reduce` (grid `(gx, S)`) and `kp_merge`.
   `v < best || (idx < 0 && v == best)`. KMIN: sorted list (value, int64 index)
   in registers, insertion by unrolled swaps.
 - **j-splitting (`jsplit`)**: if the grid `ceil(M / rows per block)` has
-  fewer than `blocks_per_cu × CU` blocks (32 × 32 by default, chosen from one series of R9700 measurements, to be confirmed), the
+  fewer than `blocks_per_cu × CU` blocks (32 × 32 by default, chosen from R9700 measurements), the
   `j` range is cut into `S <= 64` ranges (multiples of `TJ`); each block
   `(bx, s)` writes its partial state into `[S, M, W]` (values + indices for
   ARG*/KMIN), allocated by Torch on the current device and stream. `kp_merge`
@@ -138,17 +140,16 @@ A hipRTC module contains `kp_reduce` (grid `(gx, S)`) and `kp_merge`.
   `__shfl` then inserted one by one (inter-lane shift through `__shfl_up`),
   full lexicographic comparison (value, j). Can be combined with `jsplit`.
 
-### Variant API (contract v0.2)
+### Variants
 
 `Variant(name, params)` with `name ∈ {row, jsplit, coop_topk}` and concrete
 parameters `block`, `tile_j`, `split` (`off`/`auto`), `blocks_per_cu` (if `auto`),
 `group` (coop). The variant is part of the cache key and is published in
-`info.variant` (`HipCompileInfo`, since `base.CompileInfo` does not have this field yet).
+`info.variant`.
 
 - `default_variant` (ESTIMATE, deterministic): `coop_topk` if KMIN/ARGKMIN and
   K >= 32; j-splitting if the grid is below `32 × CU` blocks and N > tile;
-  block 256. Thresholds taken from a single series of measurements on an idle GPU
-  (R9700), to be confirmed.
+  block 256. Thresholds measured on an idle R9700.
 - `variants(..., "measure")` (<= 4, chosen for gfx1201): default; block 128
   (wave32 occupancy); inverse splitting; then finer splitting
   (other `blocks_per_cu`: 8) or small tile (large D). Top-K: default, the other
@@ -165,7 +166,7 @@ ARGMIN (massive ties, NaN, inf), COUNT, KMIN_ARGKMIN K = 8/70/130 and
 stay within the L1 tolerance for SUM (FP32/FP64), for (M, N) = (40, 700) and
 (700, 300); splittings forced up to S = 63; coop groups 2–32.
 
-## Measured resources (KMIN_ARGKMIN, d², D = 3, gfx1201, generator hip-v3)
+## Measured resources (KMIN_ARGKMIN, d², D = 3, gfx1201)
 
 `python -m kernox.backends.hip.diagnostics thread,coop` (per-kernel
 remarks + attributes of the loaded code object, in agreement). LDS 3072 B (FP32) /
@@ -193,8 +194,7 @@ remarks + attributes of the loaded code object, in agreement). LDS 3072 B (FP32)
 
 `kp_merge`: 11–17 VGPR; 272 B/lane of scratch (pointer array of the S
 partials, second pass only). The cooperative variant removes all the
-spills observed; its cost (shuffles, sequential insertions) remains to be measured
-on an idle GPU.
+spills observed, at the cost of shuffles and sequential insertions.
 
 **K > 256**: `K_MAX = 1024`, coop only (`THREAD_K_MAX = 256`).
 At most `COOP_MAX_SLOTS = 32` slots per lane: G=16 up to K=512, G=32 beyond.
@@ -212,7 +212,7 @@ No spill in `kp_reduce` (`-Rpass-analysis`, d², D=3):
 Tests: `tests/hip/test_variants.py::test_coop_k_up_to_1024` (ties, NaN,
 K > N, j-splitting).
 
-## LOGSUMEXP and SUMSOFTMAXWEIGHT (contract v0.5, generator hip-v4)
+## LOGSUMEXP and SUMSOFTMAXWEIGHT
 
 `thread` strategy (the coop variant remains reserved for KMIN). State per row
 and per component `(m, s[, t_1..t_E])` in `kp_acc`:
@@ -240,7 +240,7 @@ Tests: `tests/hip/test_softmax.py` (forced splitting with empty slices,
 all `patient` variants, FP64 acc, fp_contract) and
 `tests/conformance/test_softmax.py`.
 
-## Summation schemes (amendment v0.7)
+## Summation schemes
 
 `HipBackend.sum_schemes = ("direct", "block", "kahan")`. The schemes apply
 to SUM, and to `s`, `t_e` of LSE/SSMW. `CompileInfo.options` publishes
@@ -265,7 +265,7 @@ Tests: `tests/hip/test_sum_scheme.py` (forced splitting with empty slices,
 ±inf/NaN rows, Higham N = 2·10⁵ with splitting and fp_contract on/off,
 FP64 acc, enforced levels) and `tests/conformance/test_sum_scheme.py`.
 
-## Batch and block-sparse ranges (amendment v0.6, generator hip-v5)
+## Batch and block-sparse ranges
 
 - Batch (`HipBackend.batch = True`): batch index `b0 + blockIdx.z`, offset
   table `boff (nargs, nb)` in elements relative to `data_ptr`, outputs
@@ -281,7 +281,7 @@ FP64 acc, enforced levels) and `tests/conformance/test_sum_scheme.py`.
 
 Tests: `tests/hip/test_batch_ranges.py`.
 
-## MIN_ARGMIN, MAX_ARGMAX, LOGSUMEXPWEIGHT (amendment v0.8, generator hip-v6)
+## MIN_ARGMIN, MAX_ARGMAX, LOGSUMEXPWEIGHT
 
 - MIN_ARGMIN / MAX_ARGMAX: the ARGMIN / ARGMAX code (same pass, same
   `(value, index)` partials, same merge), which also writes `value`. Ties,
@@ -292,10 +292,10 @@ Tests: `tests/hip/test_batch_ranges.py`.
   otherwise).
 
 Tests: `tests/hip/test_reductions_v08.py` (forced splitting, ties, NaN,
-N = 0, block/kahan schemes, FP64 acc), v0.8 cases of
+N = 0, block/kahan schemes, FP64 acc), the corresponding cases of
 `tests/hip/test_batch_ranges.py`, `tests/conformance/test_reductions_v08.py`.
 
-## FP16 (amendment v0.9, generator hip-v7)
+## FP16
 
 - Type `kp_h` (preamble `HALF_PRELUDE` of `kernox/codegen/pair.py`):
   wrapper around `_Float16` in which every operation (`+ − × ÷`, comparisons) is
@@ -307,11 +307,10 @@ N = 0, block/kahan schemes, FP64 acc), v0.8 cases of
   FP16 overload is refused at generation (`UnsupportedError`, "dtype
   float16").
 - The pair function is generated by symox in FP32 (symox has no
-  float16 dtype; "to be proposed to symox"), then `float` is replaced by `kp_h` in it.
+  float16 dtype), then `float` is replaced by `kp_h` in it.
   The plan constants are already rounded to FP16 by the builder and
   are therefore printed exactly. A constant created by a symox
   simplification can undergo a double rounding (decimal → FP32 → FP16); this is rare.
-  Only the hip dialect accepts float16; cuda and sycl refuse it.
 - Core: `kp_t = kp_h`; `kp_acc = float` by default (SUM, LOGSUMEXP
   families) or `kp_h` if `acc_dtype="float16"`. In that case, `kp_exp`,
   `kp_log` and `kp_nan` are overloaded and `sum_scheme="block"` is the

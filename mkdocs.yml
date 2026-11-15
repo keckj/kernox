@@ -50,13 +50,28 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Getting started: getting-started.md
   - User guide:
-      - API and numerics: api.md
-      - Support matrix: support-matrix.md
-      - PyKeOps parity: pykeops-parity.md
-  - Reference:
-      - Python API: reference.md
-  - Internals:
+      - Concepts: concepts.md
+      - Formula operations: operations.md
+      - Numerics: numerics.md
+  - How-to guides:
+      - Kernel sums: guides/kernel-sums.md
+      - Nearest neighbours: guides/nearest-neighbours.md
+      - Log-sum-exp and Sinkhorn: guides/logsumexp.md
+      - Gradients: guides/gradients.md
+      - Batch dimensions: guides/batch.md
+      - Block-sparse reductions: guides/block-sparse.md
+      - Complex formulas: guides/complex.md
+      - Linear systems: guides/linear-systems.md
+      - Half precision (FP16): guides/fp16.md
+      - Faster exp and log: guides/fast-math.md
+      - Autotuning and wisdom: guides/autotuning.md
+  - Coming from PyKeOps: pykeops.md
+  - Backends and hardware: backends.md
+  - API reference: reference.md
+  - Contributing:
+      - Contributing: contributing.md
       - Core and backend contract: kernel-backend-contract.md
       - HIP backend: backend-hip.md
       - Conformance suite: conformance.md
