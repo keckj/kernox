@@ -1,4 +1,4 @@
-"""Optional autotuning of kernel variants (contract v0.2).
+"""Optional autotuning of kernel variants.
 
 Levels (``compile(..., tuning=...)``):
 
@@ -85,8 +85,7 @@ def size_class(m: int, n: int, nb: int = 1, density: float = 1.0) -> tuple[int, 
 
     Two sizes in the same class differ by at most a factor sqrt(2) per
     axis (v1, in octaves, grouped sizes up to 2x apart and could reuse a
-    worse decision). ``nb``: batch elements (amendment
-    v0.6); ``density``: fraction ρ of the pairs (i, j) covered by the block-sparse
+    worse decision). ``nb``: batch elements; ``density``: fraction ρ of the pairs (i, j) covered by the block-sparse
     ranges (1 without ranges; ρ = 0 counted as one pair). K, the
     dimension and the dtype are in the plan key.
     """

@@ -1,4 +1,4 @@
-"""Block-sparse ranges (amendment v0.6, §2), in the PyKeOps sense.
+"""Block-sparse ranges, in the PyKeOps sense.
 
 A :class:`Ranges` holds, on the device of the inputs, the six integer tensors
 of PyKeOps, in the **user's** orientation (i = ``Vi``, j = ``Vj``):

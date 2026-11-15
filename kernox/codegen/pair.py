@@ -13,7 +13,7 @@ Les pointeurs suivent l'ordre de ``plan.args`` ; leurs noms sont ``xi_<n>``,
 ``yj_<n>``, ``p_<n>`` où ``<n>`` est le rang de l'argument parmi ceux de même
 rôle. ``PairSource.arg_layout`` donne la correspondance exacte.
 
-Politique numérique (cf. ``docs/api.md``) :
+Politique numérique (cf. ``docs/numerics.md``) :
 
 - jamais de fast-math (``plan.fast_math=True`` → ``UnsupportedError``) ;
 - ``1/sqrt(x)`` n'est PAS remplacé par ``rsqrt`` (précision réduite en CUDA) ;

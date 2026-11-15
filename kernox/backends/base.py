@@ -1,4 +1,4 @@
-"""Common backend interface (contract v0).
+"""Common backend interface (see ``docs/kernel-backend-contract.md``).
 
 A backend only receives Torch tensors already validated by the core
 (``kernox.runtime``): right device, right dtype, contiguous, conforming shapes.

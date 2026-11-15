@@ -325,7 +325,7 @@ class Reduction:
     def validate(self, kwargs: dict):
         """Returns ``(tensors, device, M, N, B)`` or raises ``ValidationError``.
 
-        ``B``: broadcast batch shape (amendment v0.6), ``None`` without batch.
+        ``B``: broadcast batch shape, ``None`` without batch.
         """
         import torch
 
@@ -853,7 +853,7 @@ def _complex_call(red, call, kwargs):
 
 
 class RangedReduction:
-    """Reduction restricted by block-sparse ranges (``run.with_ranges(r)``, amendment v0.6 §2).
+    """Reduction restricted by block-sparse ranges (``run.with_ranges(r)``).
 
     Triplets in the plan orientation: ``fwd`` for the forward pass,
     ``bwd`` (transposed, possibly None) for the j-side gradients.
@@ -934,15 +934,15 @@ def compile(expr, *, dtype, backend: str = "auto", acc_dtype=None, tuning: str =
     cuda/hip/sycl), a native name, or ``"oracle"`` (explicit reference).
     ``tuning``: ``"estimate"`` (default, no measurement), ``"wisdom_only"``,
     ``"measure"`` or ``"patient"`` (see :mod:`kernox.tuning`).
-    ``fp_contract`` (contract v0.3): ``True`` by default, FMA contraction
+    ``fp_contract``: ``True`` by default, FMA contraction
     allowed within an expression; ``False`` forbids it on all
     backends (bit-for-bit reproducibility; a backend that cannot
     guarantee it raises :class:`UnsupportedError`). Part of the plan key.
-    ``sum_scheme`` (amendment v0.7): ``"direct"`` (default), ``"block"`` or
+    ``sum_scheme``: ``"direct"`` (default), ``"block"`` or
     ``"kahan"`` (Neumaier) for SUM, LOGSUMEXP and SUMSOFTMAXWEIGHT; ignored by
     the other reductions. A backend that does not implement it raises
     :class:`UnsupportedError`, never a fallback to ``"direct"``.
-    ``fast_math`` (amendment v0.10): ``False`` by default (IEEE); ``True`` allows
+    ``fast_math``: ``False`` by default (IEEE); ``True`` allows
     approximate exp/log (CUDA FP32: ``ex2.approx``/``lg2.approx``, like PyKeOps
     ``use_fast_math``). Part of the plan key; a backend that does not
     implement it raises :class:`UnsupportedError`. The oracle stays IEEE.

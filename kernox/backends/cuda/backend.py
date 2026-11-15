@@ -1,6 +1,6 @@
 """Backend CUDA : NVRTC (CUBIN) + CUDA Driver API, interop Torch.
 
-Statut : implémenté ; état testé : ``docs/support-matrix.md``.
+Statut : implémenté ; état testé : ``docs/backends.md``.
 
 Interop :
 - contexte primaire du device (partagé avec le runtime CUDA de Torch) ;

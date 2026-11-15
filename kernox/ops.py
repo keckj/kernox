@@ -6,8 +6,8 @@ sources: ``keopscore/formulas/maths/*.py`` and
 (``Piecewise``, ``floor``, comparisons, arithmetic): no codegen extension,
 and the same DAG is printed by the three backends, the Torch oracle and the
 NumPy reference. Deliberate deviations (behaviors left undefined by
-keopscore) are flagged in each docstring and in
-``docs/pykeops-parity.md``.
+keopscore) are flagged in each docstring and in the
+"Coming from PyKeOps" page of the documentation.
 
 Memory layout of "matrix" vectors: row-major, like keopscore
 (``C_CONTIGUOUS 1``).
@@ -128,7 +128,7 @@ def clamp(x, lo, hi):
 
     keopscore writes ``(x < a) ? a : ((x > b) ? b : x)``; the two coincide
     except for NaN (keopscore propagates NaN, for ``min``/``max`` it depends on the backend).
-    The deviation is recorded in ``docs/pykeops-parity.md``.
+    The deviation is listed in the "Coming from PyKeOps" documentation page.
     """
     return _clamp(x, lo, hi)
 

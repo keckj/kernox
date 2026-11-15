@@ -2,8 +2,8 @@
 
 Ce module est la seule voie recommandée pour fabriquer un ``Plan`` : il valide
 le plan (noms, rôles, symboles liés, types booléens, K, dtypes) et applique les
-règles de conversion des constantes vers ``dtype`` (cf. ``docs/api.md``,
-section « Constantes »).
+règles de conversion des constantes vers ``dtype`` (cf. ``docs/numerics.md``,
+section « Constants »).
 
 Exemple minimal (backends, tests) ::
 

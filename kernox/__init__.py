@@ -1,6 +1,6 @@
 """kernox: fused symbolic reductions on GPUs.
 
-See ``docs/api.md``. Expressions are symox objects; ``compile`` produces a
+Documentation: https://keckj.github.io/kernox/. Expressions are symox objects; ``compile`` produces a
 callable that validates its inputs before any native launch.
 """
 

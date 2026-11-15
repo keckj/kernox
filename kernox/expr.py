@@ -1,9 +1,9 @@
-"""kernox frontend (**proposed** API): i/j variables, parameters, formulas.
+"""kernox frontend: i/j variables, parameters, formulas.
 
 A :class:`Formula` is a vector (dimension ``dim``) of scalar symox
 expressions; the components of variables are real ``symox.Symbol`` objects.
 No string is parsed: Python operators directly build the symox DAG. See
-``docs/api.md`` for the complete rules.
+the Concepts and Formula operations pages of the documentation.
 """
 
 from __future__ import annotations
@@ -378,7 +378,7 @@ class Formula:
         """``log Σ exp f`` over the axis ``over``, per component (PyKeOps ``logsumexp``), output (M, D).
 
         ``weight=g`` (PyKeOps ``logsumexp(weight=g)``): ``log Σ exp(f) g_e`` with
-        scalar ``f`` and ``g`` of dimension ``E``, output (M, E) (amendment v0.8).
+        scalar ``f`` and ``g`` of dimension ``E``, output (M, E).
         """
         if weight is None:
             return ReductionExpr(self, ReductionKind.LOGSUMEXP, over)
@@ -440,7 +440,7 @@ def Param(name: str, dim: int = 1, *, complex: bool = False) -> Formula:  # noqa
 
 
 class ReductionExpr:
-    """Pairwise reduction of a formula (terminal node, proposed API)."""
+    """Pairwise reduction of a formula (terminal node, compiled with :func:`kernox.compile`)."""
 
     __slots__ = ("formula", "kind", "over", "k")
 
@@ -581,8 +581,9 @@ def ne(a, b):
 def where(cond, a, b):
     """``a`` if ``cond`` else ``b``, component-wise (``Piecewise``).
 
-    Evaluation is conditional: the inactive branch is not evaluated by the
-    generated code (no global CSE in the presence of ``where``).
+    The result is always that of the active branch: an invalid value in the
+    inactive branch (``sqrt(-1)``, ``log(0)``, ``1/0``) affects neither the
+    value nor the gradient.
     """
     import symox
 
