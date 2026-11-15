@@ -168,19 +168,25 @@ An empty variable is treated as unset.
 
 ## Performance
 
+The goal of kernox is to be **at least as fast as PyKeOps** wherever PyKeOps
+runs, and to bring the same performance to AMD and Intel GPUs, which PyKeOps
+does not support. On NVIDIA GPUs, kernox is already faster than PyKeOps in
+several cases.
+
 LogSumExp reduction, M = N = 10⁵, FP32, on an RTX 2080 Ti; kernox with
 `fast_math=True`, PyKeOps 2.4b in its best configuration (each kernel compiled
 alone in a fresh process); median of two runs:
 
-| Case | kernox | PyKeOps |
-| --- | --- | --- |
-| D = 2, dense | 20.1 ms | 21.9 ms |
-| D = 3, dense | 24.6 ms | 25.8 ms |
-| D = 2, block-sparse ranges | 8.4 ms | 8.9 ms |
-| D = 3, block-sparse ranges | 4.2 ms | 4.2 ms |
+| Case | kernox | PyKeOps | kernox / PyKeOps |
+| --- | --- | --- | --- |
+| D = 2, dense | 20.1 ms | 21.9 ms | ×0.92 |
+| D = 3, dense | 24.6 ms | 25.8 ms | ×0.95 |
+| D = 2, block-sparse ranges | 8.4 ms | 8.9 ms | ×0.95 |
+| D = 3, block-sparse ranges | 4.2 ms | 4.2 ms | ×1.01 (same within noise) |
 
 These figures cover only the cases listed; they are not a general claim of
-superiority over PyKeOps on every workload or card.
+superiority over PyKeOps on every workload or card. A case where kernox is
+slower than PyKeOps is treated as a bug.
 
 ## Tests
 
