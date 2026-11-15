@@ -100,6 +100,12 @@ At your option, [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE).
 Provenance of third-party code and algorithms (KeOps, symox):
 [`THIRD_PARTY.md`](THIRD_PARTY.md).
 
+## Projects using kernox
+
+- [remblais](https://github.com/keckj/remblais): a faster GeomLoss (Sinkhorn
+  divergences, kernel norms and optimal transport) on NVIDIA, AMD and Intel
+  GPUs. Documentation: <https://keckj.github.io/remblais/>
+
 ## Related projects
 
 - symox, symbolic engine and code generation: <https://github.com/keckj/symox>
