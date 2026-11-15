@@ -1,4 +1,4 @@
-# Feature parity with PyKeOps — inventory and tracking
+# Feature parity with PyKeOps: inventory and tracking
 
 Inventory of the features of PyKeOps 2.4 (`pykeops` LazyTensor,
 `keopscore/formulas/{maths,reductions,complex,LinearOperators,factorization}`)

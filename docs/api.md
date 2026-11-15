@@ -155,7 +155,7 @@ and one j variable (otherwise M or N cannot be inferred: `UnsupportedError`).
   65504; amendment v0.9). In FP16 the formula is computed in FP16, by
   the oracle as well as by the `cuda`, `hip` and `sycl` backends.
 - `fp_contract` (contract v0.3): `True` by default (`None` = default, or the value
-  of the supplied `Plan`) — the compiler may fuse `a*b + c` into an FMA **within
+  of the supplied `Plan`): the compiler may fuse `a*b + c` into an FMA **within
   an expression** (a single rounding: no fast-math, no
   reassociation, no loss of precision; results may differ in the
   last bit from one backend to another). `False` forbids any contraction on

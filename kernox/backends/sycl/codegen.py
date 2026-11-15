@@ -529,7 +529,7 @@ def generate(plan: Plan, pair_source: str, kernel_tag: str, *, wg: int = WORK_GR
 
     L: list[str] = []
     a = L.append
-    a("// Généré par kernox.backends.sycl.codegen — ne pas éditer.")
+    a("// Généré par kernox.backends.sycl.codegen, ne pas éditer.")
     a(f"// variante : {variant_note}")
     a("#include <sycl/sycl.hpp>")
     if grf:

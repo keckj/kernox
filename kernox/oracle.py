@@ -1,4 +1,4 @@
-"""Oracles de référence (noyau) — **pas** un chemin d'exécution GPU optimisé.
+"""Oracles de référence (noyau), **pas** un chemin d'exécution GPU optimisé.
 
 1. :class:`OracleBackend` (nom ``"oracle"``) : référence Torch par blocs
    bornés, sur le device des tenseurs (CPU ou GPU). Elle n'est jamais choisie

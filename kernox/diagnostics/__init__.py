@@ -286,7 +286,7 @@ def _dist_version(name):
 
 
 def format_report(r: dict) -> str:
-    lines = ["Kernox — diagnostic", ""]
+    lines = ["Kernox diagnostic", ""]
     lines.append(f"Python {r['python']} ({r['platform']})")
     lines.append(f"kernox {r['kernox']['version']} : {r['kernox']['path']}")
     t = r["torch"]

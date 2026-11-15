@@ -1,4 +1,4 @@
-"""Backend ``sycl`` (Intel XPU via Torch XPU) — contrat v0.
+"""Backend ``sycl`` (Intel XPU via Torch XPU), contrat v0.
 
 Interop : le kernel est soumis sur la ``sycl::queue`` du stream Torch XPU
 courant (``torch.xpu.current_stream(device).sycl_queue``), queue in-order, avec

@@ -1,4 +1,4 @@
-"""M1 : interop HIP/Torch ROCm — runtime partagé, streams, dépendances, durée de vie."""
+"""M1 : interop HIP/Torch ROCm : runtime partagé, streams, dépendances, durée de vie."""
 
 import gc
 import subprocess

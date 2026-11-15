@@ -2,13 +2,13 @@
 
 Un module contient deux kernels :
 
-``kp_reduce`` — grille (gx, S). Le bloc (bx, s) traite des lignes ``i`` et la
+``kp_reduce`` : grille (gx, S). Le bloc (bx, s) traite des lignes ``i`` et la
 plage ``j ∈ [s·jchunk, min(N, (s+1)·jchunk))`` ; il charge coopérativement des
 tuiles de ``TJ`` lignes ``j`` en LDS et parcourt chaque tuile. Si ``S == 1``
 (``partial == 0``) il écrit directement les sorties ; sinon il écrit son état
 partiel dans un temporaire ``[S, M, W]`` (variante « partition de j »).
 
-``kp_merge`` — un thread par ligne ``i`` : fusionne les S partiels dans l'ordre
+``kp_merge`` : un thread par ligne ``i`` : fusionne les S partiels dans l'ordre
 croissant de ``s`` (donc de ``j``) et écrit les sorties.
 
 Stratégies de parcours (choix à la compilation, ``KernelConfig.strategy``) :

@@ -338,8 +338,8 @@ def _region_cse(exprs, prefix="_kp_t"):
 
     On part de la CSE complète de symox, puis chaque temporaire, du dernier au
     premier, est conservé (hissé, évalué inconditionnellement) s'il apparaît
-    dans la région racine — y compris dans la valeur d'un temporaire déjà
-    hissé — ou dans au moins deux régions distinctes ; sinon il est réinjecté
+    dans la région racine (y compris dans la valeur d'un temporaire déjà
+    hissé) ou dans au moins deux régions distinctes ; sinon il est réinjecté
     dans son unique branche. Les appels de fonctions non définies autres que
     les aides ``kp_pow*`` (fonctions utilisateur, coût ou effets inconnus) ne
     sont jamais hissés.

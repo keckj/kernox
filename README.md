@@ -4,8 +4,8 @@ Fused symbolic reductions on GPUs, built on [**symox**](https://github.com/keckj
 Python package **kernox** (`import kernox`), version 1.0.0, dual-licensed
 MIT or Apache-2.0.
 
-kernox lets you write pairwise computations naturally — Gaussian sums, nearest
-neighbours, log-sum-exp, softmax-weighted sums, … — as symbolic formulas on
+kernox lets you write pairwise computations naturally (Gaussian sums, nearest
+neighbours, log-sum-exp, softmax-weighted sums, …) as symbolic formulas on
 variables indexed by `i` and `j`, and runs them as fused GPU reductions: the
 M×N pairwise matrix is never materialized, temporary buffers are bounded, and
 the same formula runs on NVIDIA (CUDA), AMD (ROCm/HIP) and Intel (SYCL) GPUs.

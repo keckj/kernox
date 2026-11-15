@@ -24,7 +24,7 @@ advertised for it.
 | `cuda` | | RTX 5090 (sm_120) | `tests/cuda` suite |
 | `hip` | Torch ROCm's hipRTC | Radeon AI PRO R9700 (gfx1201) | `tests/hip` suite and conformance (including long fuzzing) |
 | `sycl` | icpx (oneAPI DPC++ 2026.2) | Intel Arc / Battlemage G31 | `tests/sycl` suite and conformance |
-| `oracle` | — (blockwise Torch CPU) | CPU | test reference, on explicit request only |
+| `oracle` | none (blockwise Torch CPU) | CPU | test reference, on explicit request only |
 
 A single card per vendor apart from NVIDIA. There is no native CPU backend:
 `backend="auto"` refuses a CPU tensor (`UnsupportedError`), and `oracle` only
