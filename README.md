@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/kernox-banner.png" alt="kernox: fused symbolic reductions on GPUs" width="720">
+</p>
+
 # kernox
 
 Fused symbolic reductions on GPUs, built on [**symox**](https://github.com/keckj/symox).
