@@ -1,0 +1,22 @@
+{
+ "seed": 807,
+ "kind": "sum",
+ "k": 1,
+ "over": "j",
+ "dtype": "float64",
+ "m": 1,
+ "n": 1,
+ "data": "int",
+ "dims": {
+  "x": 2,
+  "y": 3,
+  "p": 1
+ },
+ "sources": [
+  "kp.where(kp.ne(kp.where(kp.ne(x[0], 0), 1 / x[0], 0), 0), y[2] / kp.where(kp.ne(x[0], 0), 1 / x[0], 0), 0)",
+  "x[0]"
+ ],
+ "backend": "hip",
+ "error": "UnsupportedError: expression non réelle : Piecewise((y[2]*Piecewise((x[0], Ne(x[0], 0)), (zoo, True)), Ne(x[0], 0)), (0, True))",
+ "original_seed": 807
+}

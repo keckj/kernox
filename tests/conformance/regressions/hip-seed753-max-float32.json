@@ -1,0 +1,21 @@
+{
+ "seed": 753,
+ "kind": "max",
+ "k": 1,
+ "over": "j",
+ "dtype": "float32",
+ "m": 40,
+ "n": 1,
+ "data": "normal",
+ "dims": {
+  "x": 2,
+  "y": 1,
+  "p": 2
+ },
+ "sources": [
+  "((y[0] * p[0]) + (x[1] + -1.5))"
+ ],
+ "backend": "hip",
+ "error": "Mismatch: max (i=17, c=0, got=-0.08213329315185547, want=-0.082133236810769, tol=3.263632286736741e-08)",
+ "original_seed": 753
+}

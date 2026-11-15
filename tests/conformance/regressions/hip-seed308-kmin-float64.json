@@ -1,0 +1,21 @@
+{
+ "seed": 308,
+ "kind": "kmin",
+ "k": 5,
+ "over": "j",
+ "dtype": "float64",
+ "m": 1,
+ "n": 1,
+ "data": "normal",
+ "dims": {
+  "x": 1,
+  "y": 1,
+  "p": 2
+ },
+ "sources": [
+  "(kp.abs(((x[0] - x[0]) / (y[0] * y[0] + 0.5))) + 0.5) ** 0.5"
+ ],
+ "backend": "hip",
+ "error": "Mismatch: KMIN (i=0, rank=0, got=0.7071067811865476, want=0.707106781186548, tol=4.0418256899564495e-16)",
+ "original_seed": 308
+}

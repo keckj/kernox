@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Builds
+/build/
+/dist/
+/target/
+/.cache/
+
+# Configuration locale
+.env
+.env.*
+!.env.example

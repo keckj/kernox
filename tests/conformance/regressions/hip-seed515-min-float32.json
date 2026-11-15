@@ -1,0 +1,22 @@
+{
+ "seed": 515,
+ "kind": "min",
+ "k": 32,
+ "over": "j",
+ "dtype": "float32",
+ "m": 40,
+ "n": 1,
+ "data": "normal",
+ "dims": {
+  "x": 1,
+  "y": 2,
+  "p": 2
+ },
+ "sources": [
+  "kp.cos((kp.atan2(x[0], y[0]) / (x[0] * x[0] + 0.5)))",
+  "x[0]"
+ ],
+ "backend": "hip",
+ "error": "Mismatch: min (i=2, c=0, got=-0.0029614365193992853, want=-0.002961218408612852, tol=8.193718015900605e-08)",
+ "original_seed": 515
+}

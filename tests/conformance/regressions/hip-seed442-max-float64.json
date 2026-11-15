@@ -1,0 +1,21 @@
+{
+ "seed": 442,
+ "kind": "max",
+ "k": 5,
+ "over": "j",
+ "dtype": "float64",
+ "m": 1,
+ "n": 1,
+ "data": "normal",
+ "dims": {
+  "x": 2,
+  "y": 2,
+  "p": 2
+ },
+ "sources": [
+  "kp.where(kp.where(y[1] >= 0, kp.sqrt(y[1]), -1.5) >= 0, kp.sqrt(kp.where(y[1] >= 0, kp.sqrt(y[1]), -1.5)), x[1])"
+ ],
+ "backend": "hip",
+ "error": "UnsupportedError: expression non réelle : Piecewise((Piecewise((y[1]**(1/4), y[1] >= 0), (1.22474487139159*I, True)), ITE(y[1] >= 0, sqrt(y[1]) >= 0, False)), (x[1], True))",
+ "original_seed": 442
+}

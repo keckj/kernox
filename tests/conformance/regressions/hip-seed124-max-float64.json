@@ -1,0 +1,22 @@
+{
+ "seed": 124,
+ "kind": "max",
+ "k": 33,
+ "over": "j",
+ "dtype": "float64",
+ "m": 1,
+ "n": 1,
+ "data": "normal",
+ "dims": {
+  "x": 2,
+  "y": 3,
+  "p": 1
+ },
+ "sources": [
+  "(kp.rsqrt(0 * 0 + 0.5) + (x[0] + y[0]))",
+  "0.5"
+ ],
+ "backend": "hip",
+ "error": "Mismatch: max (i=0, c=0, got=1.9558772489418996, want=1.9558772489418947, tol=1.2793736334397419e-15)",
+ "original_seed": 124
+}

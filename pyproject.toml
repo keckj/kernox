@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]  # PEP 639: SPDX license expression, license-files
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kernox"
+version = "1.0.0"
+description = "Fused symbolic reductions on GPUs (CUDA, ROCm/HIP, SYCL), built on symox"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY.md"]
+requires-python = ">=3.10"
+authors = [{ name = "Jean-Baptiste Keck" }]
+classifiers = ["Programming Language :: Python :: 3"]
+# symox is not on PyPI: install it separately, from GitHub, at the pinned commit
+# (kernox/_symox_compat.py: PINNED_SYMOX; see "Installation" in the README):
+#
+#   symox @ git+https://github.com/keckj/symox@53d9576e9f39db16e9ca8b3483d754385ebaf986
+#
+# This direct reference (PEP 508) is not declared in `dependencies`: PyPI rejects
+# packages whose dependencies point to a URL.
+# torch: installed from the platform-specific index (CUDA, ROCm, XPU); the extras
+# only set its minimum version, the index is chosen at install time.
+dependencies = ["numpy>=2.3"]
+
+[project.optional-dependencies]
+# Lower bounds = versions actually tested.
+# NVRTC: PyPI wheel loaded by the cuda backend (tested with 12.6 and 12.8).
+cuda = ["torch>=2.11", "nvidia-cuda-nvrtc-cu12>=12.6"]
+# ROCm: torch 2.15.0+rocm10.0 (index download.pytorch.org/whl/rocm10.0), hipRTC shipped with torch.
+rocm = ["torch>=2.15"]
+# XPU: torch 2.15.0+xpu and SYCL runtime aligned with icpx 2026.2;
+# icpx (oneAPI DPC++ 2026.2) must be installed on the host.
+xpu = ["torch>=2.15", "intel-sycl-rt>=2026.2.0", "intel-cmplr-lib-ur>=2026.2.0"]
+test = ["pytest>=8.4"]
+
+[project.urls]
+Source = "https://github.com/keckj/kernox"
+symox = "https://github.com/keckj/symox"
+
+[tool.setuptools.packages.find]
+include = ["kernox*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "gpu: actually runs a kernel on a GPU",
+  "bench: benchmark, run only on an idle GPU",
+  "slow: long profile, excluded from the quick CI profile",
+]

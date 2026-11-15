@@ -1,0 +1,21 @@
+{
+ "seed": 743,
+ "kind": "sum",
+ "k": 1,
+ "over": "j",
+ "dtype": "float64",
+ "m": 17,
+ "n": 1,
+ "data": "normal",
+ "dims": {
+  "x": 3,
+  "y": 2,
+  "p": 1
+ },
+ "sources": [
+  "kp.where((y[0] * x[2]) > 0, kp.log((y[0] * x[2])), (kp.atan2(x[2], 0.25) + 1))"
+ ],
+ "backend": "sycl",
+ "error": "Mismatch: SUM (i=8, c=0, got=np.float64(-0.07095671945012638), want=np.float64(-0.07095671945012616), tol=1.321441032714242e-16, L1=0.07095671945012616)",
+ "original_seed": 743
+}

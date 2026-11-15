@@ -1,0 +1,21 @@
+{
+ "seed": 490,
+ "kind": "count",
+ "k": 2,
+ "over": "j",
+ "dtype": "float32",
+ "m": 1,
+ "n": 1,
+ "data": "int",
+ "dims": {
+  "x": 3,
+  "y": 2,
+  "p": 2
+ },
+ "sources": [
+  "kp.where((((1 <= y[0]) & (y[1] <= y[1])) & kp.ne(3, x[0])), kp.sqrt(kp.abs(kp.exp(kp.sin(kp.where(x[1] >= 0, kp.sqrt(x[1]), 0.5)) * 3)) + 0.25), kp.where(((x[0] <= y[1]) ^ kp.eq(x[1], p[1])), x[1], kp.sqrt(kp.abs(y[1]) + 0.25)))"
+ ],
+ "backend": "hip",
+ "error": "NotImplementedError: Unsupported by the code printer: re",
+ "original_seed": 490
+}

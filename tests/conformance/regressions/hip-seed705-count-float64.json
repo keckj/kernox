@@ -1,0 +1,21 @@
+{
+ "seed": 705,
+ "kind": "count",
+ "k": 1,
+ "over": "j",
+ "dtype": "float64",
+ "m": 1,
+ "n": 2,
+ "data": "int",
+ "dims": {
+  "x": 2,
+  "y": 1,
+  "p": 2
+ },
+ "sources": [
+  "(kp.where(((((p[1] > p[0]) | kp.eq(y[0], p[0])) ^ kp.ne(x[0], p[0])) ^ kp.ne(y[0], 0)), kp.log(kp.abs(x[1]) + 0.5), x[0]) >= 0.25)"
+ ],
+ "backend": "hip",
+ "error": "Mismatch: COUNT (i=0, c=0, got=2, want=0, ambiguous=0)",
+ "original_seed": 705
+}
