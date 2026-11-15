@@ -6,7 +6,7 @@
 
 Fused symbolic reductions on GPUs, built on [**symox**](https://github.com/keckj/symox).
 Python package **kernox** (`import kernox`), version 1.0.0, dual-licensed
-MIT or Apache-2.0.
+MIT or Apache-2.0. Documentation: <https://keckj.github.io/kernox/>.
 
 kernox lets you write pairwise computations naturally (Gaussian sums, nearest
 neighbours, log-sum-exp, softmax-weighted sums, …) as symbolic formulas on
