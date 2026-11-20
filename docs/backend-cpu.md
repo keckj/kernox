@@ -227,6 +227,31 @@ pairs (i, j) per second, M = N, median of several runs after a warm-up call
 - `gauss_d16`: `gauss` with D = 16;
 - `funcs`: `sin(x₀) cos(y₁) + atan2(x₁, y₀) + tanh(x₂ y₂)` summed over `j`.
 
+**Against PyKeOps** (PyKeOps 2.3, CPU backend, through `Genred`; one fresh
+process and one fresh PyKeOps build folder per measurement; 2 × AMD EPYC 9655,
+Zen 5, 192 threads; float32, M = N = 10⁵; kernox with its default options,
+IEEE arithmetic like PyKeOps, which compiles with `-O3 -fopenmp` without
+`-march=native` or fast math). Times in milliseconds, speed-up = PyKeOps time /
+kernox time. `_ranges`: block-sparse ranges on a grid, 3ᴰ neighbouring cells
+kept around each cell:
+
+| Formula | kernox | PyKeOps | Speed-up |
+| --- | --- | --- | --- |
+| lse, D = 2 | 27.9 | 334 | × 12.0 |
+| lse, D = 3 | 30.0 | 346 | × 11.5 |
+| lse, D = 2, ranges | 1.15 | 17.1 | × 14.9 |
+| lse, D = 3, ranges | 1.51 | 28.9 | × 19.1 |
+| gauss, D = 3 | 32.3 | 304 | × 9.4 |
+| gauss, D = 3, ranges | 1.61 | 28.1 | × 17.4 |
+| knn, D = 3 | 11.0 | 85.7 | × 7.8 |
+
+The results agree to 2·10⁻⁷ (dense) and 5·10⁻⁶ (ranges) relative, and 99.9998 %
+of the nearest-neighbour indices are identical.
+`flush_denormals=True` changes nothing on dense sums here, and gains 6 % on
+`gauss` with ranges (1.52 ms). On 8 threads (M = N = 30,000), the speed-ups
+are × 13.8 to × 14.0 for `lse`, × 11.1 for `gauss`, × 4.1 for `knn` and
+× 5.2 to × 7.6 with ranges.
+
 **Against PyTorch** (float32, M = N = 20,000, 192 threads). The PyTorch
 reference computes the distance matrix by blocks of 4096 rows, then
 `exp` + matrix product, `logsumexp` or `topk`:
@@ -279,6 +304,7 @@ To reproduce on a compute node:
 
 ```sh
 export OMP_PROC_BIND=close OMP_PLACES=cores
+python tools/bench_pykeops.py --device cpu --threads 192 --size 100000
 python tools/bench_cpu.py --threads 1 8 24 48 96 192 --sizes 20000
 python tools/bench_cpu.py --threads 192 --sizes 20000 --dtypes float32 --baselines
 python tools/bench_cpu.py --threads 192 --sizes 200000 --variants --tile-sweep

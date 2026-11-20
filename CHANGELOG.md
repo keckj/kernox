@@ -5,6 +5,16 @@ All notable changes to kernox. Versions follow
 without breaking code written for the previous one. Each section below is also
 the text of the corresponding [GitHub release](https://github.com/keckj/kernox/releases).
 
+## Unreleased
+
+### Added
+
+- `tools/bench_pykeops.py`: benchmark against PyKeOps on a GPU or on the CPU,
+  one fresh process and one fresh PyKeOps build folder per measurement.
+- Documentation: measurements against PyKeOps 2.3 on an RTX 5090 (× 1.5 to
+  × 2.2) and on 2 × AMD EPYC 9655 (× 7.8 to × 19); speed-ups are now given as
+  PyKeOps time / kernox time.
+
 ## 1.1.0 (2026-11-20)
 
 kernox now runs on CPUs: a native, multithreaded and vectorized `cpu`

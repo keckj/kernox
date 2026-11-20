@@ -61,35 +61,52 @@ AMD and Intel instructions, and the details, are in
 
 The goal of kernox is to be **at least as fast as PyKeOps** wherever PyKeOps
 runs, and to bring the same performance to AMD and Intel GPUs, which PyKeOps
-does not support. On NVIDIA GPUs, kernox is already faster than PyKeOps in
-several cases.
+does not support. In every case measured so far, kernox is faster.
 
-LogSumExp reduction, M = N = 10⁵, FP32, on an RTX 2080 Ti; kernox with
-`fast_math=True`, PyKeOps 2.4b in its best configuration (each kernel compiled
-alone in a fresh process); median of two runs:
+M = N = 10⁵, FP32, on an RTX 5090; kernox with `fast_math=True`, PyKeOps 2.3
+through `Genred` in its best configuration (each kernel compiled alone in a
+fresh process); median of three runs. The last column is the speed-up of
+kernox (PyKeOps time / kernox time):
 
-| Case | kernox | PyKeOps | kernox / PyKeOps |
+| Case | kernox | PyKeOps | Speed-up |
 | --- | --- | --- | --- |
-| D = 2, dense | 20.1 ms | 21.9 ms | ×0.92 |
-| D = 3, dense | 24.6 ms | 25.8 ms | ×0.95 |
-| D = 2, block-sparse ranges | 8.4 ms | 8.9 ms | ×0.95 |
-| D = 3, block-sparse ranges | 4.2 ms | 4.2 ms | ×1.01 (same within noise) |
+| Log-sum-exp, D = 2 | 3.60 ms | 7.02 ms | × 1.95 |
+| Log-sum-exp, D = 3 | 4.36 ms | 8.03 ms | × 1.84 |
+| Log-sum-exp, D = 2, block-sparse ranges | 0.249 ms | 0.552 ms | × 2.22 |
+| Log-sum-exp, D = 3, block-sparse ranges | 0.359 ms | 0.739 ms | × 2.06 |
+| Gaussian kernel sum, D = 3 | 3.49 ms | 5.24 ms | × 1.50 |
+| Gaussian kernel sum, D = 3, block-sparse ranges | 0.321 ms | 0.563 ms | × 1.76 |
+| 10 nearest neighbours, D = 3 | 5.29 ms | 8.70 ms | × 1.64 |
 
 These figures cover only the cases listed; they are not a general claim of
 superiority over PyKeOps on every workload or card. A case where kernox is
-slower than PyKeOps is treated as a bug.
+slower than PyKeOps is treated as a bug. To reproduce:
+`python tools/bench_pykeops.py --device cuda --repeat 3`.
 
 On the CPU, kernox uses every core and SIMD instructions (AVX2, AVX-512) with
-glibc's vectorized math functions. On a node with 2 × AMD EPYC 9654 (192
-cores), FP32, M = N = 20,000, against PyTorch computing the distance matrix by
-blocks:
+glibc's vectorized math functions. Against the CPU backend of PyKeOps 2.3,
+M = N = 10⁵, FP32, IEEE arithmetic on both sides, on a node with 2 × AMD
+EPYC 9655 (192 cores, 192 threads), same protocol as above:
+
+| Case | kernox | PyKeOps | Speed-up |
+| --- | --- | --- | --- |
+| Log-sum-exp, D = 2 | 27.9 ms | 334 ms | × 12.0 |
+| Log-sum-exp, D = 3 | 30.0 ms | 346 ms | × 11.5 |
+| Log-sum-exp, D = 2, block-sparse ranges | 1.15 ms | 17.1 ms | × 14.9 |
+| Log-sum-exp, D = 3, block-sparse ranges | 1.51 ms | 28.9 ms | × 19.1 |
+| Gaussian kernel sum, D = 3 | 32.3 ms | 304 ms | × 9.4 |
+| Gaussian kernel sum, D = 3, block-sparse ranges | 1.61 ms | 28.1 ms | × 17.4 |
+| 10 nearest neighbours, D = 3 | 11.0 ms | 85.7 ms | × 7.8 |
+
+Against PyTorch computing the distance matrix by blocks (2 × AMD EPYC 9654,
+192 threads, FP32, M = N = 20,000):
 
 | Case | kernox | PyTorch | Speed-up |
 | --- | --- | --- | --- |
-| Gaussian kernel sum, D = 3 | 2.1 ms | 242 ms | ×113 |
-| Log-sum-exp, D = 3 | 1.7 ms | 157 ms | ×91 |
-| 10 nearest neighbours, D = 3 | 1.4 ms | 113 ms | ×79 |
-| Gaussian kernel sum, D = 16 | 3.4 ms | 170 ms | ×50 |
+| Gaussian kernel sum, D = 3 | 2.1 ms | 242 ms | × 113 |
+| Log-sum-exp, D = 3 | 1.7 ms | 157 ms | × 91 |
+| 10 nearest neighbours, D = 3 | 1.4 ms | 113 ms | × 79 |
+| Gaussian kernel sum, D = 16 | 3.4 ms | 170 ms | × 50 |
 
 Details, thread scaling and larger sizes: [CPU backend](docs/backend-cpu.md).
 
