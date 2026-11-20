@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kernox"
-version = "1.0.2"
-description = "Fused symbolic reductions on GPUs (CUDA, ROCm/HIP, SYCL), built on symox"
+version = "1.1.0"
+description = "Fused symbolic reductions on GPUs (CUDA, ROCm/HIP, SYCL) and x86-64 CPUs (OpenMP, SIMD), built on symox"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY.md"]
 requires-python = ">=3.10"
 authors = [{ name = "Jean-Baptiste Keck" }]
-keywords = ["gpu", "cuda", "rocm", "sycl", "kernel", "reduction", "pytorch", "keops"]
+keywords = ["gpu", "cpu", "cuda", "rocm", "sycl", "openmp", "simd", "kernel", "reduction", "pytorch", "keops"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Science/Research",

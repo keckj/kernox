@@ -457,7 +457,8 @@ class ReductionExpr:
         k = f", K={self.k}" if self.k is not None else ""
         return f"ReductionExpr({self.kind.value}, over={self.over!r}{k}, {self.formula!r})"
 
-    def to_plan(self, dtype, *, acc_dtype=None, fp_contract=True, sum_scheme=None, fast_math=False) -> Plan:
+    def to_plan(self, dtype, *, acc_dtype=None, fp_contract=True, sum_scheme=None, fast_math=False,
+                flush_denormals=False) -> Plan:
         """Normalized plan (reduction over j): if ``over='i'``, the i/j roles are swapped."""
         swap = {"i": "j", "j": "i", "param": "param"} if self.over == "i" else None
         specs = []
@@ -478,6 +479,7 @@ class ReductionExpr:
             fp_contract=fp_contract,
             sum_scheme=sum_scheme,
             fast_math=fast_math,
+            flush_denormals=flush_denormals,
             meta={"over": self.over, "swapped_ij": self.over == "i"},
         )
         if cplx:
@@ -485,11 +487,12 @@ class ReductionExpr:
         return plan
 
     def compile(self, dtype, *, backend="auto", acc_dtype=None, tuning="estimate", fp_contract=None,
-                sum_scheme=None, fast_math=None):
+                sum_scheme=None, fast_math=None, flush_denormals=None):
         from .runtime import compile as _compile
 
         return _compile(self, dtype=dtype, backend=backend, acc_dtype=acc_dtype, tuning=tuning,
-                        fp_contract=fp_contract, sum_scheme=sum_scheme, fast_math=fast_math)
+                        fp_contract=fp_contract, sum_scheme=sum_scheme, fast_math=fast_math,
+                        flush_denormals=flush_denormals)
 
 
 # --------------------------------------------------------------------------

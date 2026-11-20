@@ -255,6 +255,7 @@ def make_plan(
     sum_scheme: str | None = "direct",
     meta: dict | None = None,
     fast_math: bool = False,
+    flush_denormals: bool = False,
 ) -> Plan:
     """Builds and validates a :class:`Plan`.
 
@@ -264,6 +265,7 @@ def make_plan(
     order (the frontend provides the canonical order i, j, param, then name).
     ``fp_contract``: intra-expression FMA contraction allowed (contract v0.3).
     ``fast_math`` (amendment v0.10): approximate exp/log allowed (opt-in, IEEE by default).
+    ``flush_denormals`` (amendment v0.11): subnormal values may be flushed to zero (opt-in).
     ``sum_scheme``: ``"direct"``, ``"block"`` or ``"kahan"`` (amendment v0.7); ``None``:
     default, ``"block"`` for FP16 accumulated in FP16 (as in PyKeOps), ``"direct"`` otherwise.
     """
@@ -273,6 +275,8 @@ def make_plan(
         raise ValidationError(f"fast_math must be a bool, got {fast_math!r}")
     if not isinstance(fp_contract, bool):
         raise ValidationError(f"fp_contract must be a bool, got {fp_contract!r}")
+    if not isinstance(flush_denormals, bool):
+        raise ValidationError(f"flush_denormals must be a bool, got {flush_denormals!r}")
     if sum_scheme is not None and sum_scheme not in SUM_SCHEMES:
         raise ValidationError(f"invalid sum_scheme {sum_scheme!r} (expected one of {SUM_SCHEMES})")
     if dtype not in _DTYPES:
@@ -367,5 +371,6 @@ def make_plan(
         fp_contract=fp_contract,
         sum_scheme=sum_scheme,
         fast_math=fast_math,
+        flush_denormals=flush_denormals,
         meta=dict(meta or {}),
     )

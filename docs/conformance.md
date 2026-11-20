@@ -1,9 +1,10 @@
 # Conformance suite
 
-The conformance suite (`tests/conformance/`) checks every GPU backend against
+The conformance suite (`tests/conformance/`) checks every native backend against
 the same FP64 reference, with the same rules. It is shared by the `cuda`,
-`hip` and `sycl` backends. A backend without a PyTorch device or without its
-module is **skipped**, never simulated.
+`hip`, `sycl` and `cpu` backends. A backend without a PyTorch device or without
+its module is **skipped**, never simulated. The `cpu` backend has no streams:
+the stream tests are skipped for it.
 
 ## Running
 
@@ -38,6 +39,7 @@ its measurements).
 | `test_batch.py`, `test_ranges.py` | batch dimensions and block-sparse ranges |
 | `test_fp16.py` | FP16 against the oracle and the FP64 reference |
 | `test_fast_math.py` | approximate `exp`/`log` within their error bounds, and actually active |
+| `test_flush_denormals.py` | flushing subnormal numbers: within the IEEE bound plus the flushed mass, actually active on cpu and cuda, inherited by gradients |
 | `test_complex.py`, `test_ops.py`, `test_linalg.py` | complex formulas, PyKeOps formula operations, `solve` and linear operators |
 
 Matrix: dimensions 1, 2, 3, 7, 16, 64, 65; K = 0, 1, 2, 31, 32, 33, 64, 128,
@@ -132,7 +134,7 @@ each file on all available backends.
 ## Known limitations
 
 - The matrix accepts an explicit `UnsupportedError` for K > 256 and reports
-  it as a warning; for K ≤ 256 a refusal is a failure. The three backends
+  it as a warning; for K ≤ 256 a refusal is a failure. The four backends
   currently support K up to 1024.
 - The frontend brings the complex artifacts of the symbolic engine back to real
   arithmetic (`builder.realify`): `I`/`zoo` in a branch value of a

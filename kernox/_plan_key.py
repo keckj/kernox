@@ -11,7 +11,7 @@ The key is the hexadecimal sha256 of a canonical JSON serialization of:
   list of distinct nodes in postfix order, each one being ``srepr`` for an atom
   or ``[class, head, child indices]`` otherwise. Keys of existing plans
   (smaller trees) are unchanged;
-- reduction (kind, K), ``dtype``, ``acc_dtype``, ``index_dtype``, ``fast_math``, ``fp_contract``;
+- reduction (kind, K), ``dtype``, ``acc_dtype``, ``index_dtype``, ``fast_math``, ``fp_contract``, ``flush_denormals`` (only when true);
 - ``sum_scheme`` (amendment v0.7) only if it differs from ``"direct"``: the
   key of an existing plan is unchanged.
 - ``batch_rank`` (amendment v0.6) only if nonzero: the key of a plan
@@ -101,6 +101,8 @@ def plan_payload(plan) -> dict:
         "fast_math": bool(plan.fast_math),
         "fp_contract": bool(plan.fp_contract),
     }
+    if getattr(plan, "flush_denormals", False):  # absent when off: earlier keys unchanged
+        payload["flush_denormals"] = True
     scheme = getattr(plan, "sum_scheme", "direct")
     if scheme != "direct":
         payload["sum_scheme"] = scheme

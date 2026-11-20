@@ -3,7 +3,7 @@
 For each reduction, a backend can generate several kernel variants (block
 size, how the work over `j` is split, how the K-nearest lists are shared
 between threads...). By default kernox picks one with a fixed heuristic. You
-can instead let it measure a few variants on your GPU and remember the
+can instead let it measure a few variants on your device and remember the
 fastest, in the spirit of FFTW's planning levels and "wisdom".
 
 ```python
@@ -58,6 +58,11 @@ times. `run.tuning_decisions` lists all decisions of a compiled object.
 
 A backend without variants (such as the CPU oracle) falls back to
 `"estimate"` and logs a message once.
+
+On the `cpu` backend the variants change the `j` tile and the number of rows
+per task. The default already adapts the tile to the L1 cache, and measured
+gains from tuning are small (a few percent); see
+[CPU backend](../backend-cpu.md#variants).
 
 ## Wisdom files
 

@@ -68,9 +68,13 @@ BASE_OPTIONS = ("--std=c++17", "--ftz=false", "--prec-div=true", "--prec-sqrt=tr
 
 
 def _options(plan, arch: str) -> tuple:
-    """NVRTC options: FMA contraction according to ``plan.fp_contract`` (default True)."""
+    """NVRTC options: FMA contraction according to ``plan.fp_contract`` (default True);
+    ``--ftz=true`` (float32 subnormals flushed) when ``plan.flush_denormals``."""
     fmad = "--fmad=true" if getattr(plan, "fp_contract", True) else "--fmad=false"
-    return BASE_OPTIONS + (fmad, f"--gpu-architecture={arch}")
+    base = BASE_OPTIONS
+    if getattr(plan, "flush_denormals", False):
+        base = tuple("--ftz=true" if o == "--ftz=false" else o for o in base)
+    return base + (fmad, f"--gpu-architecture={arch}")
 
 _DT_BYTES = {"float16": 2, "float32": 4, "float64": 8}
 # j partition: target = factor x resident blocks ("waves"); off: S = 1.
@@ -152,6 +156,8 @@ class CudaBackend:
     name = "cuda"
     #: contract v0.3: plan.fp_contract == False -> NVRTC --fmad=false (_options)
     fp_contract_off = True
+    #: amendment v0.11: plan.flush_denormals -> NVRTC --ftz=true (float32 operations)
+    flush_denormals = True
     #: amendment v0.7: implemented schemes; "block" publishes ``sum_block=T`` (j tile of the variant)
     sum_schemes = ("direct", "block", "kahan")
     #: amendment v0.6 §1: native batch (batch index = blockIdx.z, offset table per argument)

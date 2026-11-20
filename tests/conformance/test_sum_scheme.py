@@ -128,7 +128,10 @@ def test_sumsoftmaxweight_schemes_higham(target, n):
         # t and s accumulated with the scheme, then t / s: one extra rounded division
         assert err[scheme] <= _bound(scheme, n, l1, info) + 2 * U32 * abs(ref), (scheme, err[scheme])
     if n >= 10**5:
-        assert err["kahan"] * 10 <= err["direct"], err
+        # Kahan must beat direct by 10x, unless it already sits at the rounding
+        # floor of the FP32 output (t / s rounded twice): a blocked direct sum
+        # (cpu, split-j) can land near that floor too, and then 10x is impossible.
+        assert err["kahan"] * 10 <= err["direct"] or err["kahan"] <= 2 * U32 * abs(ref), err
 
 
 # ------------------------------------------------------------- LOGSUMEXP

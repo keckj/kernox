@@ -3,7 +3,8 @@
 The blocks of one page run in order, in a single namespace, on the CPU
 oracle: the line ``device = "cuda"`` that opens the GPU examples is replaced
 by ``device = "cpu"``, and ``backend="auto"`` resolves a CPU tensor to the
-``"oracle"`` backend instead of raising. The examples themselves are left
+``"oracle"`` backend instead of the native ``"cpu"`` backend (no C++ build
+per example). The examples themselves are left
 unchanged, so they read exactly as a user would type them.
 
 A block preceded by the comment ``<!-- skip-test -->`` is not run (PyKeOps

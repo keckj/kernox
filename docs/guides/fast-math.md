@@ -39,12 +39,17 @@ L = fast(x=X, y=Y)
 | --- | --- | --- | --- |
 | `cuda` | approximate `exp` and `log` | no effect (no fast instruction exists) | `UnsupportedError` |
 | `hip`, `sycl` | `UnsupportedError` | `UnsupportedError` | `UnsupportedError` |
+| `cpu` | no effect (stays IEEE, already vectorized) | no effect | no effect |
 | `oracle` | no effect (stays IEEE) | no effect | no effect |
 
 A backend that does not implement `fast_math` refuses it with an explicit
 error rather than ignoring it.
 
 Gradients of a `fast_math` reduction also use the approximations.
+
+`fast_math` does not flush subnormal numbers to zero, even on `cuda`; that is
+a separate option, `flush_denormals=True`, see
+[Numerics](../numerics.md#flushing-subnormal-numbers).
 
 The [Performance](../index.md#performance) figures of kernox against PyKeOps
 use `fast_math=True`.

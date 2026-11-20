@@ -28,7 +28,7 @@ from .codegen.pair import GENERATOR_VERSION
 from .errors import BackendUnavailableError, UnsupportedError, ValidationError
 from .plan import Plan, ReductionKind, output_shapes
 
-NATIVE_BACKENDS = ("cuda", "hip", "sycl")
+NATIVE_BACKENDS = ("cuda", "hip", "sycl", "cpu")
 # reductions with floating-point accumulation, affected by sum_scheme (amendment v0.7)
 _SUMMING_KINDS = (ReductionKind.SUM, ReductionKind.LOGSUMEXP, ReductionKind.SUMSOFTMAXWEIGHT,
                   ReductionKind.LOGSUMEXPWEIGHT)
@@ -90,15 +90,17 @@ def get_backend(name: str):
 
 
 def auto_backend_name(device) -> str:
-    """Native backend for a Torch device: cuda (NVIDIA), hip (ROCm), sycl (XPU)."""
+    """Native backend for a Torch device: cuda (NVIDIA), hip (ROCm), sycl (XPU), cpu."""
     import torch
 
     if device.type == "cuda":
         return "hip" if getattr(torch.version, "hip", None) else "cuda"
     if device.type == "xpu":
         return "sycl"
+    if device.type == "cpu":
+        return "cpu"
     raise UnsupportedError(
-        f"no GPU backend for device {device}; the CPU reference must be requested "
+        f"no native backend for device {device}; the Torch reference must be requested "
         "explicitly with backend='oracle'"
     )
 
@@ -116,6 +118,10 @@ def _device_fingerprint(device) -> dict:
     elif device.type == "xpu" and hasattr(torch, "xpu") and torch.xpu.is_available():
         props = torch.xpu.get_device_properties(device)
         fp.update(name=props.name, driver=str(getattr(props, "driver_version", "")))
+    elif device.type == "cpu":
+        from .backends.cpu import cpu_name
+
+        fp.update(name=cpu_name())
     return fp
 
 
@@ -205,6 +211,9 @@ class Reduction:
             raise UnsupportedError(
                 f"backend {name!r}: fp_contract=False (no FMA contraction) is not supported "
                 "by this backend (contract v0.3)")
+        if self.plan.flush_denormals and not getattr(backend, "flush_denormals", False):
+            raise UnsupportedError(
+                f"backend {name!r}: flush_denormals=True is not supported by this backend (amendment v0.11)")
         support = backend.supports(self.plan, device)
         if not support.ok:
             raise UnsupportedError(f"backend {name!r}: {support.reason}")
@@ -926,12 +935,12 @@ class RangedReduction:
 
 def compile(expr, *, dtype, backend: str = "auto", acc_dtype=None, tuning: str = "estimate",  # noqa: A001
             fp_contract: bool | None = None, sum_scheme: str | None = None,
-            fast_math: bool | None = None) -> Reduction:
+            fast_math: bool | None = None, flush_denormals: bool | None = None) -> Reduction:
     """Compiles a frontend reduction (or a :class:`Plan`) into a callable.
 
     ``dtype`` is mandatory (``"float16"``, ``"float32"`` or ``"float64"``): no
     implicit precision. ``backend``: ``"auto"`` (device of the tensors:
-    cuda/hip/sycl), a native name, or ``"oracle"`` (explicit reference).
+    cuda/hip/sycl/cpu), a native name, or ``"oracle"`` (explicit reference).
     ``tuning``: ``"estimate"`` (default, no measurement), ``"wisdom_only"``,
     ``"measure"`` or ``"patient"`` (see :mod:`kernox.tuning`).
     ``fp_contract``: ``True`` by default, FMA contraction
@@ -946,6 +955,11 @@ def compile(expr, *, dtype, backend: str = "auto", acc_dtype=None, tuning: str =
     approximate exp/log (CUDA FP32: ``ex2.approx``/``lg2.approx``, like PyKeOps
     ``use_fast_math``). Part of the plan key; a backend that does not
     implement it raises :class:`UnsupportedError`. The oracle stays IEEE.
+    ``flush_denormals``: ``False`` by default (subnormal numbers kept);
+    ``True`` allows the backend to flush subnormal inputs and results of
+    floating-point operations to zero (cpu: FTZ/DAZ; cuda: ``--ftz=true``,
+    float32 only). Part of the plan key; a backend that does not implement it
+    raises :class:`UnsupportedError`. The oracle keeps subnormal numbers.
     """
     from .expr import ReductionExpr
 
@@ -953,9 +967,12 @@ def compile(expr, *, dtype, backend: str = "auto", acc_dtype=None, tuning: str =
         raise ValidationError(f"fast_math must be a boolean, got {fast_math!r}")
     if fp_contract is not None and not isinstance(fp_contract, bool):
         raise ValidationError(f"fp_contract must be a boolean, got {fp_contract!r}")
+    if flush_denormals is not None and not isinstance(flush_denormals, bool):
+        raise ValidationError(f"flush_denormals must be a boolean, got {flush_denormals!r}")
     if isinstance(expr, ReductionExpr):
         plan = expr.to_plan(dtype, acc_dtype=acc_dtype, fp_contract=True if fp_contract is None else fp_contract,
-                            sum_scheme=sum_scheme, fast_math=bool(fast_math))
+                            sum_scheme=sum_scheme, fast_math=bool(fast_math),
+                            flush_denormals=bool(flush_denormals))
     elif isinstance(expr, Plan):
         if dtype != expr.dtype or (acc_dtype is not None and acc_dtype != expr.acc_dtype):
             raise ValidationError("dtype/acc_dtype inconsistent with the given plan")
@@ -963,6 +980,8 @@ def compile(expr, *, dtype, backend: str = "auto", acc_dtype=None, tuning: str =
             raise ValidationError("fp_contract inconsistent with the given plan")
         if fast_math is not None and fast_math != expr.fast_math:
             raise ValidationError("fast_math inconsistent with the given plan")
+        if flush_denormals is not None and flush_denormals != expr.flush_denormals:
+            raise ValidationError("flush_denormals inconsistent with the given plan")
         if sum_scheme is not None and sum_scheme != expr.sum_scheme:
             raise ValidationError("sum_scheme inconsistent with the given plan")
         plan = expr

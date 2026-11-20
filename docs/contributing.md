@@ -13,7 +13,7 @@ pip install -e ".[cuda,test]"                                          # or [roc
 
 ```sh
 pytest tests --ignore=tests/conformance                        # core tests, CPU oracle, no GPU needed
-pytest -m "not slow" tests/conformance                         # conformance, on the GPU backends present
+pytest -m "not slow" tests/conformance                         # conformance, on the native backends present
 KP_CONFORMANCE_BACKENDS=hip pytest -m slow tests/conformance   # long profile, one backend
 ```
 
@@ -45,6 +45,7 @@ from the docstrings.
 | `kernox/codegen/pair.py` | generation of the per-pair device function |
 | `kernox/oracle.py` | the CPU reference |
 | `kernox/backends/{cuda,hip,sycl}/` | the GPU backends |
+| `kernox/backends/cpu/` | the CPU backend (C++/OpenMP, `g++`) |
 | `kernox/tuning.py` | autotuning and wisdom |
 | `tests/conformance/` | the conformance suite shared by the backends |
 

@@ -8,15 +8,17 @@ explicit option.
 
 - No fast-math: `exp`, `log`, divisions and square roots are the correctly
   behaved library versions.
-- No reassociation of your formula, no flush of subnormal numbers to zero,
+- No reassociation of your formula, no flush of subnormal numbers to zero
+  (unless you ask for it, see [below](#flushing-subnormal-numbers)),
   no TF32, and no silent conversion of float64 to float32.
 - Every constant is rounded exactly once, to the reduction's dtype.
 - Only one freedom is left to the compiler: fusing `a * b + c` into a single
   fused multiply-add (FMA), described below.
 
 The order in which the terms of a sum are added is not specified and depends
-on the GPU and on the kernel variant, so float sums can differ slightly from
-one backend or variant to another.
+on the device and on the kernel variant, so float sums can differ slightly from
+one backend or variant to another. On the `cpu` backend it does not depend on
+the number of threads.
 
 ## Constants
 
@@ -123,6 +125,33 @@ rather than negating its opposite.
 `compile(..., fast_math=True)` allows approximate `exp` and `log`, the
 counterpart of PyKeOps' `use_fast_math`. It is off by default and never turned
 on implicitly. See [fast_math](guides/fast-math.md).
+
+## Flushing subnormal numbers
+
+`compile(..., flush_denormals=True)` allows subnormal numbers (smaller than
+about 1.2·10⁻³⁸ in float32, 2.2·10⁻³⁰⁸ in float64) to be replaced by zero,
+both as inputs and as results of each operation. It is off by default and
+never turned on implicitly. Gradients inherit it.
+
+| Backend | float32 | float64 | float16 |
+| --- | --- | --- | --- |
+| `cpu` | flushed (FTZ + DAZ) | flushed (FTZ + DAZ) | flushed when computed through float32 |
+| `cuda` | flushed (`--ftz=true`) | kept | flushed when computed through float32 |
+| `hip`, `sycl` | `UnsupportedError` | `UnsupportedError` | `UnsupportedError` |
+| `oracle` | kept | kept | kept |
+
+The only effect on a result is the flushed mass: a sum loses at most its
+number of terms times the smallest normal number, scaled by the factors those
+terms are multiplied by. A sum or a log-sum-exp whose largest terms are near 1
+does not change in practice. It matters for results that are themselves tiny,
+for example a Gaussian kernel sum at a point far from every other point.
+
+Speed: on Intel CPUs, each operation that produces a subnormal result costs a
+microcode assist, many times slower than a normal operation; AMD CPUs pay less,
+but still pay. Narrow Gaussian kernels, where many terms fall in the subnormal
+range, are faster with `flush_denormals=True` (4.8× on a Xeon, 1.5× on an AMD EPYC) (see [CPU backend](backend-cpu.md#vector-math-libmvec)).
+On the cpu backend the flags are set for the kernel only: PyTorch, which
+shares the OpenMP threads, still sees subnormal numbers afterwards.
 
 ## Half precision
 

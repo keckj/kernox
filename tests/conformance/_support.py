@@ -1,4 +1,4 @@
-"""Shared tools for the conformance suite (all GPU backends).
+"""Shared tools for the conformance suite (all native backends).
 
 Reference: the formula is evaluated term by term in FP64 by
 ``kernox.oracle.evaluate_numpy`` (symox NumPy lambdify, a path independent
@@ -41,7 +41,7 @@ NP = {"float32": np.float32, "float64": np.float64}
 TORCH = {"float32": torch.float32, "float64": torch.float64}
 K_KINDS = (R.KMIN, R.ARGKMIN, R.KMIN_ARGKMIN)
 SOFT_KINDS = (R.LOGSUMEXP, R.SUMSOFTMAXWEIGHT)
-BACKENDS = ("cuda", "hip", "sycl")
+BACKENDS = ("cuda", "hip", "sycl", "cpu")
 
 
 # --------------------------------------------------------------- backends
@@ -56,6 +56,8 @@ def device_for(name: str):
     if name == "sycl":
         ok = hasattr(torch, "xpu") and torch.xpu.is_available()
         return "xpu:0" if ok else None
+    if name == "cpu":
+        return "cpu"
     raise ValueError(name)
 
 

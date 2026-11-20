@@ -11,7 +11,7 @@ from kernox.backends.base import CompileInfo, Support
 from kernox.errors import (BackendUnavailableError, ConstantConversionError, UnsupportedError,
                              ValidationError)
 from kernox.oracle import reference_numpy
-from kernox.runtime import register_backend
+from kernox.runtime import auto_backend_name, register_backend
 
 
 def gaussian():
@@ -94,9 +94,10 @@ def test_errors_before_launch():
 def test_backend_selection_is_explicit():
     x, y = Vi("x"), Vj("y")
     r = (x * y).sum_over("j")
-    run = kp.compile(r, dtype="float32")  # auto
+    # auto: native backend of the tensors' device (CPU -> "cpu"), never the oracle
+    assert auto_backend_name(torch.device("cpu")) == "cpu"
     with pytest.raises(UnsupportedError, match="oracle"):
-        run(x=torch.ones(2, 1), y=torch.ones(3, 1))
+        auto_backend_name(torch.device("meta"))
     with pytest.raises(BackendUnavailableError):
         kp.compile(r, dtype="float32", backend="nope")
     with pytest.raises(TypeError):

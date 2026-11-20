@@ -81,6 +81,9 @@ class Plan:
     index_dtype: Literal["int64"] = "int64"
     fast_math: bool = False  # off by default; no backend enables it on its own
     fp_contract: bool = True  # FMA contraction within expressions (contract v0.3)
+    #: amendment v0.11: subnormal values may be flushed to zero (inputs and
+    #: results of floating-point operations). Off by default (IEEE).
+    flush_denormals: bool = False
     #: amendment v0.7: summation scheme of floating-point accumulations (SUM, and
     #: s, t_e of LOGSUMEXP/SUMSOFTMAXWEIGHT); no effect on other reductions.
     sum_scheme: SumScheme = "direct"

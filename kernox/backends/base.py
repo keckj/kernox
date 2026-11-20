@@ -28,7 +28,7 @@ class Support:
 class CompileInfo:
     """Published for diagnostics and benchmarks."""
 
-    backend: str              # "cuda" | "hip" | "sycl"
+    backend: str              # "cuda" | "hip" | "sycl" | "cpu"
     device_name: str
     arch: str                 # sm_75, gfx1201, intel_gpu_bmg_g31...
     compiler: str             # name + exact version
@@ -214,6 +214,10 @@ class Backend(Protocol):
     #: contraction (``plan.fp_contract == False``). Optional attribute, missing =
     #: False: the runtime then rejects a ``fp_contract=False`` plan (UnsupportedError).
     fp_contract_off: bool
+    #: amendment v0.11: True if the backend accepts ``plan.flush_denormals``
+    #: (subnormal values may be flushed to zero). Optional attribute, missing =
+    #: False: the runtime then rejects such a plan (UnsupportedError).
+    flush_denormals: bool
     #: amendment v0.7: implemented summation schemes (``"direct"``, ``"block"``,
     #: ``"kahan"``). Optional attribute, missing = ``("direct",)``: the runtime
     #: then rejects any other scheme for SUM/LOGSUMEXP/SUMSOFTMAXWEIGHT

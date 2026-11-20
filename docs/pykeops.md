@@ -125,7 +125,7 @@ See [Linear systems](guides/linear-systems.md).
 | `sum_scheme="direct_sum"`, `"block_sum"`, `"kahan_scheme"` | `sum_scheme="direct"`, `"block"`, `"kahan"` |
 | `use_fast_math=True` (the PyKeOps default) | `fast_math=True` (off by default) |
 | `backend="GPU"`, `device_id=` | the device of the tensors |
-| `backend="CPU"` | not available; `backend="oracle"` is a slow reference for tests |
+| `backend="CPU"` | CPU tensors (`backend="auto"` or `"cpu"`) |
 | `IntCst(3)`, `Var(...)`, formula strings, `Genred` | Python constants and symbolic formulas |
 | `ComplexLazyTensor` | `Vi("z", D, complex=True)`, see [Complex formulas](guides/complex.md) |
 
@@ -189,5 +189,4 @@ See [Linear systems](guides/linear-systems.md).
 | PyKeOps feature | Status |
 | --- | --- |
 | NumPy interface (`pykeops.numpy`) | not supported, not planned: kernox works with PyTorch only. (The linear operator accepts NumPy arrays for SciPy interoperability.) |
-| CPU backend | not supported, not planned: the CPU oracle is only a test reference |
 | formula strings and the `Genred` interface | not supported: formulas are Python expressions |

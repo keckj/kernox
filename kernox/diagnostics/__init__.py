@@ -5,8 +5,9 @@ Reports, without installing or modifying anything:
 - versions: Python, Torch (CUDA/ROCm/XPU runtime), NumPy, symox (with the
   development revision when its native library is a known build) and the
   detected symox capabilities, with a warning if one is missing;
-- native backends (cuda, hip, sycl): available, or exact reason
-  for unavailability (module, device, rejected dtype); device, arch, actual FP64;
+- native backends (cuda, hip, sycl, cpu): available, or exact reason
+  for unavailability (module, device, compiler, rejected dtype); device, arch,
+  actual FP64;
 - caches: compilation and wisdom directories (number of valid entries);
 - option ``check=True``: compilation of a small plan (exact compiler and driver
   via ``CompileInfo``) and a mini correctness check against
@@ -109,6 +110,14 @@ def _device_for(name: str):
         if xpu is None or not xpu.is_available():
             return None, "no Torch XPU device visible"
         return torch.device("xpu:0"), ""
+    if name == "cpu":
+        from ..backends.cpu import toolchain
+
+        try:
+            toolchain.compiler()
+        except toolchain.ToolchainError as exc:
+            return None, str(exc)
+        return torch.device("cpu"), ""
     raise ValueError(name)
 
 
@@ -120,6 +129,13 @@ def _device_props(device) -> dict:
         arch = p.gcnArchName if getattr(torch.version, "hip", None) else f"sm_{p.major}{p.minor}"
         return {"name": p.name, "arch": arch, "memory_bytes": int(p.total_memory),
                 "multiprocessors": int(p.multi_processor_count)}
+    if device.type == "cpu":
+        from ..backends.cpu import cpu_name, toolchain
+
+        arch, _ = toolchain.native_target()
+        return {"name": cpu_name(), "arch": arch, "compiler": toolchain.compiler_version(),
+                "threads": torch.get_num_threads(), "libmvec": list(toolchain.libmvec_functions()),
+                "float16": toolchain.float16_supported()}
     p = torch.xpu.get_device_properties(device)
     return {"name": p.name, "driver": str(getattr(p, "driver_version", "")),
             "memory_bytes": int(getattr(p, "total_memory", 0)),
@@ -148,7 +164,8 @@ def _backend_info(name: str, check: bool) -> dict:
         out.update(available=False, reason=why)
         return out
     out.update(available=True, device=str(device), properties=_device_props(device),
-               fp_contract_off=bool(getattr(backend, "fp_contract_off", False)))
+               fp_contract_off=bool(getattr(backend, "fp_contract_off", False)),
+               flush_denormals=bool(getattr(backend, "flush_denormals", False)))
     dtypes = {}
     for dt in ("float32", "float64"):
         s = backend.supports(_probe_plan(dt), device)
@@ -232,7 +249,8 @@ def _cache_info() -> dict:
     dirs = {}
     for name, mod, fn in (("cuda", "kernox.backends.cuda.backend", "_cache_dir"),
                           ("hip", "kernox.backends.hip._cache", "cache_dir"),
-                          ("sycl", "kernox.backends.sycl.toolchain", "cache_dir")):
+                          ("sycl", "kernox.backends.sycl.toolchain", "cache_dir"),
+                          ("cpu", "kernox.backends.cpu.toolchain", "cache_dir")):
         try:
             d = Path(getattr(importlib.import_module(mod), fn)())
         except Exception as exc:  # noqa: BLE001 - backend absent
@@ -325,7 +343,7 @@ def format_report(r: dict) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m kernox.diagnostics", description=__doc__.split("\n")[0])
     ap.add_argument("--check", action="store_true", help="compile and check small reductions on each backend")
-    ap.add_argument("--backend", action="append", choices=("cuda", "hip", "sycl"), help="restrict to this backend (repeatable)")
+    ap.add_argument("--backend", action="append", choices=("cuda", "hip", "sycl", "cpu"), help="restrict to this backend (repeatable)")
     ap.add_argument("--json", action="store_true", help="JSON output")
     a = ap.parse_args(argv)
     r = diagnostics(check=a.check, backends=a.backend)

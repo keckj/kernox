@@ -451,6 +451,8 @@ class OracleBackend:
     name = "oracle"
     # Torch CPU rounds every elementary operation: no FMA contraction.
     fp_contract_off = True
+    # amendment v0.11: flushing is allowed, never required; the oracle keeps subnormals
+    flush_denormals = True
     # amendment v0.7: all three schemes, simulated in acc_dtype (see _Accumulator)
     sum_schemes = ("direct", "block", "kahan")
     # amendment v0.6: batch dimensions (reference loop over the elements)

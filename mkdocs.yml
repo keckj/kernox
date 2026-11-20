@@ -1,5 +1,5 @@
 site_name: kernox
-site_description: Fused symbolic reductions on GPUs, built on symox
+site_description: Fused symbolic reductions on GPUs and CPUs, built on symox
 site_url: https://keckj.github.io/kernox/
 repo_url: https://github.com/keckj/kernox
 repo_name: keckj/kernox
@@ -80,4 +80,5 @@ nav:
       - Contributing: contributing.md
       - Core and backend contract: kernel-backend-contract.md
       - HIP backend: backend-hip.md
+      - CPU backend: backend-cpu.md
       - Conformance suite: conformance.md

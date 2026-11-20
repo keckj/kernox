@@ -4,12 +4,12 @@
   <img src="docs/images/kernox-banner.png" alt="kernox logo" width="560">
 </p>
 
-kernox computes pairwise reductions on GPUs (Gaussian kernel sums, nearest
+kernox computes pairwise reductions on GPUs and CPUs (Gaussian kernel sums, nearest
 neighbours, log-sum-exp, softmax-weighted sums, ...) without ever building the
 M×N matrix. You write the formula with symbolic variables indexed by `i` and
 `j`, and kernox turns it into a single fused GPU kernel for NVIDIA (CUDA),
-AMD (ROCm/HIP) or Intel (SYCL) cards. Support for other accelerators may be
-added later.
+AMD (ROCm/HIP) or Intel (SYCL) cards, or into vectorized multithreaded C++ on
+x86-64 CPUs. Support for other accelerators may be added later.
 
 kernox is a successor to [PyKeOps](https://github.com/getkeops/keops), built on
 the [symox](https://github.com/keckj/symox) symbolic engine. It works with
@@ -22,20 +22,22 @@ PyTorch tensors.
 
 - **No M×N matrix.** Memory stays linear in the number of points, so each row
   can be reduced over millions of points.
-- **Three GPU vendors.** One formula runs on NVIDIA, AMD and Intel GPUs.
+- **Three GPU vendors and the CPU.** One formula runs on NVIDIA, AMD and Intel
+  GPUs, and on x86-64 CPUs (OpenMP, SIMD).
 - **Formulas, not strings.** Formulas are Python expressions. Derivatives are
   computed symbolically and run as fused reductions too.
 - **Predictable numerics.** IEEE arithmetic by default, an explicit opt-in for
   approximate `exp` and `log`, and an explicit error instead of a silent
   fallback when something is not supported.
 - **Familiar to PyKeOps users.** The PyKeOps reductions and formula operations
-  are available for PyTorch on GPUs. kernox has no NumPy interface and no CPU
-  backend; the other differences are listed in
+  are available for PyTorch on GPUs and CPUs. kernox has no NumPy interface;
+  the other differences are listed in
   [Coming from PyKeOps](docs/pykeops.md).
 
 ## Installation
 
-kernox needs Python 3.10 or later, PyTorch and a supported GPU. Install PyTorch
+kernox needs Python 3.10 or later, PyTorch, and a supported GPU or an x86-64
+Linux CPU with `g++` 12 or later. Install PyTorch
 for your platform first, then kernox from PyPI (symox, its symbolic engine, comes
 with it as a dependency):
 
@@ -43,6 +45,13 @@ with it as a dependency):
 pip install torch --index-url https://download.pytorch.org/whl/cu126   # NVIDIA
 pip install "kernox[cuda]"
 python -m kernox.diagnostics --check
+```
+
+On the CPU only:
+
+```sh
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install kernox
 ```
 
 AMD and Intel instructions, and the details, are in
@@ -70,6 +79,20 @@ These figures cover only the cases listed; they are not a general claim of
 superiority over PyKeOps on every workload or card. A case where kernox is
 slower than PyKeOps is treated as a bug.
 
+On the CPU, kernox uses every core and SIMD instructions (AVX2, AVX-512) with
+glibc's vectorized math functions. On a node with 2 × AMD EPYC 9654 (192
+cores), FP32, M = N = 20,000, against PyTorch computing the distance matrix by
+blocks:
+
+| Case | kernox | PyTorch | Speed-up |
+| --- | --- | --- | --- |
+| Gaussian kernel sum, D = 3 | 2.1 ms | 242 ms | ×113 |
+| Log-sum-exp, D = 3 | 1.7 ms | 157 ms | ×91 |
+| 10 nearest neighbours, D = 3 | 1.4 ms | 113 ms | ×79 |
+| Gaussian kernel sum, D = 16 | 3.4 ms | 170 ms | ×50 |
+
+Details, thread scaling and larger sizes: [CPU backend](docs/backend-cpu.md).
+
 ## Learn more
 
 - [Getting started](docs/getting-started.md): installation and a first
@@ -84,6 +107,8 @@ slower than PyKeOps is treated as a bug.
 - [Coming from PyKeOps](docs/pykeops.md): a migration guide.
 - [Backends and hardware](docs/backends.md): what runs where, and the known
   limitations.
+- [CPU backend](docs/backend-cpu.md): how the CPU kernels are built, and
+  measured performance.
 
 ## About the name and logo
 
@@ -104,7 +129,7 @@ Provenance of third-party code and algorithms (KeOps, symox):
 
 - [remblais](https://github.com/keckj/remblais): a faster GeomLoss (Sinkhorn
   divergences, kernel norms and optimal transport) on NVIDIA, AMD and Intel
-  GPUs. Documentation: <https://keckj.github.io/remblais/>
+  GPUs and on CPUs. Documentation: <https://keckj.github.io/remblais/>
 
 ## Related projects
 

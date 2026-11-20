@@ -150,6 +150,7 @@ run = kp.compile(nearest, dtype="float32")
 | `sum_scheme` | `"direct"` | `"direct"`, `"block"` or `"kahan"`, see [Numerics](numerics.md#summation-schemes) |
 | `fp_contract` | `True` | allow fused multiply-add, see [Numerics](numerics.md#fused-multiply-add) |
 | `fast_math` | `False` | approximate `exp` and `log`, see [fast_math](guides/fast-math.md) |
+| `flush_denormals` | `False` | allow subnormal numbers to be flushed to zero, see [Numerics](numerics.md#flushing-subnormal-numbers) |
 | `tuning` | `"estimate"` | kernel autotuning, see [Autotuning](guides/autotuning.md) |
 
 The same options are available as a method: `nearest.compile("float32")`.
@@ -158,7 +159,7 @@ The compiled object is called with keyword arguments only. It returns a tensor
 (or a tuple for `min_argmin`, `max_argmax` and `kmin_argkmin`) allocated on the
 device of the inputs. `run.input_names` lists the expected names.
 
-The GPU kernel is generated and compiled on the first call for a device, and
+The kernel is generated and compiled on the first call for a device, and
 cached on disk (see [Backends](backends.md#caches-and-environment-variables)),
 so later processes start fast.
 
@@ -166,12 +167,12 @@ so later processes start fast.
 
 With `backend="auto"`, the device of the input tensors decides:
 
-| Tensors on | Backend | GPUs |
+| Tensors on | Backend | Hardware |
 | --- | --- | --- |
 | `cuda` (CUDA build of PyTorch) | `"cuda"` | NVIDIA |
 | `cuda` (ROCm build of PyTorch) | `"hip"` | AMD |
 | `xpu` | `"sycl"` | Intel |
-| `cpu` | none: `UnsupportedError` | |
+| `cpu` | `"cpu"` | x86-64 CPU (Linux, `g++`) |
 
 You can also name a backend explicitly. `backend="oracle"` is the CPU reference
 used by the tests; it is never chosen automatically.

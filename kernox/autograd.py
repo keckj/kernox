@@ -162,7 +162,8 @@ def gradient_plans(plan: Plan, wrt) -> GradientPlans:
         args.sort(key=lambda a: (_ROLE_ORDER[a.role], a.name))
         meta = {"gradient_of": plan.key(), "gradient_side": "i" if roles["i"] == "i" else "j"}
         p = make_plan(outputs, ReductionKind.SUM, plan.dtype, args=args, acc_dtype=plan.acc_dtype,
-                      fp_contract=plan.fp_contract, sum_scheme=plan.sum_scheme, meta=meta, fast_math=plan.fast_math)
+                      fp_contract=plan.fp_contract, sum_scheme=plan.sum_scheme, meta=meta, fast_math=plan.fast_math,
+                      flush_denormals=plan.flush_denormals)
         return p, tuple(layout)
 
     i_targets = [a for a in plan.args if a.name in wrt and a.role in ("i", "param")]
@@ -235,7 +236,7 @@ def surrogate(plan: Plan) -> Surrogate:
     args.sort(key=lambda a: (_ROLE_ORDER[a.role], a.name))
     p = make_plan(new, ReductionKind.SUM, plan.dtype, args=args, acc_dtype=plan.acc_dtype,
                   fp_contract=plan.fp_contract, sum_scheme=plan.sum_scheme, fast_math=plan.fast_math,
-                  meta={"surrogate_of": plan.key()})
+                  flush_denormals=plan.flush_denormals, meta={"surrogate_of": plan.key()})
     p = dataclasses.replace(p, batch_rank=plan.batch_rank, ranges=plan.ranges)
     return Surrogate(p, tuple((name, len(syms), src) for name, syms, src in extra), lse_plan)
 

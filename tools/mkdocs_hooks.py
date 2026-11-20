@@ -19,7 +19,7 @@ def on_page_markdown(markdown, page, config, **kwargs):
         markdown = re.sub(r"\((?:\./)?docs/", "(", markdown).replace('src="docs/', 'src="')
         for name in _ROOT_FILES:
             markdown = markdown.replace(f"({name})", f"({BLOB}{name})")
-    # Links from docs/ to the sources: ../kernox/... -> GitHub
-    markdown = re.sub(r"\(\.\./(kernox/[^)]*/)\)", lambda m: f"({TREE}{m.group(1)})", markdown)
-    markdown = re.sub(r"\(\.\./(kernox/[^)]*)\)", lambda m: f"({BLOB}{m.group(1)})", markdown)
+    # Links from docs/ to the sources: ../kernox/, ../tools/, ../tests/ -> GitHub
+    markdown = re.sub(r"\(\.\./((?:kernox|tools|tests)/[^)]*/)\)", lambda m: f"({TREE}{m.group(1)})", markdown)
+    markdown = re.sub(r"\(\.\./((?:kernox|tools|tests)/[^)]*)\)", lambda m: f"({BLOB}{m.group(1)})", markdown)
     return markdown

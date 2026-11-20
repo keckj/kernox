@@ -8,9 +8,8 @@ a first reduction.
 - Python 3.10 or later and NumPy 2.3 or later.
 - **PyTorch.** kernox works on `torch.Tensor` inputs only. There is no NumPy
   interface, and none is planned.
-- **A supported GPU**: NVIDIA (CUDA), AMD (ROCm) or Intel (XPU). kernox has no
-  native CPU backend, and none is planned. A slow CPU reference exists for
-  testing (see [Trying kernox without a GPU](#trying-kernox-without-a-gpu)).
+- **A supported GPU**: NVIDIA (CUDA), AMD (ROCm) or Intel (XPU), **or an
+  x86-64 CPU** with `g++` (see [Running on the CPU](#running-on-the-cpu)).
 
 The [Backends and hardware](backends.md) page lists the tested cards and the
 exact versions.
@@ -79,10 +78,11 @@ python -m kernox.diagnostics --check
 This prints the versions of Python, PyTorch, NumPy and symox, which GPU
 backends are available (or exactly why one is not), whether FP64 is supported,
 and where the caches live. With `--check`, it also compiles a few small
-reductions, runs them on the GPU and compares them with an FP64 reference. The
+reductions, runs them on each available device and compares them with an
+FP64 reference. The
 exit code is 1 if a check fails.
 
-Two more options: `--backend NAME` (`cuda`, `hip` or `sycl`, repeatable)
+Two more options: `--backend NAME` (`cuda`, `hip`, `sycl` or `cpu`, repeatable)
 restricts the report to some backends, and `--json` prints machine-readable
 output. The same report is available from Python as
 `kernox.diagnostics(check=False, backends=None)`, which returns a dictionary.
@@ -97,7 +97,7 @@ out[i] = Σ_j exp(-|x_i - y_j|² / (2σ²)) · w_j
 ```
 
 **1. Pick the device.** Use `"cuda"` for NVIDIA and AMD GPUs, `"xpu"` for
-Intel GPUs.
+Intel GPUs, `"cpu"` for the CPU.
 
 ```python
 import torch
@@ -154,18 +154,27 @@ passed to a `float32` reduction, tensors on two devices or a non-contiguous
 tensor raise `kernox.ValidationError` with a message naming the argument.
 kernox never converts or copies your tensors behind your back.
 
-## Trying kernox without a GPU
+## Running on the CPU
 
-The `"oracle"` backend evaluates the same reductions with plain PyTorch on the
-CPU, block by block. It is a reference used by the tests: it is slow and is
-never selected automatically. Ask for it explicitly:
+With CPU tensors, `backend="auto"` selects the native `cpu` backend: kernox
+generates C++, compiles it with `g++` and OpenMP (once, then from the disk
+cache) and runs it on `torch.get_num_threads()` threads. It needs `g++` 12 or
+later on Linux x86-64 and a CPU build of PyTorch; no other dependency.
 
 ```python
-run_cpu = kp.compile(gaussian_sum, dtype="float32", backend="oracle")
+run_cpu = kp.compile(gaussian_sum, dtype="float32")   # "auto": cpu backend
 out_cpu = run_cpu(x=X.cpu(), y=Y.cpu(), w=W.cpu(), sigma=0.5)
 ```
 
-With the default `backend="auto"`, CPU tensors raise `kernox.UnsupportedError`.
+Set the number of threads with `torch.set_num_threads`; results do not depend
+on it. On a machine with several sockets, pinning the threads
+(`OMP_PROC_BIND=close OMP_PLACES=cores`) gives steadier timings. On a
+192-core AMD EPYC node, a Gaussian sum in dimension 3 over 200,000 points
+takes 0.13 s in float32 ([measurements](backend-cpu.md#measured-performance)).
+
+The `"oracle"` backend also evaluates the reductions on the CPU, with plain
+PyTorch, block by block. It is the slow reference used by the tests and is
+never selected automatically: ask for it with `backend="oracle"`.
 
 ## Next steps
 

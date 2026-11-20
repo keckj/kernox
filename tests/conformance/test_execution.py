@@ -36,6 +36,12 @@ def _api(device):
     return torch.xpu if torch.device(device).type == "xpu" else torch.cuda
 
 
+def _require_device_queue(device, what):
+    """Streams / events / devices: GPU backends only (cpu: synchronous launch on the host)."""
+    if torch.device(device).type == "cpu":
+        pytest.skip(f"cpu backend: synchronous launch on the host, no {what}")
+
+
 def _gauss(sigma_tag=0.0):
     x, y, b, s = Vi("x", 3), Vj("y", 3), Vj("b", 2), Param("s")
     d2 = ((x - y) ** 2).sum()
@@ -80,6 +86,7 @@ def test_non_default_stream_dependencies(backend):
     a kernel launched on another stream (or unordered) would read zeros.
     """
     bname, dev = backend
+    _require_device_queue(dev, "stream")
     api = _api(dev)
     run = kp.compile(_gauss(), dtype="float32", backend=bname)
     m, n = 4096, 8192
@@ -109,6 +116,7 @@ def test_non_default_stream_dependencies(backend):
 def test_stream_dependency_on_output_consumer(backend):
     """Output consumed on a second stream after ``wait_stream``: final values."""
     bname, dev = backend
+    _require_device_queue(dev, "stream")
     api = _api(dev)
     run = kp.compile(_gauss(), dtype="float32", backend=bname)
     t = _inputs(2048, 65536, dev, seed=1)
@@ -197,6 +205,7 @@ def test_destroy_compiled_while_running(backend):
     contract only requires the enqueued kernel to stay valid.
     """
     bname, dev = backend
+    _require_device_queue(dev, "kernel running asynchronously")
     api = _api(dev)
     tag = 1e-3 * (hash(bname) % 997) / 997.0
     run = kp.compile(_gauss(tag), dtype="float32", backend=bname)
@@ -247,7 +256,9 @@ class _HostTransfers(TorchDispatchMode):
 
 def _device_activity(device):
     acts = torch.profiler.supported_activities()
-    want = {"cuda": "CUDA", "xpu": "XPU"}[torch.device(device).type]
+    want = {"cuda": "CUDA", "xpu": "XPU"}.get(torch.device(device).type)
+    if want is None:
+        return None
     return next((a for a in acts if a.name == want), None)
 
 
@@ -315,6 +326,7 @@ def _same_backend_devices(dev):
 
 def test_multi_gpu_same_backend(backend):
     bname, dev = backend
+    _require_device_queue(dev, "multiple devices")
     count = _same_backend_devices(dev)
     if count < 2:
         pytest.skip(f"{bname}: {count} visible device; multi-GPU cannot be tested on this host "

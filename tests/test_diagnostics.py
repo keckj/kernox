@@ -9,7 +9,7 @@ def test_report_is_json_and_mentions_every_backend(capsys):
     assert callable(kp.diagnostics)
     r = kp.diagnostics()
     json.dumps(r, default=str)
-    assert set(r["backends"]) == {"cuda", "hip", "sycl"}
+    assert set(r["backends"]) == {"cuda", "hip", "sycl", "cpu"}
     for b in r["backends"].values():
         assert b["available"] or b["reason"]
     assert "wisdom_dir" in r["cache"]
