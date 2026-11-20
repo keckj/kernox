@@ -701,8 +701,11 @@ def generate(plan: Plan, pair_source: str, *, tj: int = TILE_J, bi: int = ROWS,
     a("    const int64_t ngi = (M + BI - 1) / BI;")
     a(f"    const int64_t ntask = {'NW' if rng else 'NB * S * ngi'};")
     a("    if (ntask <= 0) return 0;")
-    a("    int nth = nthreads < 1 ? 1 : nthreads;")
-    a("    if (nth > ntask) nth = static_cast<int>(ntask);")
+    # Always the full team (torch.get_num_threads()), even with fewer tasks:
+    # the threads without a task leave at once. With OMP_PROC_BIND, a change of
+    # team size between two parallel regions costs libgomp milliseconds on
+    # large nodes (about 10 ms for the next PyTorch region at 192 threads).
+    a("    const int nth = nthreads < 1 ? 1 : nthreads;")
     a("    std::atomic<int64_t> next{0};")
     a("    std::atomic<int> failed{0};")
     a("    const size_t ybytes = (static_cast<size_t>(DJ) * TJ * sizeof(T) + 63) / 64 * 64;")
@@ -769,8 +772,7 @@ def generate(plan: Plan, pair_source: str, *, tj: int = TILE_J, bi: int = ROWS,
     if not rng:
         a("    if (S > 1) {")
         a("        const int64_t nm = NB * ngi;")
-        a("        int nth2 = nthreads < 1 ? 1 : nthreads;")
-        a("        if (nth2 > nm) nth2 = static_cast<int>(nm);")
+        a("        const int nth2 = nthreads < 1 ? 1 : nthreads;  // full team, see above")
         a("        std::atomic<int64_t> next2{0};")
         a("        #pragma omp parallel num_threads(nth2) if (nth2 > 1)")
         a("        {")

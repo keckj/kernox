@@ -7,12 +7,20 @@ the text of the corresponding [GitHub release](https://github.com/keckj/kernox/r
 
 ## Unreleased
 
+### Fixed
+
+- `cpu` backend: small reductions no longer slow down the PyTorch operations
+  that follow them on large nodes. The kernel now always runs with the full
+  OpenMP team of PyTorch instead of one thread per task; changing the team
+  size cost libgomp about 10 ms on 192 pinned threads. A Sinkhorn divergence
+  of remblais on 10³ points goes from 12 ms to 3.8 ms on 2 × EPYC 9654.
+
 ### Added
 
 - `tools/bench_pykeops.py`: benchmark against PyKeOps on a GPU or on the CPU,
   one fresh process and one fresh PyKeOps build folder per measurement.
 - Documentation: measurements against PyKeOps 2.3 on an RTX 5090 (× 1.5 to
-  × 2.2) and on 2 × AMD EPYC 9655 (× 7.8 to × 19); speed-ups are now given as
+  × 2.2) and on 2 × AMD EPYC 9654 (× 7.3 to × 19.6); speed-ups are now given as
   PyKeOps time / kernox time.
 
 ## 1.1.0 (2026-11-20)
