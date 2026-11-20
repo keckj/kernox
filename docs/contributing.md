@@ -34,6 +34,18 @@ mkdocs build --strict
 The home page is generated from `README.md`. The API reference is generated
 from the docstrings.
 
+## Releasing
+
+1. Set the version in `pyproject.toml`.
+2. Describe the version in a new section `## X.Y.Z (date)` at the top of
+   [`CHANGELOG.md`](https://github.com/keckj/kernox/blob/main/CHANGELOG.md):
+   what it adds, changes and fixes, and how to upgrade. That section becomes
+   the text of the GitHub release (`tools/release_notes.py`);
+   `tests/test_changelog.py` fails while it is missing.
+3. Push a tag `vX.Y.Z`. The release workflow runs the tests, checks the
+   version and the changelog, publishes to PyPI and creates the GitHub
+   release.
+
 ## Where things live
 
 | Path | Content |
