@@ -192,8 +192,10 @@ def validate_triplet(tr: Triplet, m: int, n: int, side: str) -> None:
         a, b = rows[:, 0], rows[:, 1]
         if bool(((a < 0) | (b < a) | (b > m)).any()):
             problems.append(f"row block outside [0, {m}] or reversed")
-        order = torch.argsort(a)
-        if c > 1 and bool((a[order][1:] < b[order][:-1]).any()):
+        live = b > a  # empty blocks overlap nothing
+        order = torch.argsort(a[live])
+        al, bl = a[live][order], b[live][order]
+        if al.numel() > 1 and bool((al[1:] < bl[:-1]).any()):
             problems.append("overlapping row blocks")
         if bool((slices[1:] < slices[:-1]).any()) or int(slices[0]) < 0 or int(slices[-1]) != r:
             problems.append(f"decreasing slices or last end different from {r}")
@@ -205,6 +207,8 @@ def validate_triplet(tr: Triplet, m: int, n: int, side: str) -> None:
             problems.append(f"reduced interval outside [0, {n}]")
         else:
             block = torch.repeat_interleave(torch.arange(c, device=red.device), torch.diff(slices, prepend=slices.new_zeros(1)))
+            live = d > cc  # empty intervals overlap nothing
+            block, cc, d = block[live], cc[live], d[live]
             key = block * (n + 1) + cc
             order = torch.argsort(key)
             same = block[order][1:] == block[order][:-1]

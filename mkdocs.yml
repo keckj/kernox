@@ -70,6 +70,8 @@ nav:
       - Block-sparse reductions: guides/block-sparse.md
       - Complex formulas: guides/complex.md
       - Linear systems: guides/linear-systems.md
+      - Several GPUs or nodes: guides/distributed.md
+      - Running on a cluster: guides/cluster.md
       - Half precision (FP16): guides/fp16.md
       - Faster exp and log: guides/fast-math.md
       - Autotuning and wisdom: guides/autotuning.md

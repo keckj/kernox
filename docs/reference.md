@@ -18,4 +18,6 @@ examples, start with [Concepts](concepts.md); the numerical rules are in
 
 ::: kernox.tuning
 
+::: kernox.distributed
+
 ::: kernox.errors

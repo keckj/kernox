@@ -181,6 +181,17 @@ def test_sizes_zero():
     assert torch.equal(out, torch.zeros(3, 2, dtype=F64))
 
 
+def test_validate_accepts_empty_blocks_and_intervals():
+    """Empty blocks and intervals overlap nothing (kernox.distributed clips ranges to spans)."""
+    run = kp.compile(_formulas()["sum"], dtype="float64", backend="oracle")
+    X, Y, Bw = _inputs(10, 20, integer=False)
+    r = Ranges(torch.tensor([[0, 5], [0, 0], [3, 3], [5, 10]]), torch.tensor([3, 4, 4, 5]),
+               torch.tensor([[0, 4], [4, 4], [2, 2], [0, 20], [5, 9]]))
+    dense = Ranges(torch.tensor([[0, 5], [5, 10]]), torch.tensor([1, 2]), torch.tensor([[0, 4], [5, 9]]))
+    out = run.with_ranges(r, validate=True)(x=X, y=Y, b=Bw)
+    assert torch.equal(out, run.with_ranges(dense, validate=True)(x=X, y=Y, b=Bw))
+
+
 @pytest.mark.parametrize("bad,msg", [
     (Ranges(torch.tensor([[0, 5], [3, 8]]), torch.tensor([1, 2]), torch.tensor([[0, 2], [0, 2]])), "overlapping row blocks"),
     (Ranges(torch.tensor([[0, 5]]), torch.tensor([2]), torch.tensor([[0, 4], [3, 6]])), "within a block"),

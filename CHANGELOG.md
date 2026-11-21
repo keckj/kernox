@@ -5,6 +5,36 @@ All notable changes to kernox. Versions follow
 without breaking code written for the previous one. Each section below is also
 the text of the corresponding [GitHub release](https://github.com/keckj/kernox/releases).
 
+## 1.2.0 (2026-11-21)
+
+One reduction can now run on several GPUs or nodes: `kernox.distributed`
+splits it across the processes of a `torch.distributed` group, from
+`torchrun`, `mpirun`, `srun` or OAR, with a step-by-step guide for clusters.
+
+### Added
+
+- `kernox.distributed`: one reduction split across the processes of a
+  `torch.distributed` group, NCCL on GPUs or Gloo on CPUs. Every process passes
+  the same inputs and receives the full result, with autograd.
+  `split="output"` shares the output rows; `split="reduced"` shares the
+  reduced axis and merges the partial results of every reduction with the
+  semantics of a single call. Block-sparse ranges are split by number of
+  pairs. `init_from_env()` starts the group under `torchrun`, `mpirun`, `srun`
+  or OAR. See the guides [Several GPUs or nodes](https://keckj.github.io/kernox/guides/distributed/)
+  and [Running on a cluster](https://keckj.github.io/kernox/guides/cluster/).
+- `tools/bench_distributed.py`: strong scaling of a dense and a block-sparse
+  Gaussian kernel product, forward and backward; the block-sparse case keeps
+  the 27 neighbouring cells of a grid and runs up to 10⁸ points.
+  Measured on 8 AMD MI210 (2 nodes): × 8.0 for a dense product of 10⁷
+  points, × 7.7 for a block-sparse one of 10⁸ points; × 7.2 on 8 CPU nodes
+  (2 × EPYC 9654) for a dense product of 3 × 10⁶ points. See
+  [Scaling](https://keckj.github.io/kernox/guides/distributed/#scaling).
+
+### Fixed
+
+- `with_ranges(..., validate=True)` no longer reports empty row blocks or
+  empty intervals as overlapping their neighbours.
+
 ## 1.1.1 (2026-11-21)
 
 A performance fix for the `cpu` backend on large nodes, and measurements

@@ -9,7 +9,8 @@ neighbours, log-sum-exp, softmax-weighted sums, ...) without ever building the
 M×N matrix. You write the formula with symbolic variables indexed by `i` and
 `j`, and kernox turns it into a single fused GPU kernel for NVIDIA (CUDA),
 AMD (ROCm/HIP) or Intel (SYCL) cards, or into vectorized multithreaded C++ on
-x86-64 CPUs. Support for other accelerators may be added later.
+x86-64 CPUs. Support for other architectures and accelerators may be added
+later.
 
 kernox is a successor to [PyKeOps](https://github.com/getkeops/keops), built on
 the [symox](https://github.com/keckj/symox) symbolic engine. It works with
@@ -24,6 +25,8 @@ PyTorch tensors.
   can be reduced over millions of points.
 - **Three GPU vendors and the CPU.** One formula runs on NVIDIA, AMD and Intel
   GPUs, and on x86-64 CPUs (OpenMP, SIMD).
+- **Several GPUs or nodes.** `kernox.distributed` splits a reduction across
+  the processes of a `torch.distributed` group (NCCL, Gloo), with gradients.
 - **Formulas, not strings.** Formulas are Python expressions. Derivatives are
   computed symbolically and run as fused reductions too.
 - **Predictable numerics.** IEEE arithmetic by default, an explicit opt-in for
@@ -120,7 +123,8 @@ Details, thread scaling and larger sizes: [CPU backend](docs/backend-cpu.md).
   [nearest neighbours](docs/guides/nearest-neighbours.md),
   [log-sum-exp and Sinkhorn](docs/guides/logsumexp.md),
   [gradients](docs/guides/gradients.md),
-  [linear systems](docs/guides/linear-systems.md) and more.
+  [linear systems](docs/guides/linear-systems.md),
+  [several GPUs or nodes](docs/guides/distributed.md) and more.
 - [Coming from PyKeOps](docs/pykeops.md): a migration guide.
 - [Backends and hardware](docs/backends.md): what runs where, and the known
   limitations.
