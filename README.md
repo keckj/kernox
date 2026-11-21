@@ -82,31 +82,18 @@ every workload or card. A case where kernox is slower than PyKeOps is treated
 as a bug. The times and how to reproduce them are in
 [Coming from PyKeOps](docs/pykeops.md#performance).
 
-Against PyTorch computing the distance matrix by blocks, on the same CPU
-node (192 threads, FP32, M = N = 20,000):
-
-| Case | kernox | PyTorch | Speed-up |
-| --- | --- | --- | --- |
-| Gaussian kernel sum, D = 3 | 2.1 ms | 242 ms | × 113 |
-| Log-sum-exp, D = 3 | 1.7 ms | 157 ms | × 91 |
-| 10 nearest neighbours, D = 3 | 1.4 ms | 113 ms | × 79 |
-| Gaussian kernel sum, D = 16 | 3.4 ms | 170 ms | × 50 |
-
-Details, thread scaling and larger sizes: [CPU backend](docs/backend-cpu.md).
+On the same CPU node, kernox is 50 to 113 times faster than PyTorch computing
+the distance matrix by blocks (FP32, M = N = 20,000). Details, thread scaling
+and larger sizes: [CPU backend](docs/backend-cpu.md).
 
 ### Several GPUs or nodes
 
 Strong scaling of a Gaussian kernel product in D = 3, FP32, forward and
 backward, split with `kernox.distributed`. The block-sparse case keeps, for
 each point, the 27 neighbouring cells of a grid (2.7 × 10¹² pairs for 10⁸
-points):
+points). Speed-up = time on one device / time on P devices:
 
-| Case | 1 device | 8 devices | Speed-up |
-| --- | --- | --- | --- |
-| Dense, N = 10⁷, AMD MI210 (2 nodes of 4) | 756 s | 94.6 s | × 8.0 |
-| Block-sparse, N = 10⁸, AMD MI210 (2 nodes of 4) | 21.4 s | 2.79 s | × 7.7 |
-| Dense, N = 3 × 10⁶, CPU nodes (2 × EPYC 9654) | 94.9 s | 13.2 s | × 7.2 |
-| Block-sparse, N = 10⁸, CPU nodes (2 × EPYC 9654) | 28.0 s | 5.40 s | × 5.2 |
+![Strong scaling of kernox.distributed: speed-up against the number of devices](docs/images/scaling.svg)
 
 All the measurements, and when splitting pays:
 [Several GPUs or nodes](docs/guides/distributed.md#scaling).
