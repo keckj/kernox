@@ -9,8 +9,9 @@ neighbours, log-sum-exp, softmax-weighted sums, ...) without ever building the
 M×N matrix. You write the formula with symbolic variables indexed by `i` and
 `j`, and kernox turns it into a single fused GPU kernel for NVIDIA (CUDA),
 AMD (ROCm/HIP) or Intel (SYCL) cards, or into vectorized multithreaded C++ on
-x86-64 CPUs. Support for other architectures and accelerators may be added
-later.
+x86-64 CPUs. One reduction can also be split across several GPUs or nodes,
+from a laptop script to a cluster job. Support for other architectures and
+accelerators may be added later.
 
 kernox is a successor to [PyKeOps](https://github.com/getkeops/keops), built on
 the [symox](https://github.com/keckj/symox) symbolic engine. It works with
@@ -26,7 +27,9 @@ PyTorch tensors.
 - **Three GPU vendors and the CPU.** One formula runs on NVIDIA, AMD and Intel
   GPUs, and on x86-64 CPUs (OpenMP, SIMD).
 - **Several GPUs or nodes.** `kernox.distributed` splits a reduction across
-  the processes of a `torch.distributed` group (NCCL, Gloo), with gradients.
+  the processes of a `torch.distributed` group (NCCL between GPUs, Gloo
+  between CPU nodes), with gradients. The same script runs alone or under
+  `torchrun`, `mpirun` or `srun`, without `mpi4py`.
 - **Formulas, not strings.** Formulas are Python expressions. Derivatives are
   computed symbolically and run as fused reductions too.
 - **Predictable numerics.** IEEE arithmetic by default, an explicit opt-in for
@@ -113,6 +116,23 @@ threads, FP32, M = N = 20,000):
 
 Details, thread scaling and larger sizes: [CPU backend](docs/backend-cpu.md).
 
+### Several GPUs or nodes
+
+Strong scaling of a Gaussian kernel product in D = 3, FP32, forward and
+backward, split with `kernox.distributed`. The block-sparse case keeps, for
+each point, the 27 neighbouring cells of a grid (2.7 × 10¹² pairs for 10⁸
+points):
+
+| Case | 1 device | 8 devices | Speed-up |
+| --- | --- | --- | --- |
+| Dense, N = 10⁷, AMD MI210 (2 nodes of 4) | 756 s | 94.6 s | × 8.0 |
+| Block-sparse, N = 10⁸, AMD MI210 (2 nodes of 4) | 21.4 s | 2.79 s | × 7.7 |
+| Dense, N = 3 × 10⁶, CPU nodes (2 × EPYC 9654) | 94.9 s | 13.2 s | × 7.2 |
+| Block-sparse, N = 10⁸, CPU nodes (2 × EPYC 9654) | 28.0 s | 5.40 s | × 5.2 |
+
+All the measurements, and when splitting pays:
+[Several GPUs or nodes](docs/guides/distributed.md#scaling).
+
 ## Learn more
 
 - [Getting started](docs/getting-started.md): installation and a first
@@ -125,6 +145,8 @@ Details, thread scaling and larger sizes: [CPU backend](docs/backend-cpu.md).
   [gradients](docs/guides/gradients.md),
   [linear systems](docs/guides/linear-systems.md),
   [several GPUs or nodes](docs/guides/distributed.md) and more.
+- [Running on a cluster](docs/guides/cluster.md): a script tested on a
+  laptop, then launched with `torchrun`, SLURM, OAR or `mpirun`, step by step.
 - [Coming from PyKeOps](docs/pykeops.md): a migration guide.
 - [Backends and hardware](docs/backends.md): what runs where, and the known
   limitations.
