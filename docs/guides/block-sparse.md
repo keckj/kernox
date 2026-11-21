@@ -5,6 +5,13 @@ bandwidth, neighbours within a radius), you can skip whole blocks of pairs.
 Sort the points into clusters, decide which pairs of clusters interact, and
 kernox only visits those. This is the `ranges` mechanism of PyKeOps.
 
+![Block-sparse ranges: kept blocks of clusters and the tensors that describe them](../images/block-sparse.svg)
+
+Once the points are sorted by cluster, the pairs form a grid of blocks, one
+per pair of clusters. kernox computes the kept blocks and skips the others.
+Each kept block is an interval of `j` for a block of rows `i`; the tensors on
+the right are detailed in [Building ranges by hand](#building-ranges-by-hand).
+
 ## Step by step
 
 ```python

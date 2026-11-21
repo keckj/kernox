@@ -59,6 +59,8 @@ anything runs. kernox never falls back to another backend or to the CPU.
 
 ## How each backend works
 
+![How kernox turns a formula into a kernel: symox, a backend compiler, a cache, a launch](images/pipeline.svg)
+
 - **`cuda`** generates CUDA C++ source, compiles it in-process with NVRTC and
   launches it through the CUDA driver API on the current PyTorch stream.
 - **`hip`** generates HIP source and compiles it with the hipRTC library that

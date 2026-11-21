@@ -1,0 +1,151 @@
+<svg class="kxfig" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 390" width="660" height="390" role="img" aria-label="A reduction over j: the M by N matrix is computed tile by tile and never stored">
+<title>A reduction over j: the M by N matrix is computed tile by tile and never stored</title>
+<style>.kxfig{--kx-ink:#1f2937;--kx-ink2:#556070;--kx-line:#9aa3af;--kx-grid:#e3e6ea;--kx-panel:#f4f5f7;--kx-bg:#ffffff;--kx-c1:#00897b;--kx-c1l:#cfeae6;--kx-c2:#e64a19;--kx-c2l:#fbd9cc;--kx-c3:#5c6bc0;--kx-c3l:#d9ddf2;--kx-c4:#b07d00;--kx-c4l:#f1e2bd}@media (prefers-color-scheme: dark){.kxfig{--kx-ink:#e3e6eb;--kx-ink2:#a3aab5;--kx-line:#6b7383;--kx-grid:#343947;--kx-panel:#262a34;--kx-bg:#1e2129;--kx-c1:#26a69a;--kx-c1l:#1d4440;--kx-c2:#e55a2b;--kx-c2l:#53291c;--kx-c3:#7c8ce8;--kx-c3l:#2d3360;--kx-c4:#c08a10;--kx-c4l:#4a3a14}}</style>
+<text x="318" y="38" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;fill:var(--kx-ink2)'>y<tspan dy="3.9" style="font-size:9.4px">j</tspan><tspan dy="-3.9">  (Vj, N rows)</tspan></text>
+<rect x="152" y="52" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="180" y="52" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="208" y="52" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="236" y="52" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="264" y="52" width="24" height="24" rx="3" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:1"/>
+<rect x="292" y="52" width="24" height="24" rx="3" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:1"/>
+<rect x="320" y="52" width="24" height="24" rx="3" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:1"/>
+<rect x="348" y="52" width="24" height="24" rx="3" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:1"/>
+<rect x="376" y="52" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="404" y="52" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="432" y="52" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="460" y="52" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<text x="104" y="86" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;fill:var(--kx-ink2)'>x<tspan dy="3.9" style="font-size:9.4px">i</tspan><tspan dy="-3.9">  (Vi, M rows)</tspan></text>
+<rect x="92" y="102" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="92" y="130" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="92" y="158" width="24" height="24" rx="3" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:1"/>
+<rect x="92" y="186" width="24" height="24" rx="3" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:1"/>
+<rect x="92" y="214" width="24" height="24" rx="3" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:1"/>
+<rect x="92" y="242" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="92" y="270" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="92" y="298" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="152" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="180" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="208" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="236" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="264" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="292" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="320" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="348" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="376" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="404" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="432" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="460" y="102" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="152" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="180" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="208" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="236" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="264" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="292" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="320" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="348" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="376" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="404" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="432" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="460" y="130" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="152" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="180" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="208" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="236" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="264" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="292" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="320" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="348" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="376" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="404" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="432" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="460" y="158" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="152" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="180" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="208" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="236" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="264" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="292" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="320" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="348" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="376" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="404" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="432" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="460" y="186" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="152" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="180" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="208" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="236" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="264" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="292" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="320" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="348" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="376" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="404" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="432" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="460" y="214" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="152" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="180" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="208" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="236" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="264" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="292" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="320" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="348" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="376" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="404" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="432" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="460" y="242" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="152" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="180" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="208" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="236" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="264" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="292" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="320" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="348" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="376" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="404" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="432" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="460" y="270" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="152" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="180" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="208" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="236" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="264" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="292" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="320" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="348" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="376" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="404" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="432" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="460" y="298" width="24" height="24" rx="2" style="fill:none;stroke:var(--kx-grid);stroke-width:1;stroke-dasharray:3 2"/>
+<rect x="262" y="156" width="112" height="84" rx="4" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:2"/>
+<text x="276" y="174" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="304" y="174" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="332" y="174" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="360" y="174" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="276" y="202" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="304" y="202" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="332" y="202" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="360" y="202" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="276" y="230" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="304" y="230" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="332" y="230" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="360" y="230" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;font-style:italic;fill:var(--kx-c1)'>f</text>
+<text x="318" y="346" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;fill:var(--kx-ink2)'>f(x<tspan dy="3.9" style="font-size:9.4px">i</tspan><tspan dy="-3.9">, y</tspan><tspan dy="3.9" style="font-size:9.4px">j</tspan><tspan dy="-3.9">) for every pair: never stored</tspan></text>
+<text x="318" y="149" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;fill:var(--kx-c1)'>one tile, in registers</text>
+<line x1="380" y1="198" x2="543" y2="198" style="fill:none;stroke:var(--kx-c2);stroke-width:2"/>
+<polygon points="550.0,198.0 543.0,201.5 543.0,194.5" style="fill:var(--kx-c2);stroke:none"/>
+<text x="467" y="188" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;fill:var(--kx-c2)'>reduce over j</text>
+<text x="572" y="86" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;fill:var(--kx-ink2)'>result</text>
+<rect x="560" y="102" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="560" y="130" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="560" y="158" width="24" height="24" rx="3" style="fill:var(--kx-c2l);stroke:var(--kx-c2);stroke-width:1"/>
+<rect x="560" y="186" width="24" height="24" rx="3" style="fill:var(--kx-c2l);stroke:var(--kx-c2);stroke-width:1"/>
+<rect x="560" y="214" width="24" height="24" rx="3" style="fill:var(--kx-c2l);stroke:var(--kx-c2);stroke-width:1"/>
+<rect x="560" y="242" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="560" y="270" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<rect x="560" y="298" width="24" height="24" rx="3" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1"/>
+<text x="572" y="346" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;fill:var(--kx-ink2)'>M rows</text>
+<text x="330" y="375" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;fill:var(--kx-ink)'>Memory: the inputs and the result only, linear in M + N.</text>
+</svg>

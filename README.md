@@ -69,6 +69,8 @@ The goal of kernox is to be **at least as fast as PyKeOps** wherever PyKeOps
 runs, and to bring the same performance to AMD and Intel GPUs, which PyKeOps
 does not support. In every case measured so far, kernox is faster.
 
+![Speed-up of kernox over PyKeOps 2.3, M = N = 10⁵, FP32](docs/images/speedup-pykeops.svg)
+
 M = N = 10⁵, FP32, on an RTX 5090; kernox with `fast_math=True`, PyKeOps 2.3
 through `Genred` in its best configuration (each kernel compiled alone in a
 fresh process); median of three runs. The last column is the speed-up of

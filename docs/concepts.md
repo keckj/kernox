@@ -5,6 +5,12 @@ tensors, a **formula** that combines them for one pair `(i, j)`, and a
 **reduction** that combines the formula over all `j` (or all `i`). You
 **compile** the reduction once and call it with tensors as often as you like.
 
+![A reduction over j: the M by N matrix is computed tile by tile and never stored](images/reduction.svg)
+
+The formula is evaluated for each pair `(i, j)` while the reduction runs, one
+tile of pairs at a time: the M × N matrix of its values is never stored, and
+memory stays linear in M + N.
+
 ```python
 import torch
 import kernox as kp

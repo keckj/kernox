@@ -4,6 +4,8 @@ This page takes a kernox script from a laptop to a batch job on several GPUs
 or CPU nodes, step by step. [Several GPUs or nodes](distributed.md) explains
 what `kd.reduce` splits and how.
 
+![A launcher starts one process per GPU; init_from_env joins them into one group](../images/cluster.svg)
+
 kernox does not need `mpi4py` or an MPI build of PyTorch: `mpirun`, `srun`
 or `torchrun` only start the processes, and they talk to each other through
 `torch.distributed` (NCCL between GPUs, Gloo over TCP between CPU nodes).

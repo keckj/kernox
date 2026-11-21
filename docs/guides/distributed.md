@@ -63,6 +63,8 @@ If your program already calls `torch.distributed.init_process_group`, skip
 
 ## Two ways to split
 
+![The two ways kd.reduce splits a reduction across four processes](../images/distributed-split.svg)
+
 `split="output"` (the default): each process owns a contiguous span of the
 output rows, computes them exactly, and an `all_gather` assembles the result.
 The communication is the size of the output.
@@ -121,6 +123,11 @@ to `x`), median time in seconds. *Dense* computes the N² pairs. *Block-sparse*
 sorts the points on a grid of about 1,000 points per cell and keeps, for each
 cell, its 27 neighbours: about 27,000 pairs per point (2.7 × 10¹² pairs for
 10⁸ points).
+
+![Strong scaling of kernox.distributed: speed-up against the number of devices](../images/scaling.svg)
+
+Speed-up = time on one device / time on P devices; the times are in the
+tables below.
 
 AMD Instinct MI210, one process per GPU, 4 GPUs per node, RCCL:
 

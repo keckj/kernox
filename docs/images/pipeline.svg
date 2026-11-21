@@ -1,0 +1,50 @@
+<svg class="kxfig" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 270" width="740" height="270" role="img" aria-label="How kernox turns a formula into a kernel: symox, a backend compiler, a cache, a launch">
+<title>How kernox turns a formula into a kernel: symox, a backend compiler, a cache, a launch</title>
+<style>.kxfig{--kx-ink:#1f2937;--kx-ink2:#556070;--kx-line:#9aa3af;--kx-grid:#e3e6ea;--kx-panel:#f4f5f7;--kx-bg:#ffffff;--kx-c1:#00897b;--kx-c1l:#cfeae6;--kx-c2:#e64a19;--kx-c2l:#fbd9cc;--kx-c3:#5c6bc0;--kx-c3l:#d9ddf2;--kx-c4:#b07d00;--kx-c4l:#f1e2bd}@media (prefers-color-scheme: dark){.kxfig{--kx-ink:#e3e6eb;--kx-ink2:#a3aab5;--kx-line:#6b7383;--kx-grid:#343947;--kx-panel:#262a34;--kx-bg:#1e2129;--kx-c1:#26a69a;--kx-c1l:#1d4440;--kx-c2:#e55a2b;--kx-c2l:#53291c;--kx-c3:#7c8ce8;--kx-c3l:#2d3360;--kx-c4:#c08a10;--kx-c4l:#4a3a14}}</style>
+<rect x="10" y="105" width="120" height="56" rx="8" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1.5"/>
+<text x="70" y="130" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>formula</text>
+<text x="70" y="148" text-anchor="middle" style='font-family:var(--md-code-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);font-size:11px;fill:var(--kx-ink2)'>kp.compile(...)</text>
+<line x1="132" y1="133" x2="149" y2="133" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.5"/>
+<polygon points="156.0,133.0 149.0,136.5 149.0,129.5" style="fill:var(--kx-ink2);stroke:none"/>
+<rect x="158" y="95" width="132" height="76" rx="8" style="fill:var(--kx-c1l);stroke:var(--kx-c1);stroke-width:1.5"/>
+<text x="224" y="124" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>symox</text>
+<text x="224" y="146" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>simplify, derive,</text>
+<text x="224" y="161" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>generate source</text>
+<line x1="292" y1="133" x2="314.47" y2="47.8016" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.2"/>
+<polygon points="316.0,42.0 317.4,48.6 311.6,47.0" style="fill:var(--kx-ink2);stroke:none"/>
+<rect x="318" y="18" width="170" height="48" rx="8" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1.5"/>
+<text x="403" y="39" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>CUDA</text>
+<text x="403" y="57" text-anchor="middle" style='font-family:var(--md-code-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);font-size:11px;fill:var(--kx-ink2)'>NVRTC</text>
+<line x1="490" y1="42" x2="512.47" y2="127.198" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.2"/>
+<polygon points="514.0,133.0 509.6,128.0 515.4,126.4" style="fill:var(--kx-ink2);stroke:none"/>
+<line x1="292" y1="133" x2="312.327" y2="106.744" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.2"/>
+<polygon points="316.0,102.0 314.7,108.6 310.0,104.9" style="fill:var(--kx-ink2);stroke:none"/>
+<rect x="318" y="78" width="170" height="48" rx="8" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1.5"/>
+<text x="403" y="99" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>HIP</text>
+<text x="403" y="117" text-anchor="middle" style='font-family:var(--md-code-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);font-size:11px;fill:var(--kx-ink2)'>hipRTC</text>
+<line x1="490" y1="102" x2="510.327" y2="128.256" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.2"/>
+<polygon points="514.0,133.0 508.0,130.1 512.7,126.4" style="fill:var(--kx-ink2);stroke:none"/>
+<line x1="292" y1="133" x2="312.175" y2="157.378" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.2"/>
+<polygon points="316.0,162.0 309.9,159.3 314.5,155.5" style="fill:var(--kx-ink2);stroke:none"/>
+<rect x="318" y="138" width="170" height="48" rx="8" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1.5"/>
+<text x="403" y="159" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>SYCL</text>
+<text x="403" y="177" text-anchor="middle" style='font-family:var(--md-code-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);font-size:11px;fill:var(--kx-ink2)'>icpx</text>
+<line x1="490" y1="162" x2="510.175" y2="137.622" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.2"/>
+<polygon points="514.0,133.0 512.5,139.5 507.9,135.7" style="fill:var(--kx-ink2);stroke:none"/>
+<line x1="292" y1="133" x2="314.438" y2="216.207" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.2"/>
+<polygon points="316.0,222.0 311.5,217.0 317.3,215.4" style="fill:var(--kx-ink2);stroke:none"/>
+<rect x="318" y="198" width="170" height="48" rx="8" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1.5"/>
+<text x="403" y="219" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>C++ / OpenMP</text>
+<text x="403" y="237" text-anchor="middle" style='font-family:var(--md-code-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);font-size:11px;fill:var(--kx-ink2)'>g++ -O3 -march=native</text>
+<line x1="490" y1="222" x2="512.438" y2="138.793" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.2"/>
+<polygon points="514.0,133.0 515.3,139.6 509.5,138.0" style="fill:var(--kx-ink2);stroke:none"/>
+<rect x="516" y="105" width="98" height="56" rx="8" style="fill:var(--kx-panel);stroke:var(--kx-line);stroke-width:1.5"/>
+<text x="565" y="130" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>disk cache</text>
+<text x="565" y="148" text-anchor="middle" style='font-family:var(--md-code-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);font-size:11px;fill:var(--kx-ink2)'>~/.cache/kernox</text>
+<line x1="616" y1="133" x2="629" y2="133" style="fill:none;stroke:var(--kx-ink2);stroke-width:1.5"/>
+<polygon points="636.0,133.0 629.0,136.5 629.0,129.5" style="fill:var(--kx-ink2);stroke:none"/>
+<rect x="638" y="105" width="96" height="56" rx="8" style="fill:var(--kx-c2l);stroke:var(--kx-c2);stroke-width:1.5"/>
+<text x="686" y="130" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>launch</text>
+<text x="686" y="148" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>PyTorch stream</text>
+<text x="370" y="262" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;fill:var(--kx-ink2)'>Compiled once per formula, dtype and device; every later call only launches.</text>
+</svg>

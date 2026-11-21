@@ -1,0 +1,93 @@
+<svg class="kxfig" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 978 352" width="978" height="352" role="img" aria-label="Strong scaling of kernox.distributed: speed-up against the number of devices">
+<title>Strong scaling of kernox.distributed: speed-up against the number of devices</title>
+<style>.kxfig{--kx-ink:#1f2937;--kx-ink2:#556070;--kx-line:#9aa3af;--kx-grid:#e3e6ea;--kx-panel:#f4f5f7;--kx-bg:#ffffff;--kx-c1:#00897b;--kx-c1l:#cfeae6;--kx-c2:#e64a19;--kx-c2l:#fbd9cc;--kx-c3:#5c6bc0;--kx-c3l:#d9ddf2;--kx-c4:#b07d00;--kx-c4l:#f1e2bd}@media (prefers-color-scheme: dark){.kxfig{--kx-ink:#e3e6eb;--kx-ink2:#a3aab5;--kx-line:#6b7383;--kx-grid:#343947;--kx-panel:#262a34;--kx-bg:#1e2129;--kx-c1:#26a69a;--kx-c1l:#1d4440;--kx-c2:#e55a2b;--kx-c2l:#53291c;--kx-c3:#7c8ce8;--kx-c3l:#2d3360;--kx-c4:#c08a10;--kx-c4l:#4a3a14}}</style>
+<text x="58" y="32" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>AMD MI210 (4 per node, RCCL)</text>
+<line x1="58" y1="282" x2="338" y2="282" style="fill:none;stroke:var(--kx-grid);stroke-width:1"/>
+<text x="50" y="286" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>1</text>
+<line x1="58" y1="215.773" x2="338" y2="215.773" style="fill:none;stroke:var(--kx-grid);stroke-width:1"/>
+<text x="50" y="219.773" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>2</text>
+<line x1="58" y1="149.547" x2="338" y2="149.547" style="fill:none;stroke:var(--kx-grid);stroke-width:1"/>
+<text x="50" y="153.547" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>4</text>
+<line x1="58" y1="83.3202" x2="338" y2="83.3202" style="fill:none;stroke:var(--kx-grid);stroke-width:1"/>
+<text x="50" y="87.3202" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>8</text>
+<text x="58" y="300" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>1</text>
+<text x="151.333" y="300" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>2</text>
+<text x="244.667" y="300" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>4</text>
+<text x="338" y="300" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>8</text>
+<text x="198" y="322" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;fill:var(--kx-ink2)'>GPUs or nodes</text>
+<text x="22" y="172" text-anchor="middle" transform="rotate(-90 22 172)" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;fill:var(--kx-ink2)'>speed-up</text>
+<line x1="58" y1="282" x2="338" y2="83.3202" style="fill:none;stroke:var(--kx-line);stroke-width:1.5;stroke-dasharray:5 4"/>
+<text x="188.64" y="179.625" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>ideal</text>
+<path d="M58.0,282.0 L151.3,215.8 L244.7,157.3 L338.0,83.4" style="fill:none;stroke:var(--kx-c1);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+<circle cx="58.0" cy="282.0" r="4.5" style="fill:var(--kx-c1);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="151.3" cy="215.8" r="4.5" style="fill:var(--kx-c1);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="244.7" cy="157.3" r="4.5" style="fill:var(--kx-c1);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="338.0" cy="83.4" r="4.5" style="fill:var(--kx-c1);stroke:var(--kx-bg);stroke-width:2"/>
+<path d="M58.0,282.0 L151.3,204.9 L244.7,143.3 L338.0,87.3" style="fill:none;stroke:var(--kx-c2);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+<circle cx="58.0" cy="282.0" r="4.5" style="fill:var(--kx-c2);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="151.3" cy="204.9" r="4.5" style="fill:var(--kx-c2);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="244.7" cy="143.3" r="4.5" style="fill:var(--kx-c2);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="338.0" cy="87.3" r="4.5" style="fill:var(--kx-c2);stroke:var(--kx-bg);stroke-width:2"/>
+<path d="M58.0,282.0 L151.3,204.6 L244.7,140.9 L338.0,95.4" style="fill:none;stroke:var(--kx-c3);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+<circle cx="58.0" cy="282.0" r="4.5" style="fill:var(--kx-c3);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="151.3" cy="204.6" r="4.5" style="fill:var(--kx-c3);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="244.7" cy="140.9" r="4.5" style="fill:var(--kx-c3);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="338.0" cy="95.4" r="4.5" style="fill:var(--kx-c3);stroke:var(--kx-bg);stroke-width:2"/>
+<path d="M58.0,282.0 L151.3,216.4 L244.7,179.9 L338.0,156.9" style="fill:none;stroke:var(--kx-c4);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+<circle cx="58.0" cy="282.0" r="4.5" style="fill:var(--kx-c4);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="151.3" cy="216.4" r="4.5" style="fill:var(--kx-c4);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="244.7" cy="179.9" r="4.5" style="fill:var(--kx-c4);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="338.0" cy="156.9" r="4.5" style="fill:var(--kx-c4);stroke:var(--kx-bg);stroke-width:2"/>
+<text x="350" y="83.4213" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink)'>Dense, N = 10⁷</text>
+<text x="350" y="97.4213" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;font-weight:600;fill:var(--kx-c1)'>× 8.0</text>
+<text x="350" y="113.421" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink)'>Block-sparse, N = 10⁸</text>
+<text x="350" y="127.421" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;font-weight:600;fill:var(--kx-c2)'>× 7.7</text>
+<text x="350" y="143.421" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink)'>Dense, N = 10⁶</text>
+<text x="350" y="157.421" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;font-weight:600;fill:var(--kx-c3)'>× 7.1</text>
+<text x="350" y="173.421" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink)'>Block-sparse, N = 10⁷</text>
+<text x="350" y="187.421" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;font-weight:600;fill:var(--kx-c4)'>× 3.7</text>
+<text x="528" y="32" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:13px;font-weight:600;fill:var(--kx-ink)'>CPU nodes, 2 × EPYC 9654 (Gloo)</text>
+<line x1="528" y1="282" x2="808" y2="282" style="fill:none;stroke:var(--kx-grid);stroke-width:1"/>
+<text x="520" y="286" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>1</text>
+<line x1="528" y1="215.773" x2="808" y2="215.773" style="fill:none;stroke:var(--kx-grid);stroke-width:1"/>
+<text x="520" y="219.773" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>2</text>
+<line x1="528" y1="149.547" x2="808" y2="149.547" style="fill:none;stroke:var(--kx-grid);stroke-width:1"/>
+<text x="520" y="153.547" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>4</text>
+<line x1="528" y1="83.3202" x2="808" y2="83.3202" style="fill:none;stroke:var(--kx-grid);stroke-width:1"/>
+<text x="520" y="87.3202" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>8</text>
+<text x="528" y="300" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>1</text>
+<text x="621.333" y="300" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>2</text>
+<text x="714.667" y="300" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>4</text>
+<text x="808" y="300" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>8</text>
+<text x="668" y="322" text-anchor="middle" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:12px;fill:var(--kx-ink2)'>GPUs or nodes</text>
+<line x1="528" y1="282" x2="808" y2="83.3202" style="fill:none;stroke:var(--kx-line);stroke-width:1.5;stroke-dasharray:5 4"/>
+<text x="658.64" y="179.625" text-anchor="end" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink2)'>ideal</text>
+<path d="M528.0,282.0 L621.3,216.7 L714.7,151.0 L808.0,93.5" style="fill:none;stroke:var(--kx-c1);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+<circle cx="528.0" cy="282.0" r="4.5" style="fill:var(--kx-c1);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="621.3" cy="216.7" r="4.5" style="fill:var(--kx-c1);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="714.7" cy="151.0" r="4.5" style="fill:var(--kx-c1);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="808.0" cy="93.5" r="4.5" style="fill:var(--kx-c1);stroke:var(--kx-bg);stroke-width:2"/>
+<path d="M528.0,282.0 L621.3,222.4 L714.7,165.5 L808.0,124.8" style="fill:none;stroke:var(--kx-c2);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+<circle cx="528.0" cy="282.0" r="4.5" style="fill:var(--kx-c2);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="621.3" cy="222.4" r="4.5" style="fill:var(--kx-c2);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="714.7" cy="165.5" r="4.5" style="fill:var(--kx-c2);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="808.0" cy="124.8" r="4.5" style="fill:var(--kx-c2);stroke:var(--kx-bg);stroke-width:2"/>
+<path d="M528.0,282.0 L621.3,217.1 L714.7,152.6 L808.0,97.9" style="fill:none;stroke:var(--kx-c3);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+<circle cx="528.0" cy="282.0" r="4.5" style="fill:var(--kx-c3);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="621.3" cy="217.1" r="4.5" style="fill:var(--kx-c3);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="714.7" cy="152.6" r="4.5" style="fill:var(--kx-c3);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="808.0" cy="97.9" r="4.5" style="fill:var(--kx-c3);stroke:var(--kx-bg);stroke-width:2"/>
+<path d="M528.0,282.0 L621.3,224.7 L714.7,170.6 L808.0,136.1" style="fill:none;stroke:var(--kx-c4);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+<circle cx="528.0" cy="282.0" r="4.5" style="fill:var(--kx-c4);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="621.3" cy="224.7" r="4.5" style="fill:var(--kx-c4);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="714.7" cy="170.6" r="4.5" style="fill:var(--kx-c4);stroke:var(--kx-bg);stroke-width:2"/>
+<circle cx="808.0" cy="136.1" r="4.5" style="fill:var(--kx-c4);stroke:var(--kx-bg);stroke-width:2"/>
+<text x="820" y="93.5277" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink)'>Dense, N = 3 × 10⁶</text>
+<text x="820" y="107.528" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;font-weight:600;fill:var(--kx-c1)'>× 7.2</text>
+<text x="820" y="123.528" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink)'>Dense, N = 10⁶</text>
+<text x="820" y="137.528" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;font-weight:600;fill:var(--kx-c3)'>× 6.9</text>
+<text x="820" y="153.528" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink)'>Block-sparse, N = 10⁸</text>
+<text x="820" y="167.528" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;font-weight:600;fill:var(--kx-c2)'>× 5.2</text>
+<text x="820" y="183.528" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;fill:var(--kx-ink)'>Block-sparse, N = 10⁷</text>
+<text x="820" y="197.528" text-anchor="start" style='font-family:var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);font-size:11px;font-weight:600;fill:var(--kx-c4)'>× 4.6</text>
+</svg>

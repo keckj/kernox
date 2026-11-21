@@ -3,6 +3,8 @@
 - The home page (docs/index.md) is README.md, with its links rewritten:
   ``docs/x.md`` becomes ``x.md`` and ``docs/images/`` becomes ``images/``.
 - Links to files outside docs/ (licenses, sources) point to GitHub.
+- A figure of tools/make_figures.py alone on its line, ``![alt](images/x.svg)``,
+  is inlined, so that its colours follow the theme toggle (figures.css).
 """
 
 import re
@@ -11,6 +13,16 @@ from pathlib import Path
 BLOB = "https://github.com/keckj/kernox/blob/main/"
 TREE = "https://github.com/keckj/kernox/tree/main/"
 _ROOT_FILES = ("LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY.md")
+_FIGURE = re.compile(r"^!\[[^\]]*\]\((?:\.\./)*images/([\w-]+\.svg)\)[ \t]*$", re.M)
+
+
+def _inline_figures(markdown, docs_dir):
+    def inline(m):
+        svg = (Path(docs_dir) / "images" / m.group(1)).read_text().strip()
+        if 'class="kxfig"' not in svg:
+            return m.group(0)
+        return f'<figure class="kxfig-wrap">\n{svg}\n</figure>'
+    return _FIGURE.sub(inline, markdown)
 
 
 def on_page_markdown(markdown, page, config, **kwargs):
@@ -22,4 +34,4 @@ def on_page_markdown(markdown, page, config, **kwargs):
     # Links from docs/ to the sources: ../kernox/, ../tools/, ../tests/ -> GitHub
     markdown = re.sub(r"\(\.\./((?:kernox|tools|tests)/[^)]*/)\)", lambda m: f"({TREE}{m.group(1)})", markdown)
     markdown = re.sub(r"\(\.\./((?:kernox|tools|tests)/[^)]*)\)", lambda m: f"({BLOB}{m.group(1)})", markdown)
-    return markdown
+    return _inline_figures(markdown, config.docs_dir)
