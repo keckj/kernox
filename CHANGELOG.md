@@ -5,7 +5,10 @@ All notable changes to kernox. Versions follow
 without breaking code written for the previous one. Each section below is also
 the text of the corresponding [GitHub release](https://github.com/keckj/kernox/releases).
 
-## Unreleased
+## 1.1.1 (2026-11-21)
+
+A performance fix for the `cpu` backend on large nodes, and measurements
+against PyKeOps.
 
 ### Fixed
 
