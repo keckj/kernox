@@ -139,7 +139,7 @@ class RangesLayout:
 
 @dataclass(frozen=True)
 class RangesSummary:
-    """Bounds of a :class:`RangesLayout` (all entries, then non-empty entries).
+    """Bounds of a `RangesLayout` (all entries, then non-empty entries).
 
     ``i0_min``, ``i1_max``, ``h_min``/``h_max`` (height ``i1 − i0``), ``k0_min``,
     ``k1_max``, ``dk_min`` (``k1 − k0``), ``c_min``, ``d_max``: over all

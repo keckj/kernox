@@ -1,9 +1,9 @@
 """Reference oracles (core), **not** an optimized GPU execution path.
 
-1. :class:`OracleBackend` (name ``"oracle"``): blockwise Torch reference with
+1. `OracleBackend` (name ``"oracle"``): blockwise Torch reference with
    bounded blocks, on the tensors' device (CPU or GPU). It is never selected
    by ``backend="auto"``; it must be requested explicitly.
-2. :func:`reference_numpy`: small FP64 NumPy oracle (full M×N grid, Python
+2. `reference_numpy`: small FP64 NumPy oracle (full M×N grid, Python
    loops), an independent implementation of the contract semantics, meant
    for small test cases only.
 

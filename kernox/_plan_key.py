@@ -1,4 +1,4 @@
-"""Stable key of a :class:`kernox.plan.Plan` (contract v0).
+"""Stable key of a `kernox.plan.Plan` (contract v0).
 
 The key is the hexadecimal sha256 of a canonical JSON serialization of:
 
@@ -86,7 +86,7 @@ def _output(expr):
 
 
 def plan_payload(plan) -> dict:
-    """Canonical JSON structure hashed by :func:`plan_key` (useful for debugging)."""
+    """Canonical JSON structure hashed by `plan_key` (useful for debugging)."""
     payload = {
         "format": PLAN_KEY_FORMAT,
         "args": [
@@ -115,6 +115,6 @@ def plan_payload(plan) -> dict:
 
 
 def plan_key(plan) -> str:
-    """Hex sha256 of :func:`plan_payload`, canonically serialized."""
+    """Hex sha256 of `plan_payload`, canonically serialized."""
     text = json.dumps(plan_payload(plan), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(text.encode("ascii")).hexdigest()

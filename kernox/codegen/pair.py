@@ -19,7 +19,7 @@ Numerical policy (see ``docs/numerics.md``):
 - ``1/sqrt(x)`` is NOT replaced by ``rsqrt`` (reduced precision in CUDA);
 - no FP64 → FP32 conversion: all temporaries have type ``T``;
 - region-aware CSE in the presence of ``Piecewise`` (``where``), see
-  :func:`_region_cse`: a common subexpression is hoisted (evaluated
+  `_region_cse`: a common subexpression is hoisted (evaluated
   unconditionally) only if it is already evaluated outside any branch
   (condition of the outermost ``where``, unconditional part) or if it
   appears in at least two distinct regions; otherwise it stays in its

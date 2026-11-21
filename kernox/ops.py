@@ -124,7 +124,7 @@ def mod(x, modulus, offset=0):
 
 
 def clamp(x, lo, hi):
-    """Alias of :func:`kernox.clamp` (``min(max(x, lo), hi)``).
+    """Alias of `kernox.clamp` (``min(max(x, lo), hi)``).
 
     keopscore writes ``(x < a) ? a : ((x > b) ? b : x)``; the two coincide
     except for NaN (keopscore propagates NaN, for ``min``/``max`` it depends on the backend).
@@ -403,7 +403,7 @@ def _d(expr, symbol):
 def grad(f, v, e):
     """``(∂f/∂v)ᵀ e`` (keopscore ``Grad(f, v, e)``): dimension of ``v``, ``e`` of dimension of ``f``.
 
-    Symbolic derivative (rules of :mod:`kernox.autograd`: ``Heaviside`` of
+    Symbolic derivative (rules of `kernox.autograd`: ``Heaviside`` of
     ``min``/``max`` → 1/2 at ties, ``where`` differentiated branch by branch).
     """
     f, e = _real(f, "grad"), _real(e, "grad")

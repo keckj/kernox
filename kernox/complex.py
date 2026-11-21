@@ -1,7 +1,7 @@
 """Complex formulas (parity with PyKeOps ``ComplexLazyTensor``, keopscore ``formulas/complex``).
 
 keopscore representation: a complex formula of dimension D is a real
-:class:`~kernox.expr.Formula` of dimension 2D, with **interleaved**
+`Formula` of dimension 2D, with **interleaved**
 components ``(re_0, im_0, re_1, im_1, …)``. Each operation is the
 keopscore definition re-expressed with real symox primitives (no complex
 type in the engine nor in the backends):
@@ -99,7 +99,7 @@ def _mult(p, q):
 
 
 class ComplexFormula:
-    """Complex formula: interleaved real :class:`Formula` of dimension 2·``dim``."""
+    """Complex formula: interleaved real `Formula` of dimension 2·``dim``."""
 
     __slots__ = ("_f",)
     __array_priority__ = 1001
@@ -195,7 +195,7 @@ class ComplexFormula:
         return ComplexFormula(self._f[2 * i:2 * i + 2])
 
     def factorize(self, g):
-        """Identity (CSE always applied), see :func:`kernox.ops.factorize`."""
+        """Identity (CSE always applied), see `kernox.ops.factorize`."""
         from .ops import factorize
 
         factorize(self._f, g)

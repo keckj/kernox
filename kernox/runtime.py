@@ -8,7 +8,7 @@ unsupported operation raises an explicit error. The ``"oracle"`` backend
 
 Registry: a native backend is a ``kernox.backends.<name>`` module that
 exposes ``get_backend() -> Backend`` (loaded lazily), or an object
-registered with :func:`register_backend`.
+registered with `register_backend`.
 """
 
 from __future__ import annotations
@@ -726,7 +726,7 @@ class Reduction:
     # ---- block-sparse ranges (amendment v0.6 §2)
     # ---- linear operator and solve (PyKeOps parity, see kernox.linalg)
     def linear_operator(self, var: str, /, **inputs):
-        """:class:`~kernox.linalg.LinearOperator` ``v ↦ self(**inputs, var=v)`` (SUM linear in ``var``)."""
+        """`LinearOperator` ``v ↦ self(**inputs, var=v)`` (SUM linear in ``var``)."""
         from .linalg import LinearOperator
 
         return LinearOperator(self, var, inputs)
@@ -737,7 +737,7 @@ class Reduction:
 
         The other inputs are passed by keyword (or ``inputs={...}`` if a
         name conflicts with ``alpha``, ``eps``, ``maxiter``, ``x0``).
-        See :meth:`kernox.linalg.LinearOperator.solve`.
+        See `kernox.linalg.LinearOperator.solve`.
         """
         merged = dict(inputs or {})
         clash = merged.keys() & kwargs.keys()
@@ -747,7 +747,7 @@ class Reduction:
         return self.linear_operator(var, **merged).solve(rhs, alpha=alpha, eps=eps, maxiter=maxiter, x0=x0)
 
     def with_ranges(self, ranges, *, validate: bool = False) -> "RangedReduction":
-        """Call restricted to the blocks of ``ranges`` (:class:`kernox.Ranges`).
+        """Call restricted to the blocks of ``ranges`` (`kernox.Ranges`).
 
         ``run.with_ranges(r)(**inputs)``. ``validate=True`` checks the values
         (bounds, overlaps; one host synchronization per call).
@@ -936,30 +936,30 @@ class RangedReduction:
 def compile(expr, *, dtype, backend: str = "auto", acc_dtype=None, tuning: str = "estimate",  # noqa: A001
             fp_contract: bool | None = None, sum_scheme: str | None = None,
             fast_math: bool | None = None, flush_denormals: bool | None = None) -> Reduction:
-    """Compiles a frontend reduction (or a :class:`Plan`) into a callable.
+    """Compiles a frontend reduction (or a `Plan`) into a callable.
 
     ``dtype`` is mandatory (``"float16"``, ``"float32"`` or ``"float64"``): no
     implicit precision. ``backend``: ``"auto"`` (device of the tensors:
     cuda/hip/sycl/cpu), a native name, or ``"oracle"`` (explicit reference).
     ``tuning``: ``"estimate"`` (default, no measurement), ``"wisdom_only"``,
-    ``"measure"`` or ``"patient"`` (see :mod:`kernox.tuning`).
+    ``"measure"`` or ``"patient"`` (see `kernox.tuning`).
     ``fp_contract``: ``True`` by default, FMA contraction
     allowed within an expression; ``False`` forbids it on all
     backends (bit-for-bit reproducibility; a backend that cannot
-    guarantee it raises :class:`UnsupportedError`). Part of the plan key.
+    guarantee it raises `UnsupportedError`). Part of the plan key.
     ``sum_scheme``: ``"direct"`` (default), ``"block"`` or
     ``"kahan"`` (Neumaier) for SUM, LOGSUMEXP and SUMSOFTMAXWEIGHT; ignored by
     the other reductions. A backend that does not implement it raises
-    :class:`UnsupportedError`, never a fallback to ``"direct"``.
+    `UnsupportedError`, never a fallback to ``"direct"``.
     ``fast_math``: ``False`` by default (IEEE); ``True`` allows
     approximate exp/log (CUDA FP32: ``ex2.approx``/``lg2.approx``, like PyKeOps
     ``use_fast_math``). Part of the plan key; a backend that does not
-    implement it raises :class:`UnsupportedError`. The oracle stays IEEE.
+    implement it raises `UnsupportedError`. The oracle stays IEEE.
     ``flush_denormals``: ``False`` by default (subnormal numbers kept);
     ``True`` allows the backend to flush subnormal inputs and results of
     floating-point operations to zero (cpu: FTZ/DAZ; cuda: ``--ftz=true``,
     float32 only). Part of the plan key; a backend that does not implement it
-    raises :class:`UnsupportedError`. The oracle keeps subnormal numbers.
+    raises `UnsupportedError`. The oracle keeps subnormal numbers.
     """
     from .expr import ReductionExpr
 

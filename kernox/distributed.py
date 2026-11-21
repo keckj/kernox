@@ -21,8 +21,8 @@ on all ranks and reproducible for a fixed group size (NCCL, Gloo), but
 not bitwise identical to a single-process call (another summation order).
 
 Launch with ``torchrun``, or ``mpirun``/``srun``/OAR and
-:func:`init_from_env`. Without an initialized group, or with a single rank,
-:func:`reduce` is a plain call.
+`init_from_env`. Without an initialized group, or with a single rank,
+`reduce` is a plain call.
 """
 
 from __future__ import annotations
@@ -492,8 +492,8 @@ def _resolve_split(split, m, n, size):
 def reduce(red, /, *, group=None, split=None, ranges=None, **inputs):  # noqa: A001
     """Calls the reduction ``red`` with its work split across ``group``.
 
-    ``red``: a :class:`kernox.Reduction` or a ``RangedReduction``
-    (``run.with_ranges(r)``); ``ranges`` (a :class:`kernox.Ranges`) is the
+    ``red``: a `kernox.Reduction` or a ``RangedReduction``
+    (``run.with_ranges(r)``); ``ranges`` (a `kernox.Ranges`) is the
     same as passing ``run.with_ranges(ranges)``. ``group``: a
     ``torch.distributed`` process group (default: the world group).
     ``split``: ``"output"`` (each rank computes a span of output rows),

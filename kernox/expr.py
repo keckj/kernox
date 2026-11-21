@@ -1,6 +1,6 @@
 """kernox frontend: i/j variables, parameters, formulas.
 
-A :class:`Formula` is a vector (dimension ``dim``) of scalar symox
+A `Formula` is a vector (dimension ``dim``) of scalar symox
 expressions; the components of variables are real ``symox.Symbol`` objects.
 No string is parsed: Python operators directly build the symox DAG. See
 the Concepts and Formula operations pages of the documentation.
@@ -38,7 +38,7 @@ def constant(value, *, boolean: bool = False):
     - symox numbers (``Rational(1, 3)``, ``pi``, ``E``...): kept exact.
 
     Rounding to the plan's dtype only happens when the plan is built
-    (:func:`kernox.builder.convert_constants`).
+    (`kernox.builder.convert_constants`).
     """
     import math
 
@@ -418,7 +418,7 @@ def _variable(name, role, dim, is_complex=False):
 def Vi(name: str, dim: int = 1, *, complex: bool = False) -> Formula:  # noqa: A002
     """Variable indexed by i: tensor (M, dim) passed under the name ``name``.
 
-    ``complex=True``: :class:`~kernox.complex.ComplexFormula`; complex tensor
+    ``complex=True``: `ComplexFormula`; complex tensor
     (M, dim) or its interleaved real view (M, 2·dim).
     """
     return _variable(name, "i", dim, complex)
@@ -440,7 +440,7 @@ def Param(name: str, dim: int = 1, *, complex: bool = False) -> Formula:  # noqa
 
 
 class ReductionExpr:
-    """Pairwise reduction of a formula (terminal node, compiled with :func:`kernox.compile`)."""
+    """Pairwise reduction of a formula (terminal node, compiled with `kernox.compile`)."""
 
     __slots__ = ("formula", "kind", "over", "k")
 

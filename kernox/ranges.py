@@ -1,6 +1,6 @@
 """Block-sparse ranges, in the PyKeOps sense.
 
-A :class:`Ranges` holds, on the device of the inputs, the six integer tensors
+A `Ranges` holds, on the device of the inputs, the six integer tensors
 of PyKeOps, in the **user's** orientation (i = ``Vi``, j = ``Vj``):
 
 - ``ranges_i`` (Ci, 2): blocks of i rows ``[a, b)``;
@@ -16,7 +16,7 @@ reduction; ties go to the smallest j of ``J(i)``. Disjoint blocks and
 disjoint intervals within a block: checked by ``with_ranges(r,
 validate=True)``, otherwise an overlap is undefined behavior.
 
-Call: ``run.with_ranges(r)(**inputs)`` (see :mod:`kernox.runtime`).
+Call: ``run.with_ranges(r)(**inputs)`` (see `kernox.runtime`).
 """
 
 from __future__ import annotations

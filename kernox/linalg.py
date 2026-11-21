@@ -3,10 +3,10 @@
 A SUM reduction that is **linear** in a ``j`` variable (``var``) defines
 the operator ``K : v ↦ run(..., var=v)`` from ``(N, Dv)`` to ``(M, Do)``:
 ``(K v)_i = Σ_j J(x_i, y_j) v_j`` with ``J = ∂F/∂var`` (Do × Dv), constant in
-``var``. :class:`LinearOperator` exposes it with the interface of
-:mod:`scipy.sparse.linalg` (``shape``, ``dtype``, ``matvec``, ``rmatvec``,
+``var``. `LinearOperator` exposes it with the interface of
+`scipy.sparse.linalg` (``shape``, ``dtype``, ``matvec``, ``rmatvec``,
 ``matmat``, ``T``, ``@``), like ``LazyTensor`` on the PyKeOps side;
-:meth:`LinearOperator.solve` solves ``(α I + K) a = b`` by conjugate gradient
+`LinearOperator.solve` solves ``(α I + K) a = b`` by conjugate gradient
 (transcription of PyKeOps' ``ConjugateGradientSolver``, see THIRD_PARTY.md),
 differentiable with respect to ``b`` and to the other bound inputs.
 
@@ -66,7 +66,7 @@ def conjugate_gradient(linop, b, *, x0=None, eps: float = DEFAULT_EPS, maxiter: 
 
 
 def check_linear(plan, var: str):
-    """Raises :class:`ValidationError` if the plan is not a SUM linear in ``var`` (``j`` argument)."""
+    """Raises `ValidationError` if the plan is not a SUM linear in ``var`` (``j`` argument)."""
     import symox
 
     from .autograd import derivative
@@ -103,7 +103,7 @@ class LinearOperator:
     """Operator ``v ↦ run(**inputs, var=v)`` bound to inputs (``run.linear_operator``).
 
     ``shape = (M·Do, N·Dv)`` and ``dtype`` (NumPy) for
-    :func:`scipy.sparse.linalg.aslinearoperator`. ``matvec(v)`` accepts a
+    `scipy.sparse.linalg.aslinearoperator`. ``matvec(v)`` accepts a
     ``(N, Dv)`` tensor (returned as ``(M, Do)``), a ``(N·Dv,)`` vector or a
     ``(N·Dv, k)`` matrix (flattened columns); NumPy arrays are converted to the
     device of the inputs and returned as NumPy. ``matvec`` is differentiable (it is

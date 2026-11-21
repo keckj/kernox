@@ -1,4 +1,4 @@
-"""Builder for :class:`kernox.plan.Plan` (core, usable without a frontend).
+"""Builder for `kernox.plan.Plan` (core, usable without a frontend).
 
 This module is the only recommended way to build a ``Plan``: it validates the
 plan (names, roles, bound symbols, boolean types, K, dtypes) and applies the
@@ -53,7 +53,7 @@ def check_name(name) -> str:
 
 
 def make_arg(name: str, role: str, dim: int = 1) -> Arg:
-    """Builds an :class:`Arg` and its component symbols."""
+    """Builds an `Arg` and its component symbols."""
     check_name(name)
     if role not in _ROLES:
         raise ValidationError(f"invalid role {role!r} (expected one of {_ROLES})")
@@ -126,7 +126,7 @@ def convert_constants(expr, dtype: DType):
       in the dtype, which yields the correctly rounded p/q when p and q are
       representable); only their representability is checked.
     - Overflow, or underflow of a nonzero value to 0:
-      :class:`ConstantConversionError`.
+      `ConstantConversionError`.
     """
     import symox
 
@@ -173,7 +173,7 @@ def realify(expr):
     - ``abs(exp(z))`` becomes ``exp(re(z))``: ``re(a)`` is ``a`` and ``im(a)``
       is 0 for a real expression (without ``I``).
 
-    An ``I`` or ``zoo`` outside any branch is still rejected by :func:`make_plan`.
+    An ``I`` or ``zoo`` outside any branch is still rejected by `make_plan`.
     """
     import symox
 
@@ -216,7 +216,7 @@ def fold_constants(expr):
     be printed as is; ``cos(1)`` in double is ambiguous for NVRTC
     (``cos(float)``/``cos(double)`` overloads for an integer argument). The
     value is computed in extended precision, then rounded to the dtype by
-    :func:`convert_constants`.
+    `convert_constants`.
     """
     import symox
 
@@ -257,11 +257,11 @@ def make_plan(
     fast_math: bool = False,
     flush_denormals: bool = False,
 ) -> Plan:
-    """Builds and validates a :class:`Plan`.
+    """Builds and validates a `Plan`.
 
     ``outputs``: sequence of scalar symox expressions (or Python values/booleans).
-    ``reduction``: :class:`ReductionKind`, its value (``"sum"``...) or a
-    :class:`Reduction`. ``args``: sequence of :class:`Arg`, kept in the given
+    ``reduction``: `ReductionKind`, its value (``"sum"``...) or a
+    `Reduction`. ``args``: sequence of `Arg`, kept in the given
     order (the frontend provides the canonical order i, j, param, then name).
     ``fp_contract``: intra-expression FMA contraction allowed (contract v0.3).
     ``fast_math`` (amendment v0.10): approximate exp/log allowed (opt-in, IEEE by default).

@@ -4,10 +4,10 @@ SUM (below): fused gradient reductions, at any order. The other floating-point
 reductions reduce to this mechanism or to the selected term (first order):
 
 - LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT: surrogate SUM plan, with the
-  forward outputs held fixed (:func:`surrogate`);
+  forward outputs held fixed (`surrogate`);
 - MIN, MAX, KMIN and the values of MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN:
   derivative at the selected pair, evaluated on O(M·K) pairs
-  (:class:`SelectGradient`).
+  (`SelectGradient`).
 
 For a normalized SUM plan (reduction over j)::
 
@@ -345,7 +345,7 @@ def _make_function():
     class KpSum(torch.autograd.Function):
         """Forward pass: SUM reduction; backward pass: fused gradient reductions.
 
-        The backward pass calls :class:`~kernox.runtime.Reduction` objects, which
+        The backward pass calls `Reduction` objects, which
         are differentiable themselves: with ``create_graph=True``, second-order
         derivatives go through the same mechanism.
         """
@@ -385,7 +385,7 @@ def _make_function():
 
     class KpSurrogate(torch.autograd.Function):
         """LOGSUMEXP, LOGSUMEXPWEIGHT, SUMSOFTMAXWEIGHT: gradient through the surrogate
-        SUM plan (:func:`surrogate`), fused reductions. First order only."""
+        SUM plan (`surrogate`), fused reductions. First order only."""
 
         @staticmethod
         def forward(ctx, red, names, *tensors):
@@ -405,7 +405,7 @@ def _make_function():
 
     class KpSelect(torch.autograd.Function):
         """MIN, MAX, KMIN (and values of MIN_ARGMIN, MAX_ARGMAX, KMIN_ARGKMIN):
-        gradient at the selected term (:class:`SelectGradient`). First order only;
+        gradient at the selected term (`SelectGradient`). First order only;
         the indices are not differentiable."""
 
         @staticmethod
