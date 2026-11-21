@@ -90,6 +90,12 @@ needs no recompilation.
 For more speed, `fast_math=True` lets the CUDA backend use approximate `exp`
 and `log` in float32: see [fast_math](fast-math.md).
 
+For a complete implementation, use [remblais](https://keckj.github.io/remblais/),
+a drop-in replacement for GeomLoss built on kernox. It provides debiased
+Sinkhorn divergences with epsilon scaling, unbalanced transport, a
+multiscale backend for large clouds in 2D and 3D, and gradients with
+respect to the points and the weights.
+
 ## Special values
 
 - A score of `-inf` contributes nothing.
