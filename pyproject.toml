@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kernox"
 version = "1.2.0"
-description = "Fused symbolic reductions on GPUs (CUDA, ROCm/HIP, SYCL) and x86-64 CPUs (OpenMP, SIMD), split across GPUs and nodes with torch.distributed, built on symox"
+description = "Fused symbolic reductions on GPUs (CUDA, ROCm/HIP, SYCL) and x86-64 CPUs (OpenMP, SIMD), on one device or optionally split across several GPUs or nodes, built on symox"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY.md"]
