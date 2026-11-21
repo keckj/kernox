@@ -1,6 +1,6 @@
 # Kernel sums
 
-A kernel sum computes, for every point `x_i`, `Σ_j k(x_i, y_j) b_j`. It is the
+A kernel sum computes, for every point $x_i$, $\sum_j k(x_i, y_j)\, b_j$. It is the
 basic operation behind kernel density estimation, Gaussian processes, kernel
 methods and many particle simulations.
 
@@ -25,8 +25,8 @@ B = torch.randn(10_000, 1, device=device)
 out = gauss(x=X, y=Y, b=B, sigma=0.3)     # (5000, 1)
 ```
 
-The 5,000 × 10,000 kernel matrix is never stored, so the same code works for
-millions of points: memory stays proportional to M + N.
+The $5{,}000 \times 10{,}000$ kernel matrix is never stored, so the same code works for
+millions of points: memory stays proportional to $M + N$.
 
 ## Several signals at once
 
@@ -50,8 +50,8 @@ cauchy = 1 / (1 + r2 / sigma**2)
 matern32 = (1 + kp.sqrt(3 * r2) / sigma) * kp.exp(-kp.sqrt(3 * r2) / sigma)
 ```
 
-Anisotropic distances use `weightedsqdist`. With a weight `s` of dimension D,
-the distance is `Σ_k s_k (x_k - y_k)²`:
+Anisotropic distances use `weightedsqdist`. With a weight `s` of dimension $D$,
+the distance is $\sum_k s_k (x_k - y_k)^2$:
 
 ```python
 s = kp.Param("s", 3)

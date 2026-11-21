@@ -726,14 +726,14 @@ class Reduction:
     # ---- block-sparse ranges (amendment v0.6 §2)
     # ---- linear operator and solve (PyKeOps parity, see kernox.linalg)
     def linear_operator(self, var: str, /, **inputs):
-        """`LinearOperator` ``v ↦ self(**inputs, var=v)`` (SUM linear in ``var``)."""
+        r"""`LinearOperator` $v \mapsto$ ``self(**inputs, var=v)`` (SUM linear in ``var``)."""
         from .linalg import LinearOperator
 
         return LinearOperator(self, var, inputs)
 
     def solve(self, var: str, rhs, /, *, alpha: float = 1e-10, eps: float = 1e-6, maxiter=None, x0=None,
               inputs: dict | None = None, **kwargs):
-        """Solves ``(alpha·I + K) var = rhs`` by conjugate gradient, with ``K = self`` viewed as linear in ``var``.
+        r"""Solves $(\texttt{alpha} \cdot I + K)\, \texttt{var} = \texttt{rhs}$ by conjugate gradient, with $K = \texttt{self}$ viewed as linear in ``var``.
 
         The other inputs are passed by keyword (or ``inputs={...}`` if a
         name conflicts with ``alpha``, ``eps``, ``maxiter``, ``x0``).

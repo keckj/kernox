@@ -1,12 +1,12 @@
 # Linear operators and linear systems
 
 A sum reduction that is linear in one of its `Vj` inputs is a matrix-vector
-product with an implicit M×N matrix. kernox can expose it as a linear operator,
+product with an implicit $M \times N$ matrix. kernox can expose it as a linear operator,
 and solve linear systems with it, as PyKeOps' `solve` does.
 
 ## Kernel ridge regression with `solve`
 
-Find `a` such that `(alpha·I + K) a = rhs`, where `K` is a Gaussian kernel
+Find $a$ such that $(\alpha I + K)\, a = \texttt{rhs}$, where $K$ is a Gaussian kernel
 matrix:
 
 ```python
@@ -32,9 +32,9 @@ defaults:
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `alpha` | `1e-10` | regularization `alpha·I` |
-| `eps` | `1e-6` | stop when the residual norm is below `max(eps·|rhs|, eps)` |
-| `maxiter` | `10·M` | iteration limit; a `RuntimeWarning` is emitted if it is reached |
+| `alpha` | `1e-10` | regularization $\alpha I$ |
+| `eps` | `1e-6` | stop when the residual norm is below $\max(\varepsilon \cdot \|\texttt{rhs}\|, \varepsilon)$ |
+| `maxiter` | $10 \cdot M$ | iteration limit; a `RuntimeWarning` is emitted if it is reached |
 | `x0` | zeros | starting point |
 
 The operator must be square (same number of rows and same dimension on both
@@ -60,8 +60,8 @@ print(op.shape)            # (2000, 2000)
 ```
 
 Operands can be `(N, Dv)` tensors (the result is then `(M, Do)`), flat
-vectors of length `N·Dv`, or `(N·Dv, k)` matrices of `k` columns. `shape` is
-`(M·Do, N·Dv)`. kernox checks symbolically that the reduction really is linear
+vectors of length $N \cdot \mathrm{Dv}$, or $(N \cdot \mathrm{Dv}, k)$ matrices of $k$ columns. `shape` is
+$(M \cdot \mathrm{Do}, N \cdot \mathrm{Dv})$. kernox checks symbolically that the reduction really is linear
 in `var`, and raises `ValidationError` otherwise.
 
 The operator plugs into SciPy's iterative solvers and eigensolvers. For this

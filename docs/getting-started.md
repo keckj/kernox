@@ -89,12 +89,12 @@ output. The same report is available from Python as
 
 ## Your first reduction
 
-We compute, for each point `x_i`, a Gaussian-weighted sum over all the points
-`y_j`:
+We compute, for each point $x_i$, a Gaussian-weighted sum over all the points
+$y_j$:
 
-```
-out[i] = Σ_j exp(-|x_i - y_j|² / (2σ²)) · w_j
-```
+$$
+\mathrm{out}_i = \sum_j \exp\left(-\frac{\|x_i - y_j\|^2}{2\sigma^2}\right) \cdot w_j
+$$
 
 **1. Pick the device.** Use `"cuda"` for NVIDIA and AMD GPUs, `"xpu"` for
 Intel GPUs, `"cpu"` for the CPU.
@@ -146,7 +146,7 @@ out = run(x=X, y=Y, w=W, sigma=0.5)
 print(out.shape)          # torch.Size([10000, 1])
 ```
 
-The 10,000 × 20,000 matrix of kernel values never exists in memory: each GPU
+The $10{,}000 \times 20{,}000$ matrix of kernel values never exists in memory: each GPU
 thread keeps a running sum.
 
 Inputs are checked before anything runs. A wrong shape, a `float64` tensor

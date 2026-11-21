@@ -174,12 +174,12 @@ See [Linear systems](guides/linear-systems.md).
 | FP16 accumulator | float16 | float32 by default (`acc_dtype="float16"` to match) |
 | `"kahan"` scheme | Kahan summation | Kahan-Babuška (Neumaier), slightly more accurate |
 | linearity for `solve` | assumed | checked symbolically, `ValidationError` if not linear |
-| `solve` default `maxiter` with batched `rhs` | `10 ×` the size of the first dimension | `10·M` |
+| `solve` default `maxiter` with batched `rhs` | $10 \times$ the size of the first dimension | $10 \cdot M$ |
 | gradients of min, max, kmin, log-sum-exp family | supported | first order only (second order: sums only) |
-| `kmin`, `argkmin` | vector formulas allowed | scalar formulas, `K ≤ 1024` on GPUs |
+| `kmin`, `argkmin` | vector formulas allowed | scalar formulas, $K \leq 1024$ on GPUs |
 | `bspline`, `round`, `one_hot`, `mod` | not all differentiable | differentiable (zero derivative where piecewise constant) |
 | `softdtw_sqdist` | not differentiable in `gamma` | differentiable in `x`, `y` and `gamma` |
-| `round(x, d)` with `d ≠ 0` | divides by `10^d` | multiplies by `10^-d`: may differ by one unit in the last place |
+| `round(x, d)` with $d \neq 0$ | divides by $10^d$ | multiplies by $10^{-d}$: may differ by one unit in the last place |
 | `one_hot` near a half-integer, in float64 | rounds `x + 0.5` first | exact comparison: can differ just below a half-integer |
 | `clamp`, `clampint` with NaN input | NaN | depends on the GPU's min/max |
 | `rsqrt(0)` | 0 | `inf` (`kp.rsqrt` is exactly `1/sqrt`); `normalize` of the zero vector is 0 in both |
@@ -193,7 +193,7 @@ See [Linear systems](guides/linear-systems.md).
 
 ## Performance
 
-M = N = 10⁵, FP32, median of three runs. PyKeOps 2.3 runs through `Genred`
+$M = N = 10^5$, FP32, median of three runs. PyKeOps 2.3 runs through `Genred`
 in its best configuration (each kernel compiled alone in a fresh process).
 The last column is the speed-up of kernox (PyKeOps time / kernox time).
 
@@ -201,26 +201,26 @@ On an RTX 5090, kernox with `fast_math=True`:
 
 | Case | kernox | PyKeOps | Speed-up |
 | --- | --- | --- | --- |
-| Log-sum-exp, D = 2 | 3.60 ms | 7.02 ms | × 1.95 |
-| Log-sum-exp, D = 3 | 4.36 ms | 8.03 ms | × 1.84 |
-| Log-sum-exp, D = 2, block-sparse ranges | 0.249 ms | 0.552 ms | × 2.22 |
-| Log-sum-exp, D = 3, block-sparse ranges | 0.359 ms | 0.739 ms | × 2.06 |
-| Gaussian kernel sum, D = 3 | 3.49 ms | 5.24 ms | × 1.50 |
-| Gaussian kernel sum, D = 3, block-sparse ranges | 0.321 ms | 0.563 ms | × 1.76 |
-| 10 nearest neighbours, D = 3 | 5.29 ms | 8.70 ms | × 1.64 |
+| Log-sum-exp, $D = 2$ | 3.60 ms | 7.02 ms | × 1.95 |
+| Log-sum-exp, $D = 3$ | 4.36 ms | 8.03 ms | × 1.84 |
+| Log-sum-exp, $D = 2$, block-sparse ranges | 0.249 ms | 0.552 ms | × 2.22 |
+| Log-sum-exp, $D = 3$, block-sparse ranges | 0.359 ms | 0.739 ms | × 2.06 |
+| Gaussian kernel sum, $D = 3$ | 3.49 ms | 5.24 ms | × 1.50 |
+| Gaussian kernel sum, $D = 3$, block-sparse ranges | 0.321 ms | 0.563 ms | × 1.76 |
+| 10 nearest neighbours, $D = 3$ | 5.29 ms | 8.70 ms | × 1.64 |
 
 On a node with 2 × AMD EPYC 9654 (192 cores, 192 threads), against the CPU
 backend of PyKeOps, IEEE arithmetic on both sides:
 
 | Case | kernox | PyKeOps | Speed-up |
 | --- | --- | --- | --- |
-| Log-sum-exp, D = 2 | 35.2 ms | 344 ms | × 9.8 |
-| Log-sum-exp, D = 3 | 37.4 ms | 374 ms | × 10.0 |
-| Log-sum-exp, D = 2, block-sparse ranges | 1.35 ms | 21.6 ms | × 16.0 |
-| Log-sum-exp, D = 3, block-sparse ranges | 1.72 ms | 33.7 ms | × 19.6 |
-| Gaussian kernel sum, D = 3 | 47.2 ms | 343 ms | × 7.3 |
-| Gaussian kernel sum, D = 3, block-sparse ranges | 1.94 ms | 36.1 ms | × 18.6 |
-| 10 nearest neighbours, D = 3 | 13.8 ms | 110 ms | × 7.9 |
+| Log-sum-exp, $D = 2$ | 35.2 ms | 344 ms | × 9.8 |
+| Log-sum-exp, $D = 3$ | 37.4 ms | 374 ms | × 10.0 |
+| Log-sum-exp, $D = 2$, block-sparse ranges | 1.35 ms | 21.6 ms | × 16.0 |
+| Log-sum-exp, $D = 3$, block-sparse ranges | 1.72 ms | 33.7 ms | × 19.6 |
+| Gaussian kernel sum, $D = 3$ | 47.2 ms | 343 ms | × 7.3 |
+| Gaussian kernel sum, $D = 3$, block-sparse ranges | 1.94 ms | 36.1 ms | × 18.6 |
+| 10 nearest neighbours, $D = 3$ | 13.8 ms | 110 ms | × 7.9 |
 
 To reproduce: `python tools/bench_pykeops.py --device cuda --repeat 3`
 (`--device cpu --threads 192` on the CPU). Thread scaling and larger sizes:

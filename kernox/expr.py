@@ -375,10 +375,10 @@ class Formula:
         return ReductionExpr(self, ReductionKind.MAX_ARGMAX, over)
 
     def logsumexp(self, *, over: str, weight=None) -> "ReductionExpr":
-        """``log Σ exp f`` over the axis ``over``, per component (PyKeOps ``logsumexp``), output (M, D).
+        r"""$\log \sum \exp f$ over the axis ``over``, per component (PyKeOps ``logsumexp``), output (M, D).
 
-        ``weight=g`` (PyKeOps ``logsumexp(weight=g)``): ``log Σ exp(f) g_e`` with
-        scalar ``f`` and ``g`` of dimension ``E``, output (M, E).
+        ``weight=g`` (PyKeOps ``logsumexp(weight=g)``): $\log \sum \exp(f)\, g_e$ with
+        scalar $f$ and $g$ of dimension $E$, output (M, E).
         """
         if weight is None:
             return ReductionExpr(self, ReductionKind.LOGSUMEXP, over)
@@ -390,9 +390,9 @@ class Formula:
         return ReductionExpr(cat(self, g), ReductionKind.LOGSUMEXPWEIGHT, over)
 
     def sumsoftmaxweight(self, g, *, over: str) -> "ReductionExpr":
-        """``Σ softmax(f) · g`` over the axis ``over`` (PyKeOps ``sumsoftmaxweight``), output (M, E).
+        r"""$\sum \operatorname{softmax}(f) \cdot g$ over the axis ``over`` (PyKeOps ``sumsoftmaxweight``), output (M, E).
 
-        ``self``: scalar score ``f``; ``g``: weights of dimension ``E >= 1``.
+        ``self``: scalar score $f$; ``g``: weights of dimension $E \geq 1$.
         """
         if self.dim != 1:
             raise ValidationError(f"sumsoftmaxweight: expected a scalar score (dim={self.dim})")
@@ -416,10 +416,10 @@ def _variable(name, role, dim, is_complex=False):
 
 
 def Vi(name: str, dim: int = 1, *, complex: bool = False) -> Formula:  # noqa: A002
-    """Variable indexed by i: tensor (M, dim) passed under the name ``name``.
+    r"""Variable indexed by i: tensor (M, dim) passed under the name ``name``.
 
     ``complex=True``: `ComplexFormula`; complex tensor
-    (M, dim) or its interleaved real view (M, 2·dim).
+    (M, dim) or its interleaved real view $(M, 2 \cdot \texttt{dim})$.
     """
     return _variable(name, "i", dim, complex)
 
@@ -542,7 +542,7 @@ def abs(x):  # noqa: A001 - intended public name
 
 
 def rsqrt(x):
-    """Exact ``1/sqrt(x)`` (no approximate rsqrt instruction)."""
+    r"""Exact $1/\sqrt{x}$ (no approximate rsqrt instruction)."""
     return 1 / sqrt(x)
 
 

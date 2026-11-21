@@ -38,7 +38,7 @@ is zero: opening 2.7 ms, dynamo import 1.40 s versus 1.43 s without Kernox.
 
 `amdclang++` from the same package is only used for offline diagnostics
 (`-Rpass-analysis=kernel-resource-usage`, `diagnostics.py`); its VGPR counts
-agree with `hipFuncGetAttribute` on the hipRTC code object (checked for K=8).
+agree with `hipFuncGetAttribute` on the hipRTC code object (checked for $K = 8$).
 
 Compilation options (all part of the cache key):
 `--offload-arch=<gcnArchName> -O3 -std=c++17 -ffp-contract={on|off} -fno-fast-math
@@ -49,7 +49,7 @@ FMA contraction: `-ffp-contract=on` if `plan.fp_contract`
 expression** only, never `fast`), `-ffp-contract=off` if
 `plan.fp_contract=False` (bit-for-bit reproducibility). Checked on R9700
 (`tests/hip/test_fp_contract.py`): in FP64, `off` is bit-for-bit equal to the
-Torch reference without FMA, `on` differs from it in the last bit (≤ 1e-15); the two
+Torch reference without FMA, `on` differs from it in the last bit ($\leq 10^{-15}$); the two
 modes have distinct cache keys. The semantic tests of
 `tests/hip/_cases.py` use `fp_contract=False` (bit-for-bit references).
 
@@ -58,7 +58,7 @@ modes have distinct cache keys. The semantic tests of
 `kp_pow2(v)`, so the product and the addition are in two distinct source
 expressions. The gfx1201 ISA is identical between `on` and `off` (gauss D16: 2 FMA
 FP32 / 13 FP64, all coming from `exp`; KNN D16: 0), gauss outputs
-bit-for-bit identical on 20,000² (FP32/FP64, D3/D16). With
+bit-for-bit identical on $20{,}000^2$ (FP32/FP64, D3/D16). With
 `-ffp-contract=fast`, which only does contraction (no fast-math),
 KNN D16 goes up to 15 FMA, like nvcc `--fmad=true` (15 FMA out of
 16 on the CUDA side), and gauss to 57 FP32 / 29 FP64. In other words, the
@@ -96,7 +96,7 @@ KNN D16 goes up to 15 FMA, like nvcc `--fmad=true` (15 FMA out of
    `hipModuleUnload` while a kernel is queued would be undefined, and
    unloading at interpreter exit can follow the destruction of the
    runtime. Destroying a `HipBackend`/`HipCompiledReduction` has no native effect.
-8. **Zero elements**: M = 0 and K = 0 launch nothing; N = 0 launches the kernel
+8. **Zero elements**: $M = 0$ and $K = 0$ launch nothing; $N = 0$ launches the kernel
    that writes the neutral values (no host-side filling).
 9. **Multi-GPU**: a single AMD GPU available for testing; not tested.
 
@@ -107,7 +107,7 @@ Key = sha256 of `{plan.key(), generator version, sha256 of the full
 source (pair function + kernel), compiler (hipRTC version, runtime
 version, path), options, arch}`. Written to a temporary file in the same
 directory, `fsync`, then `os.replace`. One `fcntl.flock` lock per key
-(re-read under the lock: a single compilation for N processes, tested with 3).
+(re-read under the lock: a single compilation for $N$ processes, tested with 3).
 A code object unreadable by `hipModuleLoadData` → invalidation and recompilation
 (tested). In-memory cache by `(key, device)` on top.
 
@@ -117,15 +117,15 @@ A hipRTC module contains `kp_reduce` (grid `(gx, S)`) and `kp_merge`.
 
 - **`row` traversal**: one thread per row `i`, blocks of 256 threads (multiple of
   32 and of 64: no assumption on the wavefront size, 32 on gfx12),
-  tiles of `TJ` rows `j` in LDS (`TJ = min(block, 32 KiB / row j)`),
+  tiles of `TJ` rows `j` in LDS ($\mathrm{TJ} = \min(\texttt{block}, 32\ \mathrm{KiB} / \text{row } j)$),
   `i` arguments in registers. Traversal in increasing `j`: "smallest index on
   ties" through strict comparisons. SUM: partial sum per tile then
   total. MIN/MAX: NaN ignored through strict comparison. ARGMIN/ARGMAX:
   `v < best || (idx < 0 && v == best)`. KMIN: sorted list (value, int64 index)
   in registers, insertion by unrolled swaps.
 - **j-splitting (`jsplit`)**: if the grid `ceil(M / rows per block)` has
-  fewer than `blocks_per_cu × CU` blocks (32 × 32 by default, chosen from R9700 measurements), the
-  `j` range is cut into `S <= 64` ranges (multiples of `TJ`); each block
+  fewer than `blocks_per_cu` $\times\, \mathrm{CU}$ blocks ($32 \times 32$ by default, chosen from R9700 measurements), the
+  `j` range is cut into $S \leq 64$ ranges (multiples of `TJ`); each block
   `(bx, s)` writes its partial state into `[S, M, W]` (values + indices for
   ARG*/KMIN), allocated by Torch on the current device and stream. `kp_merge`
   merges in increasing order of `s` (= of `j`): sum, min/max, arg (the
@@ -134,39 +134,39 @@ A hipRTC module contains `kp_reduce` (grid `(gx, S)`) and `kp_merge`.
   recompilation); temporaries bounded by `temp_max_bytes` (256 MiB),
   published in `CompileInfo.temp_bytes_per_launch` (bound) and
   `HipCompiledReduction.temp_bytes(M, N)` / `last_launch` (exact).
-- **Cooperative top-K (`coop_topk`)**: G lanes (G | 32) per row `i`; the list
-  of `G·L >= K` elements is distributed (L ≈ 16 slots per lane, in registers);
-  each lane evaluates a different `j`, the G candidates are broadcast by
+- **Cooperative top-K (`coop_topk`)**: $G$ lanes ($G \mid 32$) per row `i`; the list
+  of $G \cdot L \geq K$ elements is distributed ($L \approx 16$ slots per lane, in registers);
+  each lane evaluates a different `j`, the $G$ candidates are broadcast by
   `__shfl` then inserted one by one (inter-lane shift through `__shfl_up`),
   full lexicographic comparison (value, j). Can be combined with `jsplit`.
 
 ### Variants
 
-`Variant(name, params)` with `name ∈ {row, jsplit, coop_topk}` and concrete
+`Variant(name, params)` with `name in {row, jsplit, coop_topk}` and concrete
 parameters `block`, `tile_j`, `split` (`off`/`auto`), `blocks_per_cu` (if `auto`),
 `group` (coop). The variant is part of the cache key and is published in
 `info.variant`.
 
 - `default_variant` (ESTIMATE, deterministic): `coop_topk` if KMIN/ARGKMIN and
-  K >= 32; j-splitting if the grid is below `32 × CU` blocks and N > tile;
+  $K \geq 32$; j-splitting if the grid is below $32 \times \mathrm{CU}$ blocks and $N > \text{tile}$;
   block 256. Thresholds measured on an idle R9700.
-- `variants(..., "measure")` (<= 4, chosen for gfx1201): default; block 128
+- `variants(..., "measure")` ($\leq 4$, chosen for gfx1201): default; block 128
   (wave32 occupancy); inverse splitting; then finer splitting
   (other `blocks_per_cu`: 8) or small tile (large D). Top-K: default, the other
-  strategy (coop from K >= 16, or thread if K <= 128, otherwise coop G/2), coop 2G,
+  strategy (coop from $K \geq 16$, or thread if $K \leq 128$, otherwise coop $G/2$), coop $2G$,
   inverse splitting.
-- `variants(..., "patient")` (<= 32): blocks 64/128/256/512 × tiles × splitting
+- `variants(..., "patient")` ($\leq 32$): blocks 64/128/256/512 × tiles × splitting
   (off, auto 8, auto 32); top-K: groups with 4–32 slots per lane × blocks
-  128/256 × splitting, plus thread if K <= 128. Invalid variants excluded
+  128/256 × splitting, plus thread if $K \leq 128$. Invalid variants excluded
   (block not a multiple of 64, LDS, more than 32 slots per lane).
 
 Tests (`tests/hip/test_variant_api.py`, `test_variants.py`): all
 `patient` variants give **identical** results for MIN, ARGMAX,
-ARGMIN (massive ties, NaN, inf), COUNT, KMIN_ARGKMIN K = 8/70/130 and
+ARGMIN (massive ties, NaN, inf), COUNT, KMIN_ARGKMIN $K = 8/70/130$ and
 stay within the L1 tolerance for SUM (FP32/FP64), for (M, N) = (40, 700) and
-(700, 300); splittings forced up to S = 63; coop groups 2–32.
+(700, 300); splittings forced up to $S = 63$; coop groups 2–32.
 
-## Measured resources (KMIN_ARGKMIN, d², D = 3, gfx1201)
+## Measured resources (KMIN_ARGKMIN, $d^2$, $D = 3$, gfx1201)
 
 `python -m kernox.backends.hip.diagnostics thread,coop` (per-kernel
 remarks + attributes of the loaded code object, in agreement). LDS 3072 B (FP32) /
@@ -192,13 +192,13 @@ remarks + attributes of the loaded code object, in agreement). LDS 3072 B (FP32)
 | coop | f64 | 128 | 8 | 167 | 0 | 0 | 9 |
 | coop | f64 | 256 | 16 | 167 | 0 | 0 | 9 |
 
-`kp_merge`: 11–17 VGPR; 272 B/lane of scratch (pointer array of the S
+`kp_merge`: 11–17 VGPR; 272 B/lane of scratch (pointer array of the $S$
 partials, second pass only). The cooperative variant removes all the
 spills observed, at the cost of shuffles and sequential insertions.
 
-**K > 256**: `K_MAX = 1024`, coop only (`THREAD_K_MAX = 256`).
-At most `COOP_MAX_SLOTS = 32` slots per lane: G=16 up to K=512, G=32 beyond.
-No spill in `kp_reduce` (`-Rpass-analysis`, d², D=3):
+**$K > 256$**: `K_MAX = 1024`, coop only (`THREAD_K_MAX = 256`).
+At most `COOP_MAX_SLOTS = 32` slots per lane: $G = 16$ up to $K = 512$, $G = 32$ beyond.
+No spill in `kp_reduce` (`-Rpass-analysis`, $d^2$, $D = 3$):
 
 | dtype | K | G | slots/lane | VGPR | spill | occupancy |
 |---|---|---|---|---|---|---|
@@ -210,16 +210,16 @@ No spill in `kp_reduce` (`-Rpass-analysis`, d², D=3):
 | f64 | 1024 | 32 | 32 | 216 | 0 | 7 |
 
 Tests: `tests/hip/test_variants.py::test_coop_k_up_to_1024` (ties, NaN,
-K > N, j-splitting).
+$K > N$, j-splitting).
 
 ## LOGSUMEXP and SUMSOFTMAXWEIGHT
 
 `thread` strategy (the coop variant remains reserved for KMIN). State per row
-and per component `(m, s[, t_1..t_E])` in `kp_acc`:
+and per component $(m, s[, t_1, \dots, t_E])$ in `kp_acc`:
 
-- insertion of a term `v`: ignored if `v == −inf`; if `v > m`,
-  `c = exp(m − v)`, `s = s·c + 1`, `t = t·c + g`, `m = v`; otherwise
-  `q = (v == m) ? 1 : exp(v − m)`, `s += q`, `t += q·g`;
+- insertion of a term $v$: ignored if $v = -\infty$; if $v > m$,
+  $c = \exp(m - v)$, $s = s \cdot c + 1$, $t = t \cdot c + g$, $m = v$; otherwise
+  `q = (v == m) ? 1 : exp(v - m)`, `s += q`, `t += q*g`;
 - insertion level (variant parameter `levels`, `HipOptions.soft_levels`):
   `2` = tile state merged into the row state at the end of the tile (like SUM),
   `1` = direct insertion into the row state (half as many registers).
@@ -227,12 +227,12 @@ and per component `(m, s[, t_1..t_E])` in `kp_acc`:
   (measured on R9700: SSMW FP64 E64 189.7 → 100.9 ms, spill 852 → 140 B, ×0.60
   versus Torch; FP32 below the threshold: no effect). The other level is included in
   `measure`/`patient`; j-splitting writes `[S, M, W]`
-  (`W = 2D` for LSE, `2 + E` for SSMW) and `kp_merge` merges with the same
+  ($W = 2D$ for LSE, $2 + E$ for SSMW) and `kp_merge` merges with the same
   rule (factor exactly 1 when the maxima are equal, so an empty state
-  `(−inf, 0)` is neutral and two `+inf` do not produce a spurious NaN);
-- `m` is never NaN; a NaN (term or weight) propagates into `s`/`t`;
-- result: LSE `s NaN → NaN`, `m = +inf → +inf`, otherwise `m + log s`
-  (`−inf` if empty); SSMW `m = +inf → NaN`, otherwise `t / s` (`0/0` if empty);
+  $(-\infty, 0)$ is neutral and two `+inf` do not produce a spurious NaN);
+- $m$ is never NaN; a NaN (term or weight) propagates into $s$/$t$;
+- result: LSE `s NaN → NaN`, `m = +inf → +inf`, otherwise $m + \log s$
+  (`-inf` if empty); SSMW `m = +inf → NaN`, otherwise $t / s$ (`0/0` if empty);
 - `expf`/`exp`, `logf`/`log` from the HIP libm, never `__expf`; FMA
   contraction according to `plan.fp_contract`.
 
@@ -243,26 +243,26 @@ all `patient` variants, FP64 acc, fp_contract) and
 ## Summation schemes
 
 `HipBackend.sum_schemes = ("direct", "block", "kahan")`. The schemes apply
-to SUM, and to `s`, `t_e` of LSE/SSMW. `CompileInfo.options` publishes
+to SUM, and to $s$, $t_e$ of LSE/SSMW. `CompileInfo.options` publishes
 `sum_scheme=<scheme>`, plus `sum_block=T` for block (`T = tile_j`).
 
 - `direct`: SUM accumulates each tile into a local accumulator, added to the
   total at the end of the tile (in effect, the same code as block). LSE/SSMW follow the
   `levels` rule above.
-- `block`: SUM, same code as direct, `T = tile_j` ≤ 256. LSE/SSMW:
+- `block`: SUM, same code as direct, `T = tile_j` $\leq 256$. LSE/SSMW:
   `levels = 2` is enforced (fresh tile state merged), an explicit
   `levels = 1` is refused. A splitting slice starts a tile; the
-  last tile of a slice can be partial (≤ T).
+  last tile of a slice can be partial ($\leq T$).
 - `kahan`: Neumaier per component (`kp_kadd`), direct insertion without
   tiles (`levels = 1` enforced for LSE/SSMW). The rescaling
-  `exp(m_old − m_new)` multiplies `s`, `c_s`, `t_e`, `c_te`. The partials
-  contain the compensations: SUM `W = 2d`, LSE `3D`, SSMW `1 + 2d`.
-  `kp_merge` merges through TwoSum then adds `c1 + c2`. Result
-  `s + c` if `s` is finite, otherwise `s`, with the test `s − s == 0`.
+  $\exp(m_{\mathrm{old}} - m_{\mathrm{new}})$ multiplies $s$, $c_s$, $t_e$, $c_{t_e}$. The partials
+  contain the compensations: SUM $W = 2d$, LSE $3D$, SSMW $1 + 2d$.
+  `kp_merge` merges through TwoSum then adds $c_1 + c_2$. Result
+  $s + c$ if $s$ is finite, otherwise $s$, with the test `s - s == 0`.
   Only additions and subtractions: `fp_contract` has no effect.
 
 Tests: `tests/hip/test_sum_scheme.py` (forced splitting with empty slices,
-±inf/NaN rows, Higham N = 2·10⁵ with splitting and fp_contract on/off,
+±inf/NaN rows, Higham $N = 2 \cdot 10^5$ with splitting and fp_contract on/off,
 FP64 acc, enforced levels) and `tests/conformance/test_sum_scheme.py`.
 
 ## Batch and block-sparse ranges
@@ -271,11 +271,11 @@ FP64 acc, enforced levels) and `tests/conformance/test_sum_scheme.py`.
   table `boff (nargs, nb)` in elements relative to `data_ptr`, outputs
   `(nb, M, ·)`, partials `(nb, S, M, W)`; z grid cut into chunks of
   `GRID_Z_MAX = 65535`. `split_plan` and the default variant count
-  `gx·nb` blocks.
+  $\mathrm{gx} \cdot \mathrm{nb}$ blocks.
 - Ranges (`HipBackend.ranges = True`): `kp_reduce_ranges`, one block per work
   tile `(i0, i1, k0, k1)` of height `ranges_tile_m = rows_per_block`,
-  reduction over `∪ red[k0:k1]` without j-splitting; uncovered rows
-  receive the neutral value through an `N = 0` launch of `kp_reduce`. Ties go to the
+  reduction over $\bigcup \texttt{red}[k_0{:}k_1]$ without j-splitting; uncovered rows
+  receive the neutral value through an $N = 0$ launch of `kp_reduce`. Ties go to the
   smallest j whatever the order of the intervals (comparison `(value, j)`).
   Batch + ranges: refused.
 
@@ -285,14 +285,14 @@ Tests: `tests/hip/test_batch_ranges.py`.
 
 - MIN_ARGMIN / MAX_ARGMAX: the ARGMIN / ARGMAX code (same pass, same
   `(value, index)` partials, same merge), which also writes `value`. Ties,
-  NaN and neutral `(±inf, −1)` identical to MIN and ARGMIN.
+  NaN and neutral `(±inf, -1)` identical to MIN and ARGMIN.
 - LOGSUMEXPWEIGHT: state, insertion, levels, partials and summation
-  schemes of SUMSOFTMAXWEIGHT; result `m + log t_e` with no special case
-  (empty: `−inf`; `t_e < 0`: NaN; `f = +inf`: `+inf` if `t_e > 0`, NaN
+  schemes of SUMSOFTMAXWEIGHT; result $m + \log t_e$ with no special case
+  (empty: `-inf`; $t_e < 0$: NaN; $f = +\infty$: `+inf` if $t_e > 0$, NaN
   otherwise).
 
 Tests: `tests/hip/test_reductions_v08.py` (forced splitting, ties, NaN,
-N = 0, block/kahan schemes, FP64 acc), the corresponding cases of
+$N = 0$, block/kahan schemes, FP64 acc), the corresponding cases of
 `tests/hip/test_batch_ranges.py`, `tests/conformance/test_reductions_v08.py`.
 
 ## FP16
@@ -326,6 +326,6 @@ N = 0, block/kahan schemes, FP64 acc), the corresponding cases of
   the FP64 reference does not exceed twice that of the oracle.
 
 Tests: `tests/hip/test_fp16.py` (bit-for-bit selections, including coop
-K = 64; SUM with FP32/FP16 acc with splitting; proof of FP16 computation through
+$K = 64$; SUM with FP32/FP16 acc with splitting; proof of FP16 computation through
 overflow; final ±inf conversion; LOGSUMEXP families; batch; ranges)
 and `tests/conformance/test_fp16.py`.

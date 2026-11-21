@@ -2,7 +2,7 @@
 
 kernox reductions are differentiable with `torch.autograd`. If an input tensor
 has `requires_grad=True`, the result is part of the autograd graph, and
-`backward()` computes the gradients with fused reductions: no M×N matrix
+`backward()` computes the gradients with fused reductions: no $M \times N$ matrix
 appears in the backward pass either.
 
 ## A first gradient

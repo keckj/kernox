@@ -29,7 +29,7 @@ Y = torch.rand(5_000, 2, device=device)
 B = torch.randn(5_000, 1, device=device)
 ```
 
-**1. Label the points with a cluster.** Here a simple 10 × 10 grid on the unit
+**1. Label the points with a cluster.** Here a simple $10 \times 10$ grid on the unit
 square; any clustering works (k-means, octree, ...).
 
 ```python
@@ -71,7 +71,7 @@ out[perm_x] = out_sorted                                     # back to the order
 ```
 
 The result matches the dense reduction up to the neglected terms, here smaller
-than `exp(-18)` relative to the kernel peak.
+than $\exp(-18)$ relative to the kernel peak.
 
 ## Rules
 

@@ -8,8 +8,8 @@ tensors, a **formula** that combines them for one pair `(i, j)`, and a
 ![A reduction over j: the M by N matrix is computed tile by tile and never stored](images/reduction.svg)
 
 The formula is evaluated for each pair `(i, j)` while the reduction runs, one
-tile of pairs at a time: the M × N matrix of its values is never stored, and
-memory stays linear in M + N.
+tile of pairs at a time: the $M \times N$ matrix of its values is never stored, and
+memory stays linear in $M + N$.
 
 ```python
 import torch
@@ -112,18 +112,18 @@ The complete list of functions is on the
 | `f.kmin(K, over="j")` | `(M, K)`: the K smallest values, sorted | input dtype |
 | `f.argkmin(K, over="j")` | `(M, K)`: their indices | int64 |
 | `f.kmin_argkmin(K, over="j")` | tuple `(values, indices)`, one pass | input dtype, int64 |
-| `f.logsumexp(over="j")` | `(M, D)`: `log Σ_j exp f` | float |
-| `f.logsumexp(over="j", weight=g)` | `(M, E)`: `log Σ_j exp(f) g` | float |
-| `f.sumsoftmaxweight(g, over="j")` | `(M, E)`: `Σ_j exp(f) g / Σ_j exp(f)` | float |
+| `f.logsumexp(over="j")` | `(M, D)`: $\log \sum_j \exp f$ | float |
+| `f.logsumexp(over="j", weight=g)` | `(M, E)`: $\log \sum_j \exp(f)\, g$ | float |
+| `f.sumsoftmaxweight(g, over="j")` | `(M, E)`: $\sum_j \exp(f)\, g / \sum_j \exp(f)$ | float |
 
 - Every reduction except the K-nearest family works component by component.
   `kmin`, `argkmin` and `kmin_argkmin` need a scalar formula, `K` must be a
-  Python `int` (0 is allowed), and GPU backends accept `K ≤ 1024`.
+  Python `int` (0 is allowed), and GPU backends accept $K \leq 1024$.
 - `logsumexp(weight=g)` and `sumsoftmaxweight` take a scalar score `f` and
-  weights `g` of any dimension E.
+  weights `g` of any dimension $E$.
 - Ties go to the smallest index `j`. NaN values are ignored by min, max and the
   K-nearest reductions, and propagate through sums. See [Numerics](numerics.md).
-- With no `j` at all (N = 0), each reduction returns its neutral value: 0 for
+- With no `j` at all ($N = 0$), each reduction returns its neutral value: 0 for
   sums and counts, `+inf` for min, `-inf` for max and log-sum-exp, `-1` for
   indices.
 

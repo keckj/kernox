@@ -42,7 +42,7 @@ options:
 
 | Feature | `cuda` | `hip` | `sycl` | `cpu` |
 | --- | --- | --- | --- | --- |
-| all reductions, `K ≤ 1024` | yes | yes | yes | yes |
+| all reductions, $K \leq 1024$ | yes | yes | yes | yes |
 | `sum_scheme` direct, block, kahan | yes | yes | yes | yes |
 | batch dimensions, block-sparse ranges | yes | yes | yes | yes |
 | gradients | yes | yes | yes | yes |
@@ -74,7 +74,7 @@ anything runs. kernox never falls back to another backend or to the CPU.
   are spread over `torch.get_num_threads()` threads; the `j` points are
   transposed per tile so that the formula is evaluated with SIMD instructions,
   with transcendental functions from glibc's vector math library `libmvec`
-  (≤ 4 ulp, same accuracy class as the GPU libraries; `KERNOX_CPU_LIBMVEC=0`
+  ($\leq 4$ ulp, same accuracy class as the GPU libraries; `KERNOX_CPU_LIBMVEC=0`
   falls back to the scalar libm). No fast-math option is used. How the `j`
   axis is split depends on the sizes only, so results are bit for bit
   identical for any number of threads. Details and measurements:
@@ -117,7 +117,7 @@ the result is written. Compiled kernels are cached on disk.
 | `KERNOX_ONEAPI_ROOT` | oneAPI installation root, to find `icpx` |
 | `KERNOX_SYCL_TARGET` | force the SYCL compilation target |
 | `KERNOX_CPU_CXX` | C++ compiler of the `cpu` backend (default `g++`) |
-| `KERNOX_CPU_LIBMVEC` | `0` disables glibc vector math in the `cpu` backend (scalar libm, ≤ 1 ulp, slower) |
+| `KERNOX_CPU_LIBMVEC` | `0` disables glibc vector math in the `cpu` backend (scalar libm, $\leq 1$ ulp, slower) |
 | `KERNOX_SYMOX_COMPAT` | `pinned` forces the compatibility code path for older symox builds (for tests) |
 
 An empty variable counts as unset. `python -m kernox.diagnostics` shows the
@@ -125,7 +125,7 @@ cache locations and sizes.
 
 ## Known limitations
 
-- `kmin`, `argkmin` and `kmin_argkmin`: scalar formulas only, `K ≤ 1024`.
+- `kmin`, `argkmin` and `kmin_argkmin`: scalar formulas only, $K \leq 1024$.
 - `fast_math=True` only on the `cuda` backend (accepted without effect on `cpu`).
 - The `cpu` backend targets Linux x86-64 with GCC only (no ARM, POWER or
   RISC-V, no Windows or macOS, no Clang); see
@@ -135,6 +135,6 @@ cache locations and sizes.
   are first order.
 - Block-sparse ranges cannot be combined with batch dimensions.
 - One tested card per vendor apart from NVIDIA. Multi-GPU machines and
-  reductions with N ≥ 2³¹ have not been tested on real hardware.
+  reductions with $N \geq 2^{31}$ have not been tested on real hardware.
 - On `sycl`, `argkmin` can be slower than a dense PyTorch computation for some
-  `K ≥ 32`.
+  $K \geq 32$.

@@ -1,12 +1,12 @@
-"""Reductions split across the processes of a ``torch.distributed`` group.
+r"""Reductions split across the processes of a ``torch.distributed`` group.
 
 Model: every rank of the group passes the same full inputs (replicated
 data, as in the rest of a PyTorch program), and every rank receives the
-full result. Each rank only computes its share of the M x N pairs:
+full result. Each rank only computes its share of the $M \times N$ pairs:
 
-- ``split="output"``: rank r owns a contiguous span [a, b) of the output
+- ``split="output"``: rank r owns a contiguous span $[a, b)$ of the output
   rows; its outputs are exact and gathered with ``all_gather``;
-- ``split="reduced"``: rank r owns a span [c, d) of the reduced axis; the
+- ``split="reduced"``: rank r owns a span $[c, d)$ of the reduced axis; the
   partial results are merged (sum, min with index, K smallest, log-sum-exp
   states...), with the same semantics as a single call.
 

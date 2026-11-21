@@ -1,12 +1,12 @@
-"""Linear operators and ``solve`` (PyKeOps parity).
+r"""Linear operators and ``solve`` (PyKeOps parity).
 
 A SUM reduction that is **linear** in a ``j`` variable (``var``) defines
-the operator ``K : v ↦ run(..., var=v)`` from ``(N, Dv)`` to ``(M, Do)``:
-``(K v)_i = Σ_j J(x_i, y_j) v_j`` with ``J = ∂F/∂var`` (Do × Dv), constant in
+the operator $K : v \mapsto$ ``run(..., var=v)`` from ``(N, Dv)`` to ``(M, Do)``:
+$(K v)_i = \sum_j J(x_i, y_j)\, v_j$ with $J = \partial F/\partial \texttt{var}$ ($\mathrm{Do} \times \mathrm{Dv}$), constant in
 ``var``. `LinearOperator` exposes it with the interface of
 `scipy.sparse.linalg` (``shape``, ``dtype``, ``matvec``, ``rmatvec``,
 ``matmat``, ``T``, ``@``), like ``LazyTensor`` on the PyKeOps side;
-`LinearOperator.solve` solves ``(α I + K) a = b`` by conjugate gradient
+`LinearOperator.solve` solves $(\alpha I + K)\, a = b$ by conjugate gradient
 (transcription of PyKeOps' ``ConjugateGradientSolver``, see THIRD_PARTY.md),
 differentiable with respect to ``b`` and to the other bound inputs.
 
@@ -27,11 +27,11 @@ DEFAULT_EPS = 1e-6
 
 
 def conjugate_gradient(linop, b, *, x0=None, eps: float = DEFAULT_EPS, maxiter: int | None = None):
-    """PyKeOps conjugate gradient (``pykeops.common.operations.ConjugateGradientSolver``).
+    r"""PyKeOps conjugate gradient (``pykeops.common.operations.ConjugateGradientSolver``).
 
-    ``linop`` symmetric positive definite; stops when ``‖r‖ < max(eps‖b‖, eps)``
+    ``linop`` symmetric positive definite; stops when $\|r\| < \max(\texttt{eps} \cdot \|b\|, \texttt{eps})$
     (norm over all coefficients, like PyKeOps); ``maxiter`` defaults to
-    ``10 · b.shape[0]``. Returns ``(x, info)``; warns
+    ``10 * b.shape[0]``. Returns ``(x, info)``; warns
     (``RuntimeWarning``) if ``maxiter`` is reached.
     """
     import torch
@@ -100,12 +100,12 @@ def check_linear(plan, var: str):
 
 
 class LinearOperator:
-    """Operator ``v ↦ run(**inputs, var=v)`` bound to inputs (``run.linear_operator``).
+    r"""Operator $v \mapsto$ ``run(**inputs, var=v)`` bound to inputs (``run.linear_operator``).
 
-    ``shape = (M·Do, N·Dv)`` and ``dtype`` (NumPy) for
+    ``shape`` $= (M \cdot \mathrm{Do}, N \cdot \mathrm{Dv})$ and ``dtype`` (NumPy) for
     `scipy.sparse.linalg.aslinearoperator`. ``matvec(v)`` accepts a
-    ``(N, Dv)`` tensor (returned as ``(M, Do)``), a ``(N·Dv,)`` vector or a
-    ``(N·Dv, k)`` matrix (flattened columns); NumPy arrays are converted to the
+    ``(N, Dv)`` tensor (returned as ``(M, Do)``), a $(N \cdot \mathrm{Dv},)$ vector or a
+    $(N \cdot \mathrm{Dv}, k)$ matrix (flattened columns); NumPy arrays are converted to the
     device of the inputs and returned as NumPy. ``matvec`` is differentiable (it is
     the reduction itself); so is ``rmatvec`` (vector-Jacobian product).
     """
@@ -272,16 +272,16 @@ class LinearOperator:
     # ---- solve
     def solve(self, b, *, alpha: float = DEFAULT_ALPHA, eps: float = DEFAULT_EPS, maxiter: int | None = None,
               x0=None, return_info: bool = False):
-        """Solves ``(alpha·I + K) a = b`` by conjugate gradient (PyKeOps' ``LazyTensor.solve``).
+        r"""Solves $(\texttt{alpha} \cdot I + K)\, a = b$ by conjugate gradient (PyKeOps' ``LazyTensor.solve``).
 
-        ``K`` must be square (``M = N``, ``Do = Dv``) and, for the conjugate
+        $K$ must be square ($M = N$, $\mathrm{Do} = \mathrm{Dv}$) and, for the conjugate
         gradient to converge, symmetric positive definite (``alpha`` regularizes);
         symmetry is not checked (like PyKeOps) and is used by the backward
-        pass (``Kᵀ = K``). ``b``: ``(*Bb, M, Do)``; result ``(*B, N, Dv)``,
+        pass ($K^\top = K$). ``b``: ``(*Bb, M, Do)``; result ``(*B, N, Dv)``,
         ``B`` being the broadcast of the batch of the bound inputs and of ``Bb`` (one system per
         element; like PyKeOps, the conjugate gradient operates on the whole
         block-diagonal system, with norms over all coefficients). ``maxiter``
-        defaults to ``10·M``. Differentiable with respect to ``b`` and to the bound tensor inputs,
+        defaults to $10 \cdot M$. Differentiable with respect to ``b`` and to the bound tensor inputs,
         at any order (``create_graph``).
         """
         import torch

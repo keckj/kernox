@@ -24,9 +24,9 @@ L = fast(x=X, y=Y)
 
 - `exp` and `log` are approximated: those written in the formula, and those
   used inside the log-sum-exp reductions.
-- The relative error of the approximate `exp` is about `2⁻²¹` plus a term
+- The relative error of the approximate `exp` is about $2^{-21}$ plus a term
   proportional to the size of its argument; the absolute error of the
-  approximate `log` is about `2⁻²¹`. In float32, `2⁻²¹` amounts to a few
+  approximate `log` is about $2^{-21}$. In float32, $2^{-21}$ amounts to a few
   units in the last place.
 - Everything else stays exact IEEE arithmetic: divisions, square roots,
   trigonometric functions, the order of operations, and subnormal numbers.

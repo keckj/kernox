@@ -6,7 +6,7 @@ mixture models and entropic optimal transport.
 
 ## Log-sum-exp
 
-`f.logsumexp(over="j")` computes `log Σ_j exp f(i, j)` for each component,
+`f.logsumexp(over="j")` computes $\log \sum_j \exp f(i, j)$ for each component,
 in a single pass and without overflow:
 
 ```python
@@ -26,13 +26,13 @@ Y = torch.randn(4_000, 2, device=device) + 1.0
 L = softmin(x=X, y=Y, eps=0.01)                      # (3000, 1)
 ```
 
-Even with `eps = 0.01`, where `exp(-C / eps)` underflows to zero in float32,
+Even with $\varepsilon = 0.01$, where $\exp(-C / \varepsilon)$ underflows to zero in float32,
 the result is accurate, because kernox shifts by the running maximum.
 
 ## Weighted log-sum-exp
 
 With a scalar score `f` and positive weights `g`,
-`f.logsumexp(over="j", weight=g)` computes `log Σ_j exp(f) g_j`:
+`f.logsumexp(over="j", weight=g)` computes $\log \sum_j \exp(f)\, g_j$:
 
 ```python
 b = kp.Vj("b", 1)
@@ -46,7 +46,7 @@ Negative weights give NaN, like `log` of a negative number.
 ## Softmax-weighted sums
 
 `f.sumsoftmaxweight(g, over="j")` is the softmax of `f` over `j`, applied to the
-vectors `g`: `Σ_j exp(f) g / Σ_j exp(f)`. This is attention with a formula as
+vectors `g`: $\sum_j \exp(f)\, g / \sum_j \exp(f)$. This is attention with a formula as
 the score:
 
 ```python
@@ -99,7 +99,7 @@ respect to the points and the weights.
 ## Special values
 
 - A score of `-inf` contributes nothing.
-- With no terms (N = 0) or only `-inf` scores, `logsumexp` returns `-inf` and
+- With no terms ($N = 0$) or only `-inf` scores, `logsumexp` returns `-inf` and
   `sumsoftmaxweight` returns NaN.
 - A `+inf` score gives `+inf` for `logsumexp`, and NaN for `sumsoftmaxweight`.
 

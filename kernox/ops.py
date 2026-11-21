@@ -73,18 +73,18 @@ def sinxdivx(x):
 
 
 def sinc(x):
-    """``sin(πx)/(πx)``, i.e. ``sinxdivx(π·x)`` (PyKeOps ``LazyTensor.sinc``)."""
+    r"""$\sin(\pi x)/(\pi x)$, i.e. ``sinxdivx`` applied to $\pi x$ (PyKeOps ``LazyTensor.sinc``)."""
     return sinxdivx(_sx().pi * _real(x, "sinc"))
 
 
 def xlogx(x):
-    """``x ? x·log(x) : 0`` (keopscore ``XLogX``)."""
+    """``x ? x * log(x) : 0`` (keopscore ``XLogX``)."""
     sx = _sx()
     return Formula._map(lambda a: _pw((sx.Integer(0), sx.Eq(a, 0)), (a * sx.log(a), True)), x, boolean_in=False)
 
 
 def inv(x):
-    """``1/x`` (keopscore ``Inv``)."""
+    """$1/x$ (keopscore ``Inv``)."""
     return 1 / _real(x, "inv")
 
 
@@ -104,9 +104,9 @@ def _round0(a):
 
 
 def round(x, d=0):  # noqa: A001 - PyKeOps name
-    """Rounding to ``d`` decimal places (keopscore ``Round``): ``round(x·10^d)/10^d``.
+    r"""Rounding to ``d`` decimal places (keopscore ``Round``): $\operatorname{round}(x \cdot 10^d)/10^d$.
 
-    ``d = 0``: C ``round(x)`` (half away from zero). The factor ``10^d``
+    $d = 0$: C ``round(x)`` (half away from zero). The factor $10^d$
     is an exact constant; the final division is rounded once.
     """
     d = _int(d, "round: number of decimals")
@@ -118,7 +118,7 @@ def round(x, d=0):  # noqa: A001 - PyKeOps name
 
 
 def mod(x, modulus, offset=0):
-    """``x − n·floor((x − d)/n)`` (keopscore ``Mod``, ``n = modulus``, ``d = offset``)."""
+    r"""$x - n \cdot \lfloor (x - d)/n \rfloor$ (keopscore ``Mod``, $n = \texttt{modulus}$, $d = \texttt{offset}$)."""
     sx = _sx()
     return Formula._map(lambda a, n, o: a - n * sx.floor((a - o) / n), x, modulus, offset, boolean_in=False)
 
@@ -152,23 +152,23 @@ def _rsqrt_keops(s):
 
 
 def normalize(x):
-    """``x · rsqrt(|x|²)`` with ``rsqrt(0) = 0`` (keopscore ``Normalize``: zero vector → 0)."""
+    r"""$x \cdot \operatorname{rsqrt}(\|x\|^2)$ with $\operatorname{rsqrt}(0) = 0$ (keopscore ``Normalize``: zero vector → 0)."""
     x = _real(x, "normalize")
     r = _rsqrt_keops(x.sqnorm2()._comps[0])
     return _formula((c * r for c in x._comps), x)
 
 
 def sqdist(x, y):
-    """``|x − y|²`` (keopscore ``SqDist``)."""
+    r"""$\|x - y\|^2$ (keopscore ``SqDist``)."""
     return (_real(x, "sqdist") - y).sqnorm2()
 
 
 def weightedsqnorm(x, s):
-    """Norm of ``x`` weighted by ``s`` (PyKeOps ``x.weightedsqnorm(s)``).
+    r"""Norm of ``x`` weighted by ``s`` (PyKeOps ``x.weightedsqnorm(s)``).
 
-    ``dim(s) = 1``: ``s·|x|²``; ``dim(s) = D``: ``Σ s_k x_k²``;
-    ``dim(s) = D²``: ``Σ_{kl} s_{kl} x_k x_l`` (row-major matrix). For
-    ``D = 1``, the isotropic case applies (like keopscore).
+    $\dim(s) = 1$: $s \cdot \|x\|^2$; $\dim(s) = D$: $\sum_k s_k x_k^2$;
+    $\dim(s) = D^2$: $\sum_{kl} s_{kl} x_k x_l$ (row-major matrix). For
+    $D = 1$, the isotropic case applies (like keopscore).
     """
     x, s = _real(x, "weightedsqnorm"), _real(s, "weightedsqnorm")
     d = x.dim
@@ -182,17 +182,17 @@ def weightedsqnorm(x, s):
 
 
 def weightedsqdist(x, y, s):
-    """``weightedsqnorm(x − y, s)`` (PyKeOps ``x.weightedsqdist(y, s)``)."""
+    """``weightedsqnorm(x - y, s)`` (PyKeOps ``x.weightedsqdist(y, s)``)."""
     return weightedsqnorm(_real(x, "weightedsqdist") - y, s)
 
 
 def one_hot(x, D: int):
-    """Vector of dimension ``D`` equal to 1 at ``(int)(x + 0.5)`` (keopscore ``OneHot``).
+    r"""Vector of dimension ``D`` equal to 1 at ``(int)(x + 0.5)`` (keopscore ``OneHot``).
 
     keopscore computes ``x + .5`` in double then truncates toward zero: the
-    component k ≥ 1 is 1 if ``k − 1/2 ≤ x < k + 1/2``, the component 0 if
-    ``−3/2 < x < 1/2`` (exact comparisons, without rounding ``x + 0.5``).
-    Outside ``[0, D)`` (undefined behavior in keopscore) and NaN: zero vector.
+    component $k \geq 1$ is 1 if $k - \tfrac12 \leq x < k + \tfrac12$, the component 0 if
+    $-\tfrac32 < x < \tfrac12$ (exact comparisons, without rounding ``x + 0.5``).
+    Outside $[0, D)$ (undefined behavior in keopscore) and NaN: zero vector.
     """
     D = _int(D, "one_hot: D", minimum=1)
     x = _real(x, "one_hot")
@@ -212,7 +212,7 @@ def one_hot(x, D: int):
 
 
 def elem(x, i: int):
-    """Component ``i`` (keopscore ``Elem``), ``0 ≤ i < dim``."""
+    r"""Component ``i`` (keopscore ``Elem``), $0 \leq i < \dim(x)$."""
     i = _int(i, "elem: index", minimum=0)
     if i >= x.dim:
         raise ValidationError(f"elem: index {i} out of [0, {x.dim})")
@@ -220,7 +220,7 @@ def elem(x, i: int):
 
 
 def extract(x, i: int, d: int):
-    """Components ``i … i+d−1`` (keopscore ``Extract``)."""
+    r"""Components $i, \dots, i + d - 1$ (keopscore ``Extract``)."""
     i, d = _int(i, "extract: start", minimum=0), _int(d, "extract: dimension", minimum=1)
     if i + d > x.dim:
         raise ValidationError(f"extract: [{i}, {i + d}) out of [0, {x.dim})")
@@ -228,7 +228,7 @@ def extract(x, i: int, d: int):
 
 
 def matvecmult(A, v):
-    """``(A v)_i = Σ_k A[i·m + k] v_k`` with ``A`` row-major (n, m), ``m = dim(v)``."""
+    r"""$(A v)_i = \sum_k A[i \cdot m + k]\, v_k$ with ``A`` row-major (n, m), $m = \dim(v)$."""
     A, v = _real(A, "matvecmult"), _real(v, "matvecmult")
     m = v.dim
     if A.dim % m:
@@ -240,7 +240,7 @@ def matvecmult(A, v):
 
 
 def vecmatmult(v, A):
-    """``(v A)_i = Σ_k v_k A[k·n + i]`` with ``A`` row-major (m, n), ``m = dim(v)``."""
+    r"""$(v A)_i = \sum_k v_k\, A[k \cdot n + i]$ with ``A`` row-major (m, n), $m = \dim(v)$."""
     v, A = _real(v, "vecmatmult"), _real(A, "vecmatmult")
     m = v.dim
     if A.dim % m:
@@ -252,7 +252,7 @@ def vecmatmult(v, A):
 
 
 def tensorprod(a, b):
-    """Tensor product ``out[k·dim(b) + l] = a_k b_l`` (keopscore ``TensorProd``)."""
+    r"""Tensor product $\mathrm{out}[k \cdot \dim(b) + l] = a_k b_l$ (keopscore ``TensorProd``)."""
     a, b = _real(a, "tensorprod"), _real(b, "tensorprod")
     return _formula((x * y for x in a._comps for y in b._comps), a, b)
 
@@ -310,12 +310,12 @@ def kron(a, b, dimfa, dimfb):
 
 
 def bspline(knots, x, k: int = 0):
-    """B-spline functions of order ``k`` on the knots ``knots``, evaluated at scalar ``x``.
+    r"""B-spline functions of order ``k`` on the knots ``knots``, evaluated at scalar ``x``.
 
     keopscore ``BSpline`` (in-place De Boor algorithm, same order of
-    operations): output of dimension ``dim(knots) − k − 1``. Order 0:
-    indicator ``t_j ≤ x < t_{j+1}``; ratios ``ω = (x − t_i)/(t_{i+k} − t_i)``
-    if ``t_i < t_{i+k}``, 0 otherwise. Differentiable here with respect to ``x`` and to the
+    operations): output of dimension $\dim(\texttt{knots}) - k - 1$. Order 0:
+    indicator $t_j \leq x < t_{j+1}$; ratios $\omega = (x - t_i)/(t_{i+k} - t_i)$
+    if $t_i < t_{i+k}$, 0 otherwise. Differentiable here with respect to ``x`` and to the
     knots (keopscore is not).
     """
     k = _int(k, "bspline: order", minimum=0)
@@ -343,16 +343,20 @@ def bspline(knots, x, k: int = 0):
 
 
 def softdtw_sqdist(x, y, gamma):
-    """Soft-DTW between the series ``x`` (dim n) and ``y`` (dim m), cost ``(x_i − y_j)²``.
+    r"""Soft-DTW between the series ``x`` (dim n) and ``y`` (dim m), cost $(x_i - y_j)^2$.
 
-    keopscore ``SoftDTW_SqDist``: dynamic programming ``r(i, j)`` with
-    ``r(0,0) = d²``, cumulative borders, then
-    ``r = d² + (μ − γ·log(e^{(μ−r(i−1,j−1))/γ} + e^{(μ−r(i−1,j))/γ} + e^{(μ−r(i,j−1))/γ}))``,
-    ``μ = min(r(i−1,j−1), r(i,j−1), r(i−1,j))``; output ``r(n−1, m−1)``.
-    The recurrence is unrolled symbolically (DAG of size O(n·m), shared
-    through CSE): the gradient (with respect to x, y **and** γ) is the symbolic
+    keopscore ``SoftDTW_SqDist``: dynamic programming $r(i, j)$ with
+    $r(0, 0) = d^2$, cumulative borders, then
+
+    $$
+    r = d^2 + \left(\mu - \gamma \log\left(e^{(\mu - r(i-1, j-1))/\gamma} + e^{(\mu - r(i-1, j))/\gamma} + e^{(\mu - r(i, j-1))/\gamma}\right)\right),
+    $$
+
+    $\mu = \min(r(i-1, j-1), r(i, j-1), r(i-1, j))$; output $r(n-1, m-1)$.
+    The recurrence is unrolled symbolically (DAG of size $O(n \cdot m)$, shared
+    through CSE): the gradient (with respect to x, y **and** $\gamma$) is the symbolic
     derivative of this DAG. keopscore codes a loop and a dedicated gradient, and
-    refuses the derivative with respect to γ.
+    refuses the derivative with respect to $\gamma$.
     """
     x, y, gamma = _real(x, "softdtw_sqdist"), _real(y, "softdtw_sqdist"), _real(gamma, "softdtw_sqdist")
     if gamma.dim != 1:
@@ -401,10 +405,10 @@ def _d(expr, symbol):
 
 
 def grad(f, v, e):
-    """``(∂f/∂v)ᵀ e`` (keopscore ``Grad(f, v, e)``): dimension of ``v``, ``e`` of dimension of ``f``.
+    r"""$(\partial f/\partial v)^\top e$ (keopscore ``Grad(f, v, e)``): dimension of ``v``, ``e`` of dimension of ``f``.
 
     Symbolic derivative (rules of `kernox.autograd`: ``Heaviside`` of
-    ``min``/``max`` → 1/2 at ties, ``where`` differentiated branch by branch).
+    ``min``/``max`` → $\tfrac12$ at ties, ``where`` differentiated branch by branch).
     """
     f, e = _real(f, "grad"), _real(e, "grad")
     syms = _wrt(v, "grad")
@@ -416,7 +420,7 @@ def grad(f, v, e):
 
 
 def diff(f, v, u):
-    """``(∂f/∂v) u`` (keopscore ``Diff(f, v, u)``, differential applied to ``u``): dimension of ``f``."""
+    r"""$(\partial f/\partial v)\, u$ (keopscore ``Diff(f, v, u)``, differential applied to ``u``): dimension of ``f``."""
     f, u = _real(f, "diff"), _real(u, "diff")
     syms = _wrt(v, "diff")
     if u.dim != len(syms):
@@ -427,14 +431,14 @@ def diff(f, v, u):
 
 
 def grad_matrix(f, v):
-    """Matrix ``∂f_k/∂v_c`` flattened as ``k·dim(v) + c`` (keopscore ``GradMatrix``)."""
+    r"""Matrix $\partial f_k/\partial v_c$ flattened as $k \cdot \dim(v) + c$ (keopscore ``GradMatrix``)."""
     f = _real(f, "grad_matrix")
     syms = _wrt(v, "grad_matrix")
     return _formula([_d(fk, s) for fk in f._comps for s in syms], f, v)
 
 
 def divergence(f, v):
-    """``Σ_c ∂f_c/∂v_c`` (keopscore ``Divergence``); ``dim(f) = dim(v)``."""
+    r"""$\sum_c \partial f_c/\partial v_c$ (keopscore ``Divergence``); $\dim(f) = \dim(v)$."""
     f = _real(f, "divergence")
     syms = _wrt(v, "divergence")
     if f.dim != len(syms):
@@ -443,7 +447,7 @@ def divergence(f, v):
 
 
 def laplacian(f, v):
-    """``Σ_c ∂²f/∂v_c²`` (keopscore ``Laplacian``); scalar ``f``."""
+    r"""$\sum_c \partial^2 f/\partial v_c^2$ (keopscore ``Laplacian``); scalar ``f``."""
     f = _real(f, "laplacian")
     syms = _wrt(v, "laplacian")
     if f.dim != 1:
@@ -452,7 +456,7 @@ def laplacian(f, v):
 
 
 def trace_operator(f, v):
-    """Trace of the linear map ``v ↦ f(v)`` (keopscore ``TraceOperator``): ``Σ_c ∂f_c/∂v_c``.
+    r"""Trace of the linear map $v \mapsto f(v)$ (keopscore ``TraceOperator``): $\sum_c \partial f_c/\partial v_c$.
 
     keopscore requires ``f`` to be linear in ``v``; the trace of the differential is
     then the trace of the map, and that is what is computed here for any ``f``.

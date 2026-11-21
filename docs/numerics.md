@@ -62,11 +62,11 @@ the same as PyKeOps' `sum_scheme`:
 
 | `sum_scheme` | How terms are added | Error, roughly |
 | --- | --- | --- |
-| `"direct"` (default) | one running sum per row | grows like `N · u · Σ|term|` |
-| `"block"` | sums of blocks of `T` terms, then the total | `(N/T + T) · u · Σ|term|` |
-| `"kahan"` | compensated summation (Kahan-Babuška, also known as Neumaier) | `2 · u · Σ|term|`, independent of N |
+| `"direct"` (default) | one running sum per row | grows like $N \cdot u \cdot \sum \lvert \mathrm{term} \rvert$ |
+| `"block"` | sums of blocks of $T$ terms, then the total | $(N/T + T) \cdot u \cdot \sum \lvert \mathrm{term} \rvert$ |
+| `"kahan"` | compensated summation (Kahan-Babuška, also known as Neumaier) | $2 \cdot u \cdot \sum \lvert \mathrm{term} \rvert$, independent of $N$ |
 
-Here `u` is the unit roundoff of the accumulator (about `6e-8` in float32).
+Here $u$ is the unit roundoff of the accumulator (about $6 \cdot 10^{-8}$ in float32).
 `"kahan"` costs a second accumulator per output; it is the scheme to use when
 a float32 sum over a million terms must stay accurate.
 
@@ -95,7 +95,7 @@ A wider accumulator is the other way to improve a sum: with
 - When `K` is larger than the number of candidates, `kmin` and `argkmin` pad
   with `+inf` and `-1`.
 - Log-sum-exp is computed in one pass with the usual shift by the running
-  maximum, so large scores (`1e4`) do not overflow. A term with score `-inf`
+  maximum, so large scores ($10^4$) do not overflow. A term with score `-inf`
   has zero weight. A single `+inf` score gives `+inf` for `logsumexp` and NaN
   for `sumsoftmaxweight`.
 
@@ -129,7 +129,7 @@ on implicitly. See [fast_math](guides/fast-math.md).
 ## Flushing subnormal numbers
 
 `compile(..., flush_denormals=True)` allows subnormal numbers (smaller than
-about 1.2·10⁻³⁸ in float32, 2.2·10⁻³⁰⁸ in float64) to be replaced by zero,
+about $1.2 \cdot 10^{-38}$ in float32, $2.2 \cdot 10^{-308}$ in float64) to be replaced by zero,
 both as inputs and as results of each operation. It is off by default and
 never turned on implicitly. Gradients inherit it.
 

@@ -38,7 +38,7 @@ added in a different order.
 ## When measurements happen
 
 - Only on the first call for a given **size class**. Sizes are grouped by
-  factors of about √2 for M, N, the number of batch elements and the density
+  factors of about $\sqrt{2}$ for $M$, $N$, the number of batch elements and the density
   of block-sparse ranges. Other calls in the same class reuse the decision
   without measuring or recompiling.
 - The measuring call is **blocking**: it synchronizes with the GPU. It

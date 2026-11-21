@@ -1,4 +1,4 @@
-"""Block-sparse ranges, in the PyKeOps sense.
+r"""Block-sparse ranges, in the PyKeOps sense.
 
 A `Ranges` holds, on the device of the inputs, the six integer tensors
 of PyKeOps, in the **user's** orientation (i = ``Vi``, j = ``Vj``):
@@ -10,9 +10,9 @@ of PyKeOps, in the **user's** orientation (i = ``Vi``, j = ``Vj``):
 - ``ranges_j``, ``slices_j``, ``redranges_i``: the transposed triplet
   (reduction over i; gradients with respect to the j arguments). Optional.
 
-For i in block ``c``: reduction over ``J(i) = ∪ redranges_j[slices_i[c−1]
+For i in block ``c``: reduction over $J(i) = \bigcup$ ``redranges_j[slices_i[c-1]
 : slices_i[c]]``; a row covered by no block receives the neutral element of the
-reduction; ties go to the smallest j of ``J(i)``. Disjoint blocks and
+reduction; ties go to the smallest j of $J(i)$. Disjoint blocks and
 disjoint intervals within a block: checked by ``with_ranges(r,
 validate=True)``, otherwise an overlap is undefined behavior.
 
@@ -219,7 +219,7 @@ def validate_triplet(tr: Triplet, m: int, n: int, side: str) -> None:
 
 
 def work_list(tr: Triplet, tile_m: int):
-    """Tiles ``(i0, i1, k0, k1)`` int64 (W, 4), height ≤ ``tile_m``, on the device of the triplet.
+    r"""Tiles ``(i0, i1, k0, k1)`` int64 (W, 4), height $\leq$ ``tile_m``, on the device of the triplet.
 
     ``[k0, k1)``: intervals of ``tr.red`` to traverse. Torch computation; the
     size W requires a host synchronization (the runtime caches the result

@@ -53,15 +53,15 @@ affects the generated code; `batch_rank`, `ranges` and a non-default
 
 | Kind | Outputs for M rows | Definition |
 | --- | --- | --- |
-| `SUM` | `(M, D)` | `Σ_j f_d` |
-| `COUNT` | `(M, D)` int64 | number of `j` where the boolean `f_d` holds |
+| `SUM` | `(M, D)` | $\sum_j f_d$ |
+| `COUNT` | `(M, D)` int64 | number of `j` where the boolean $f_d$ holds |
 | `MIN`, `MAX` | `(M, D)` | extremum per component |
 | `ARGMIN`, `ARGMAX` | `(M, D)` int64 | index of the extremum |
 | `MIN_ARGMIN`, `MAX_ARGMAX` | value `(M, D)` and index `(M, D)` | both from the same pass |
 | `KMIN`, `ARGKMIN`, `KMIN_ARGKMIN` | `(M, K)` | the K smallest values of a scalar `f`, their indices, or both |
-| `LOGSUMEXP` | `(M, D)` | `log Σ_j exp f_d` |
-| `SUMSOFTMAXWEIGHT` | `(M, E)` | outputs `(f, g_1..g_E)`: `Σ_j exp(f) g_e / Σ_j exp(f)` |
-| `LOGSUMEXPWEIGHT` | `(M, E)` | outputs `(f, g_1..g_E)`: `log Σ_j exp(f) g_e` |
+| `LOGSUMEXP` | `(M, D)` | $\log \sum_j \exp f_d$ |
+| `SUMSOFTMAXWEIGHT` | `(M, E)` | outputs $(f, g_1, \dots, g_E)$: $\sum_j \exp(f)\, g_e / \sum_j \exp(f)$ |
+| `LOGSUMEXPWEIGHT` | `(M, E)` | outputs $(f, g_1, \dots, g_E)$: $\log \sum_j \exp(f)\, g_e$ |
 
 Output shapes and dtypes come from `output_shapes(plan, m, batch)`. SUM and
 the LOGSUMEXP family return `acc_dtype`, except FP16 plans, which return
@@ -69,7 +69,7 @@ float16 (`accumulated_output_dtype(plan)`).
 
 ### Semantics
 
-| Kind | Identity (N = 0) | Ties | NaN |
+| Kind | Identity ($N = 0$) | Ties | NaN |
 | --- | --- | --- | --- |
 | SUM | 0 | | propagated |
 | COUNT | 0 | | a comparison with NaN is false |
@@ -82,9 +82,9 @@ float16 (`accumulated_output_dtype(plan)`).
 | LOGSUMEXPWEIGHT | `-inf` | | propagated |
 
 - K outputs are sorted by increasing value, ties by increasing index.
-  `K = 0` gives `(M, 0)` outputs; `K > N` pads with `(+inf, -1)`.
+  $K = 0$ gives `(M, 0)` outputs; $K > N$ pads with `(+inf, -1)`.
 - `±inf` is a valid value, not a missing candidate: a `+inf` term can be
-  returned with an index `≥ 0`.
+  returned with an index $\geq 0$.
 - Indices are int64 and never stored as floating point. COUNT accumulates in
   int64.
 - The summation order of SUM is not specified; tests use a tolerance relative
@@ -93,22 +93,24 @@ float16 (`accumulated_output_dtype(plan)`).
 ### The LOGSUMEXP family
 
 All three kinds use a single pass with a running maximum. The state per row
-and per component is `(m, s)`, plus `t_1..t_E` for the weighted kinds, in
+and per component is $(m, s)$, plus $t_1, \dots, t_E$ for the weighted kinds, in
 `acc_dtype`. Inserting a term, or merging two states (tiles, split ranges):
 
-```
-m' = max(m1, m2)
-s  = s1·exp(m1 − m') + s2·exp(m2 − m')       (t_e likewise)
-```
+$$
+\begin{aligned}
+m' &= \max(m_1, m_2) \\
+s &= s_1 \cdot \exp(m_1 - m') + s_2 \cdot \exp(m_2 - m') \qquad (t_e \text{ likewise})
+\end{aligned}
+$$
 
-with `exp(−inf − (−inf)) = 0`, so the empty state `(−inf, 0)` is neutral.
-Results: `m + log s` (LOGSUMEXP), `t_e / s` (SUMSOFTMAXWEIGHT),
-`m + log t_e` (LOGSUMEXPWEIGHT). Special values:
+with $\exp(-\infty - (-\infty)) = 0$, so the empty state $(-\infty, 0)$ is neutral.
+Results: $m + \log s$ (LOGSUMEXP), $t_e / s$ (SUMSOFTMAXWEIGHT),
+$m + \log t_e$ (LOGSUMEXPWEIGHT). Special values:
 
-- a term with `f = −inf` has zero weight, and a NaN weight on such a term is
+- a term with $f = -\infty$ has zero weight, and a NaN weight on such a term is
   ignored;
-- a single `f = +inf`: LOGSUMEXP gives `+inf`, SUMSOFTMAXWEIGHT NaN,
-  LOGSUMEXPWEIGHT `+inf` if `Σ_{f=+inf} g_e > 0`, NaN otherwise;
+- a single $f = +\infty$: LOGSUMEXP gives `+inf`, SUMSOFTMAXWEIGHT NaN,
+  LOGSUMEXPWEIGHT `+inf` if $\sum_{f = +\infty} g_e > 0$, NaN otherwise;
 - negative weights make LOGSUMEXPWEIGHT NaN, like `log`;
 - a NaN `f`, or a NaN weight with non-zero weight, propagates.
 
@@ -168,7 +170,7 @@ most one speculative evaluation per shared temporary.
   the plan.
 - **`fast_math`.** Only `exp` and `log` may be approximated, in the formula
   and in the LOGSUMEXP states and final `log`. Special values are preserved
-  (`exp(−inf) = 0`, `log(0) = −inf`, NaN propagates). The CUDA backend uses
+  (`exp(-inf) = 0`, `log(0) = -inf`, NaN propagates). The CUDA backend uses
   `ex2.approx.f32` and `lg2.approx.f32` without `.ftz` in float32; float64 is
   unchanged and float16 is refused. A backend must refuse the flag rather than
   ignore it. The oracle stays IEEE.
@@ -180,14 +182,14 @@ most one speculative evaluation per shared temporary.
   backend that does not declare `flush_denormals` is refused by the runtime.
   The oracle keeps subnormal numbers. The key holds the field only when it
   is true, so earlier keys are unchanged.
-- **Summation schemes** apply to SUM and to the sums `s`, `t_e` of the
+- **Summation schemes** apply to SUM and to the sums $s$, $t_e$ of the
   LOGSUMEXP family, and are ignored by the other kinds:
     - `direct`: one accumulator per thread, partial sums added together;
-    - `block`: each tile of `T` terms is summed into a fresh accumulator, then
+    - `block`: each tile of $T$ terms is summed into a fresh accumulator, then
       added to the total; `T` is published in `CompileInfo.options` as
       `sum_block=T`;
     - `kahan`: Neumaier compensated summation, state `(s, c)`; insertion
-      `t = s + x; c += (|s| ≥ |x|) ? (s − t) + x : (x − t) + s; s = t`;
+      `t = s + x; c += (|s| >= |x|) ? (s - t) + x : (x - t) + s; s = t`;
       merge with TwoSum of the sums plus `c1 + c2`; result `s + c`, or `s` if
       `s` is not finite. The LOGSUMEXP rescaling multiplies `s` and `c` (and
       `t_e`, `c_e`).
@@ -211,7 +213,7 @@ most one speculative evaluation per shared temporary.
 - The kernel runs on the current PyTorch stream of the device
   (`torch.cuda.current_stream` for CUDA and ROCm, `torch.xpu.current_stream`
   for XPU). `launch` performs no host synchronization and no host copy.
-- No M×N matrix is materialized. Temporaries are bounded, allocated through
+- No $M \times N$ matrix is materialized. Temporaries are bounded, allocated through
   PyTorch on the same device and stream, and their size is published in
   `CompileInfo.temp_bytes_per_launch`.
 - `M = 0` and `K = 0` are handled by the runtime without calling `launch`.
@@ -269,7 +271,7 @@ For a plan with `ranges=True`, the runtime calls
 `launch(inputs, outputs, ranges=RangesLayout)`. The layout holds a device work
 list of tiles `(i0, i1, k0, k1)` of height at most `tile_m` (published by the
 compiled object as `ranges_tile_m`) and the reduced intervals `redranges`.
-A tile reduces its rows over `∪ redranges[k0:k1]`; rows covered by no tile
+A tile reduces its rows over $\bigcup \texttt{redranges}[k_0{:}k_1]$; rows covered by no tile
 receive the identity, written by `launch`. Ties go to the smallest `j`
 whatever the order of the intervals. Batch and ranges together are refused.
 
@@ -278,21 +280,21 @@ whatever the order of the intervals. Batch and ranges together are refused.
 Gradients need nothing new from backends: they are ordinary plans built by the
 core and compiled by the same backend.
 
-- **SUM.** For `out[i, e] = Σ_j F_e(x_i, y_j, p)` and an upstream gradient `G`
+- **SUM.** For $\mathrm{out}[i, e] = \sum_j F_e(x_i, y_j, p)$ and an upstream gradient $G$
   (an extra input named `kp_grad`), the core builds an `i`-side SUM plan with
-  outputs `Σ_e G_e ∂F_e/∂x[c]` and `Σ_e G_e ∂F_e/∂p[c]` (the latter summed over
+  outputs $\sum_e G_e \, \partial F_e / \partial x[c]$ and $\sum_e G_e \, \partial F_e / \partial p[c]$ (the latter summed over
   `i` by PyTorch), and a `j`-side plan, with `i` and `j` swapped, for
-  `Σ_e G_e ∂F_e/∂y[c]`. Gradient plans keep the `dtype`, `acc_dtype`,
+  $\sum_e G_e \, \partial F_e / \partial y[c]$. Gradient plans keep the `dtype`, `acc_dtype`,
   `fp_contract`, `fast_math`, `flush_denormals` and `sum_scheme` of the forward plan, and are
   themselves differentiable.
 - **LOGSUMEXP family** (first order): the gradient is a SUM plan in which the
-  forward output is a fixed input, for example `Σ_j exp(f − L) ∂f` for
-  LOGSUMEXP. A row with `L = −inf` has a zero gradient.
+  forward output is a fixed input, for example $\sum_j \exp(f - L)\, \partial f$ for
+  LOGSUMEXP. A row with $L = -\infty$ has a zero gradient.
 - **MIN, MAX, KMIN** and the values of the combined kinds (first order): the
-  derivatives are evaluated by PyTorch at the selected pairs only (O(M·K)),
-  with `scatter_add` on the `j` side; an index `−1` contributes nothing.
-- **Derivatives** come from `symox.diff`. `Heaviside(z)` becomes 1, 0 or 1/2
-  for `z > 0`, `z < 0`, `z = 0`; `DiracDelta` becomes 0; an unevaluated
+  derivatives are evaluated by PyTorch at the selected pairs only ($O(M \cdot K)$),
+  with `scatter_add` on the `j` side; an index `-1` contributes nothing.
+- **Derivatives** come from `symox.diff`. `Heaviside(z)` becomes 1, 0 or $\tfrac12$
+  for $z > 0$, $z < 0$, $z = 0$; `DiracDelta` becomes 0; an unevaluated
   `Derivative` raises `UnsupportedError`. A `Piecewise` is differentiated
   branch by branch.
 - With ranges, the `i` side uses the forward triplet and the `j` side the
@@ -317,9 +319,9 @@ order of floating-point additions may differ.
 The core does the measuring: on the real inputs of the call, outputs in
 temporary tensors, compilation excluded from timing, 1 warm-up then 5 timed
 launches with GPU events, within a time budget (2 s for `measure`, 30 s for
-`patient`). A decision is stored only if the spread `(max − min)/median` of
+`patient`). A decision is stored only if the spread $(\max - \min) / \operatorname{median}$ of
 each of the two best candidates is at most 25%. Size classes are half-octaves
-of `(M, N, nb, 1/ρ)` (`nb` batch elements, `ρ` density of the ranges).
+of $(M, N, \mathrm{nb}, 1/\rho)$ (`nb` batch elements, $\rho$ density of the ranges).
 
 The wisdom key combines `plan.key()`, the backend, the device identity (from
 `device_identity`, or else from the default variant's `CompileInfo`), the

@@ -4,7 +4,7 @@
 `torch.distributed` group: several GPUs of a node with NCCL, several CPU
 nodes with Gloo. Every process passes the same full inputs and receives the
 full result, so the rest of the program does not change. Each process only
-computes its share of the M × N pairs.
+computes its share of the $M \times N$ pairs.
 
 ## A distributed call
 
@@ -118,43 +118,43 @@ call: the sums are done in another order.
 ## Scaling
 
 Strong scaling measured with `tools/bench_distributed.py`: a Gaussian kernel
-product in D = 3, float32, M = N, forward and backward (gradient with respect
-to `x`), median time in seconds. *Dense* computes the N² pairs. *Block-sparse*
+product in $D = 3$, float32, $M = N$, forward and backward (gradient with respect
+to `x`), median time in seconds. *Dense* computes the $N^2$ pairs. *Block-sparse*
 sorts the points on a grid of about 1,000 points per cell and keeps, for each
-cell, its 27 neighbours: about 27,000 pairs per point (2.7 × 10¹² pairs for
-10⁸ points).
+cell, its 27 neighbours: about 27,000 pairs per point ($2.7 \times 10^{12}$ pairs for
+$10^8$ points).
 
 ![Strong scaling of kernox.distributed: speed-up against the number of devices](../images/scaling.svg)
 
-Speed-up = time on one device / time on P devices; the times are in the
+Speed-up = time on one device / time on $P$ devices; the times are in the
 tables below.
 
 AMD Instinct MI210, one process per GPU, 4 GPUs per node, RCCL:
 
 | Case | 1 GPU | 2 GPUs | 4 GPUs | 8 GPUs (2 nodes) | Speed-up at 8 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Dense, N = 10⁶ | 7.40 | 3.29 | 1.69 | 1.05 | × 7.1 |
-| Dense, N = 10⁷ | 756 | 378 | 205 | 94.6 | × 8.0 |
-| Block-sparse, N = 10⁷ | 1.63 | 0.82 | 0.56 | 0.44 | × 3.7 |
-| Block-sparse, N = 10⁸ | 21.4 | 9.55 | 5.01 | 2.79 | × 7.7 |
+| Dense, $N = 10^6$ | 7.40 | 3.29 | 1.69 | 1.05 | × 7.1 |
+| Dense, $N = 10^7$ | 756 | 378 | 205 | 94.6 | × 8.0 |
+| Block-sparse, $N = 10^7$ | 1.63 | 0.82 | 0.56 | 0.44 | × 3.7 |
+| Block-sparse, $N = 10^8$ | 21.4 | 9.55 | 5.01 | 2.79 | × 7.7 |
 
 CPU nodes of 2 × AMD EPYC 9654 (192 cores), one process per node with all
 its cores, Gloo over TCP:
 
 | Case | 1 node | 2 nodes | 4 nodes | 8 nodes | Speed-up at 8 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Dense, N = 10⁶ | 10.3 | 5.22 | 2.66 | 1.50 | × 6.9 |
-| Dense, N = 3 × 10⁶ | 94.9 | 47.9 | 24.1 | 13.2 | × 7.2 |
-| Block-sparse, N = 10⁷ | 2.44 | 1.34 | 0.76 | 0.53 | × 4.6 |
-| Block-sparse, N = 10⁸ | 28.0 | 15.0 | 8.27 | 5.40 | × 5.2 |
+| Dense, $N = 10^6$ | 10.3 | 5.22 | 2.66 | 1.50 | × 6.9 |
+| Dense, $N = 3 \times 10^6$ | 94.9 | 47.9 | 24.1 | 13.2 | × 7.2 |
+| Block-sparse, $N = 10^7$ | 2.44 | 1.34 | 0.76 | 0.53 | × 4.6 |
+| Block-sparse, $N = 10^8$ | 28.0 | 15.0 | 8.27 | 5.40 | × 5.2 |
 
-Each process computes `1/P` of the pairs, but every process still receives
+Each process computes $1/P$ of the pairs, but every process still receives
 the whole output in the forward pass and the whole gradient in the backward
-pass: 400 MB and 1.2 GB for 10⁸ points. Splitting pays when the computation
+pass: 400 MB and 1.2 GB for $10^8$ points. Splitting pays when the computation
 is long compared to these exchanges. From a few seconds on one device
-(dense, or block-sparse with 10⁸ points), the speed-up is close to the number
+(dense, or block-sparse with $10^8$ points), the speed-up is close to the number
 of GPUs. Gloo between CPU nodes exchanges data more slowly than RCCL, so the
-block-sparse case with 10⁸ points gains × 5.2 on 8 nodes. Below about a
+block-sparse case with $10^8$ points gains × 5.2 on 8 nodes. Below about a
 second on one device, the exchanges dominate.
 
 To measure on your machine:

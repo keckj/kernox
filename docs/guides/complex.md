@@ -44,7 +44,7 @@ out = run(z=Z, w=W, t=T)                          # (100, 3) complex64
 | `z.angle()`, `kp.angle(z)` | argument, `atan2(im, re)` |
 | `kp.exp(z)`, `z.exp()` | complex exponential |
 | `z.sum()`, `z[k]` | sum of the components, component `k` |
-| `t.real2complex()`, `t.imag2complex()`, `t.exp1j()` | from a real formula: `t`, `i·t`, `exp(i·t)` |
+| `t.real2complex()`, `t.imag2complex()`, `t.exp1j()` | from a real formula: $t$, $i \cdot t$, $\exp(i \cdot t)$ |
 | `kp.complex_formula(re, im)` | from two real formulas |
 
 Power (`**`) and real functions such as `kp.sin` are not defined on complex

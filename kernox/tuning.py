@@ -1,4 +1,4 @@
-"""Optional autotuning of kernel variants.
+r"""Optional autotuning of kernel variants.
 
 Levels (``compile(..., tuning=...)``):
 
@@ -12,14 +12,14 @@ Levels (``compile(..., tuning=...)``):
   measurement is stable.
 
 Measurement: **blocking** call, only once per size class
-``(ceil(2 log2 M), ceil(2 log2 N), ceil(2 log2 nb), ceil(2 log2 1/ρ))``
-(half-octaves; wisdom v3: ``nb`` batch elements, density ``ρ`` of the block-sparse
+$(\lceil 2 \log_2 M \rceil, \lceil 2 \log_2 N \rceil, \lceil 2 \log_2 \mathrm{nb} \rceil, \lceil 2 \log_2 1/\rho \rceil)$
+(half-octaves; wisdom v3: ``nb`` batch elements, density $\rho$ of the block-sparse
 ranges, 0 and 0 without batch or ranges) and per compiled object; compilation excluded from
 timing (published separately); 1 warm-up then ``REPEATS`` launches
 timed with GPU events on the current stream (host clock on CPU);
 bounded total time budget (``BUDGET_SECONDS``, compilation included); at
 least the default variant is measured. If the relative spread
-``(max - min) / median`` of one of the two best variants exceeds
+$(\max - \min) / \operatorname{median}$ of one of the two best variants exceeds
 ``MAX_SPREAD``, the decision is marked unstable and **is not persisted**.
 The result of the call is always recomputed with the selected variant.
 
@@ -80,13 +80,13 @@ def _half_octave(x: float) -> int:
 
 
 def size_class(m: int, n: int, nb: int = 1, density: float = 1.0) -> tuple[int, int, int, int]:
-    """Size class in half-octaves (wisdom v3), ``log2(x <= 1) := 0``:
-    ``(ceil(2 log2 M), ceil(2 log2 N), ceil(2 log2 nb), ceil(2 log2 1/ρ))``.
+    r"""Size class in half-octaves (wisdom v3), $\log_2(x \leq 1) := 0$:
+    $(\lceil 2 \log_2 M \rceil, \lceil 2 \log_2 N \rceil, \lceil 2 \log_2 \mathrm{nb} \rceil, \lceil 2 \log_2 1/\rho \rceil)$.
 
-    Two sizes in the same class differ by at most a factor sqrt(2) per
+    Two sizes in the same class differ by at most a factor $\sqrt{2}$ per
     axis (v1, in octaves, grouped sizes up to 2x apart and could reuse a
-    worse decision). ``nb``: batch elements; ``density``: fraction ρ of the pairs (i, j) covered by the block-sparse
-    ranges (1 without ranges; ρ = 0 counted as one pair). K, the
+    worse decision). ``nb``: batch elements; ``density``: fraction $\rho$ of the pairs (i, j) covered by the block-sparse
+    ranges (1 without ranges; $\rho = 0$ counted as one pair). $K$, the
     dimension and the dtype are in the plan key.
     """
     rho = _half_octave(1.0 / max(float(density), 1.0 / max(m * n, 1))) if density < 1.0 else 0

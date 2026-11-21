@@ -40,7 +40,7 @@ Some limits to know:
 
 ## The single nearest neighbour
 
-`argmin` (or `min_argmin` for distance and index together) is the K = 1 case:
+`argmin` (or `min_argmin` for distance and index together) is the $K = 1$ case:
 
 ```python
 nearest = kp.compile(d2.argmin(over="j"), dtype="float32")(x=X, y=Y)   # (2000, 1)

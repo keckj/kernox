@@ -1,22 +1,22 @@
-"""Complex formulas (parity with PyKeOps ``ComplexLazyTensor``, keopscore ``formulas/complex``).
+r"""Complex formulas (parity with PyKeOps ``ComplexLazyTensor``, keopscore ``formulas/complex``).
 
-keopscore representation: a complex formula of dimension D is a real
-`Formula` of dimension 2D, with **interleaved**
+keopscore representation: a complex formula of dimension $D$ is a real
+`Formula` of dimension $2D$, with **interleaved**
 components ``(re_0, im_0, re_1, im_1, …)``. Each operation is the
 keopscore definition re-expressed with real symox primitives (no complex
 type in the engine nor in the backends):
 
-- ``Real2Complex(x) = (x, 0)``, ``Imag2Complex(x) = (0, x)``,
-  ``ComplexExp1j(x) = (cos x, sin x)``;
-- ``ComplexReal``, ``ComplexImag``, ``Conj = (re, −im)``,
-  ``ComplexSquareAbs = re² + im²``, ``ComplexAbs = sqrt(re² + im²)``,
-  ``ComplexAngle = atan2(im, re)``,
-  ``ComplexExp = (exp(re)·cos(im), exp(re)·sin(im))``;
-- ``ComplexAdd``, ``ComplexSubtract``, ``ComplexMult = (ac − bd, ad + bc)``,
-  ``ComplexRealScal`` (real of dimension 1 × complex),
-  ``ComplexDivide(f, g) = Real2Complex(1/|g|²) · (f · conj(g))``,
+- ``Real2Complex(x)`` $= (x, 0)$, ``Imag2Complex(x)`` $= (0, x)$,
+  ``ComplexExp1j(x)`` $= (\cos x, \sin x)$;
+- ``ComplexReal``, ``ComplexImag``, ``Conj`` $= (\mathrm{re}, -\mathrm{im})$,
+  ``ComplexSquareAbs`` $= \mathrm{re}^2 + \mathrm{im}^2$, ``ComplexAbs`` $= \sqrt{\mathrm{re}^2 + \mathrm{im}^2}$,
+  ``ComplexAngle`` $= \operatorname{atan2}(\mathrm{im}, \mathrm{re})$,
+  ``ComplexExp`` $= (\exp(\mathrm{re}) \cos(\mathrm{im}), \exp(\mathrm{re}) \sin(\mathrm{im}))$;
+- ``ComplexAdd``, ``ComplexSubtract``, ``ComplexMult`` $= (ac - bd, ad + bc)$,
+  ``ComplexRealScal`` (real of dimension 1 $\times$ complex),
+  ``ComplexDivide(f, g)`` $= \texttt{Real2Complex}(1/|g|^2) \cdot (f \cdot \overline{g})$,
   ``ComplexSum`` (sum of the complex components);
-- broadcasting of a complex dimension 1 to D, like ``VectorizedComplexScalarOp``.
+- broadcasting of a complex dimension 1 to $D$, like ``VectorizedComplexScalarOp``.
 
 Inputs: ``Vi(name, D, complex=True)`` (likewise ``Vj``, ``Param``) expects a
 complex tensor ``(…, L, D)`` (``complex64`` in FP32, ``complex128`` in FP64)
@@ -99,7 +99,7 @@ def _mult(p, q):
 
 
 class ComplexFormula:
-    """Complex formula: interleaved real `Formula` of dimension 2·``dim``."""
+    r"""Complex formula: interleaved real `Formula` of dimension $2 \cdot \texttt{dim}$."""
 
     __slots__ = ("_f",)
     __array_priority__ = 1001
@@ -148,11 +148,11 @@ class ComplexFormula:
         return _from_pairs([(a, -b) for a, b in _pairs(self._f)], self._f._vars)
 
     def square_abs(self) -> Formula:
-        """``re² + im²`` (keopscore ``ComplexSquareAbs``)."""
+        r"""$\mathrm{re}^2 + \mathrm{im}^2$ (keopscore ``ComplexSquareAbs``)."""
         return Formula([a * a + b * b for a, b in _pairs(self._f)], self._f._vars)
 
     def abs(self) -> Formula:  # noqa: A003
-        """Modulus ``sqrt(re² + im²)`` (keopscore ``ComplexAbs``, without hypot)."""
+        r"""Modulus $\sqrt{\mathrm{re}^2 + \mathrm{im}^2}$ (keopscore ``ComplexAbs``, without hypot)."""
         import symox
 
         return Formula([symox.sqrt(a * a + b * b) for a, b in _pairs(self._f)], self._f._vars)
@@ -160,13 +160,13 @@ class ComplexFormula:
     __abs__ = abs
 
     def angle(self) -> Formula:
-        """Argument ``atan2(im, re)`` (keopscore ``ComplexAngle``)."""
+        r"""Argument $\operatorname{atan2}(\mathrm{im}, \mathrm{re})$ (keopscore ``ComplexAngle``)."""
         import symox
 
         return Formula([symox.atan2(b, a) for a, b in _pairs(self._f)], self._f._vars)
 
     def exp(self) -> "ComplexFormula":
-        """``exp(re)·(cos im, sin im)`` (keopscore ``ComplexExp``)."""
+        r"""$\exp(\mathrm{re}) \cdot (\cos \mathrm{im}, \sin \mathrm{im})$ (keopscore ``ComplexExp``)."""
         import symox
 
         out = []
@@ -349,7 +349,7 @@ def exp1j(x) -> ComplexFormula:
 
 
 def complex_formula(re, im) -> ComplexFormula:
-    """``re + i·im`` from two real formulas of the same dimension (or broadcast)."""
+    r"""$\mathrm{re} + i \cdot \mathrm{im}$ from two real formulas of the same dimension (or broadcast)."""
     return real2complex(re) + imag2complex(im)
 
 
