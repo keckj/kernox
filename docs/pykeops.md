@@ -1,6 +1,7 @@
 # Coming from PyKeOps
 
-kernox covers the reductions and formula operations of PyKeOps 2.4 for
+kernox covers the reductions and formula operations of PyKeOps 2.4
+([Charlier et al., JMLR 2021](https://jmlr.org/papers/v22/20-275.html)) for
 PyTorch on GPUs, and adds AMD and Intel GPUs. The main change is in how a
 computation is written: in PyKeOps, a `LazyTensor` wraps your data and the
 reduction runs immediately; in kernox, you write a formula on named variables,
